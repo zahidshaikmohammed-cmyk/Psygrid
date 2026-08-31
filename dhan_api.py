@@ -33,16 +33,11 @@ class DhanAPI:
             "access-token": self.settings.access_token,
         }
         last_error = None
-        for attempt in range(4):
+        for attempt in range(5):
             try:
-                response = self.session.post(
-                    BASE_URL + path,
-                    headers=headers,
-                    json=payload,
-                    timeout=20,
-                )
+                response = self.session.post(BASE_URL + path, headers=headers, json=payload, timeout=30)
                 if response.status_code == 429:
-                    time.sleep(1.5 * (attempt + 1))
+                    time.sleep(min(8.0, 1.0 * (attempt + 1)))
                     continue
                 response.raise_for_status()
                 data = response.json()
@@ -51,9 +46,27 @@ class DhanAPI:
                 return data
             except Exception as exc:
                 last_error = exc
-                if attempt < 3:
-                    time.sleep(1.0 * (attempt + 1))
+                if attempt < 4:
+                    time.sleep(min(8.0, 1.0 * (attempt + 1)))
         raise RuntimeError(f"Dhan API failed: {last_error}")
+
+    def profile(self) -> dict:
+        response = self.session.get(
+            BASE_URL + "/profile",
+            headers={"Accept": "application/json", "access-token": self.settings.access_token},
+            timeout=20,
+        )
+        response.raise_for_status()
+        data = response.json()
+        if not isinstance(data, dict):
+            raise RuntimeError("Invalid Dhan profile response")
+        return data
+
+    def verify_data_access(self) -> dict:
+        profile = self.profile()
+        if str(profile.get("dataPlan", "")).strip().lower() != "active":
+            raise RuntimeError("DHAN_DATA_PLAN_NOT_ACTIVE")
+        return profile
 
     def quote_snapshot(self, instruments) -> Dict[str, dict]:
         grouped: Dict[str, List[int]] = {}
@@ -71,7 +84,9 @@ class DhanAPI:
         if not data:
             return []
         arrays = [data.get(key, []) for key in ("timestamp", "open", "high", "low", "close", "volume")]
-        length = min(len(a) for a in arrays) if arrays else 0
+        if not all(isinstance(a, list) for a in arrays):
+            return []
+        length = min(len(a) for a in arrays)
         candles = []
         for i in range(length):
             candles.append({
@@ -111,7 +126,7 @@ class DhanAPI:
 
     def load_previous_daily(self, item, lookback: int) -> List[dict]:
         now = datetime.now(self.tz)
-        start = now - timedelta(days=max(lookback * 3, 20))
+        start = now - timedelta(days=max(lookback * 4, 30))
         rows = self.daily(item, start, now)
         today = now.date()
         rows = [r for r in rows if datetime.fromtimestamp(r["timestamp"], self.tz).date() < today]
