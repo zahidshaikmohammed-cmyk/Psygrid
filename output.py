@@ -7,7 +7,6 @@ from zoneinfo import ZoneInfo
 
 from indicators import ema, rsi, sma, vwap
 
-
 TIMEFRAMES = ("1m", "5m", "15m", "1h", "1d", "1w")
 
 
@@ -65,11 +64,34 @@ def _historical_payload(state, security_id: str, key: str):
     return [normalize_candle(row) for row in rows]
 
 
+def _stock_payload(state, security_id: str, meta: dict) -> dict:
+    live_rows = state.live_enriched(security_id)
+    current = live_rows[-1] if live_rows else None
+    return {
+        "security_id": security_id,
+        "exchange_segment": meta["exchange_segment"],
+        "instrument": meta["instrument"],
+        "current": {
+            "ltp": current.get("close") if current else None,
+            "timestamp": current.get("timestamp") if current else None,
+            "candle_complete": bool(current.get("complete")) if current else False,
+        },
+        "timeframes": {
+            "1m": [normalize_candle(row) for row in live_rows],
+            "5m": _historical_payload(state, security_id, "5m"),
+            "15m": _historical_payload(state, security_id, "15m"),
+            "1h": _historical_payload(state, security_id, "1h"),
+            "1d": _historical_payload(state, security_id, "1d"),
+            "1w": _historical_payload(state, security_id, "1w"),
+        },
+    }
+
+
 def market_live_json(state) -> dict:
     snap = state.snapshot()
     payload = {
         "service": "PSYGRID",
-        "schema_version": "1.2",
+        "schema_version": "1.3",
         "session": {
             "status": snap["session_status"],
             "date": snap["session_date"],
@@ -98,23 +120,9 @@ def market_live_json(state) -> dict:
     }
     if snap["session_status"] != "LIVE":
         return payload
-
     with state.lock:
         for security_id, meta in sorted(state.instruments.items(), key=lambda x: x[1]["symbol"]):
-            live_rows = state.live_enriched(security_id)
-            payload["stocks"][meta["symbol"]] = {
-                "security_id": security_id,
-                "exchange_segment": meta["exchange_segment"],
-                "instrument": meta["instrument"],
-                "timeframes": {
-                    "1m": [normalize_candle(row) for row in live_rows],
-                    "5m": _historical_payload(state, security_id, "5m"),
-                    "15m": _historical_payload(state, security_id, "15m"),
-                    "1h": _historical_payload(state, security_id, "1h"),
-                    "1d": _historical_payload(state, security_id, "1d"),
-                    "1w": _historical_payload(state, security_id, "1w"),
-                },
-            }
+            payload["stocks"][meta["symbol"]] = _stock_payload(state, security_id, meta)
     return payload
 
 
@@ -128,7 +136,7 @@ def stock_json(state, symbol: str, timeframe: Optional[str] = None) -> dict:
         security_id, meta = found
         payload = {
             "service": "PSYGRID",
-            "schema_version": "1.2",
+            "schema_version": "1.3",
             "symbol": symbol,
             "security_id": security_id,
             "exchange_segment": meta["exchange_segment"],
@@ -156,12 +164,15 @@ def stock_json(state, symbol: str, timeframe: Optional[str] = None) -> dict:
         }
         if snap["session_status"] != "LIVE":
             return payload
-        requested = [timeframe] if timeframe else list(TIMEFRAMES)
-        for key in requested:
-            if key == "1m":
-                payload["timeframes"][key] = [normalize_candle(row) for row in state.live_enriched(security_id)]
-            else:
-                payload["timeframes"][key] = _historical_payload(state, security_id, key)
+        if timeframe is None:
+            full = _stock_payload(state, security_id, meta)
+            payload["current"] = full["current"]
+            payload["timeframes"] = full["timeframes"]
+            return payload
+        if timeframe == "1m":
+            payload["timeframes"]["1m"] = [normalize_candle(row) for row in state.live_enriched(security_id)]
+        else:
+            payload["timeframes"][timeframe] = _historical_payload(state, security_id, timeframe)
         return payload
 
 
