@@ -12,11 +12,6 @@ TIMEFRAMES = ("1m", "5m", "15m", "1h", "1d", "1w")
 
 
 def enrich_history(candles: list, settings) -> list:
-    """Enrich genuine Dhan candles without changing their OHLCV values.
-
-    VWAP resets at each NSE trading date. The OHLCV candle-weighted calculation
-    is used because Dhan's historical candle endpoint does not provide tick ATP.
-    """
     rows = [dict(c) for c in candles]
     closes = [float(c["close"]) for c in rows]
     day_window = []
@@ -65,6 +60,8 @@ def _historical_payload(state, security_id: str, key: str):
             "note": "Dhan v2 documented equity historical endpoints provide daily and minute intervals, not a native weekly equity candle. Psygrid never aggregates daily candles into weekly candles."
         }
     rows = enrich_history(state.historical.get(security_id, {}).get(key, []), state.settings)
+    if key == "1d":
+        rows = rows[-state.settings.daily_lookback:]
     return [normalize_candle(row) for row in rows]
 
 
@@ -128,7 +125,6 @@ def stock_json(state, symbol: str, timeframe: Optional[str] = None) -> dict:
         found = next(((sid, meta) for sid, meta in state.instruments.items() if meta["symbol"] == symbol), None)
         if found is None:
             return {"service": "PSYGRID", "symbol": symbol, "status": "NOT_FOUND"}
-
         security_id, meta = found
         payload = {
             "service": "PSYGRID",
@@ -160,7 +156,6 @@ def stock_json(state, symbol: str, timeframe: Optional[str] = None) -> dict:
         }
         if snap["session_status"] != "LIVE":
             return payload
-
         requested = [timeframe] if timeframe else list(TIMEFRAMES)
         for key in requested:
             if key == "1m":
