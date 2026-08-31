@@ -196,7 +196,7 @@ class PsygridState:
         timestamp = int(candle.get("epoch", candle["timestamp"]))
         return datetime.fromtimestamp(timestamp, self.tz).date().isoformat()
 
-    def _enrich_live(self, seed: List[dict], candles: List[dict]) -> List[dict]:
+    def _enrich_live(self, seed: List[dict], candles: List[dict], dhan_avg_price: Optional[float]) -> List[dict]:
         ordered_seed = sorted((dict(c) for c in seed), key=lambda c: int(c["timestamp"]))
         ordered_today = sorted((dict(c) for c in candles), key=lambda c: int(c["epoch"]))
         combined = ordered_seed + ordered_today
@@ -219,7 +219,7 @@ class PsygridState:
             item["ma9"] = sma(prefix_closes, self.settings.ma_period)
             item["ema20"] = ema(prefix_closes, self.settings.ema_period)
             item["rsi14"] = rsi(prefix_closes, self.settings.rsi_period)
-            item["dhan_avg_price"] = self.dhan_day_average_price.get(security_id) if False else None
+            item["dhan_avg_price"] = dhan_avg_price
             out.append(item)
         return out
 
@@ -230,11 +230,10 @@ class PsygridState:
             if current is not None:
                 candles.append(dict(current))
             seed = [dict(c) for c in self.indicator_seed_1m.get(security_id, [])]
-            enriched = self._enrich_live(seed, candles)
             dhan_avg_price = self.dhan_day_average_price.get(security_id)
+            enriched = self._enrich_live(seed, candles, dhan_avg_price)
             for candle in enriched:
                 candle.pop("epoch", None)
-                candle["dhan_avg_price"] = dhan_avg_price
             return enriched
 
     def freshness(self, security_id: str, now_epoch: Optional[float] = None) -> dict:
@@ -242,16 +241,13 @@ class PsygridState:
             now_epoch = now_epoch or datetime.now(timezone.utc).timestamp()
             last = self.last_tick_by_security.get(security_id)
             if last is None:
-                return {
-                    "status": "NO_TICK_YET",
-                    "data_age_seconds": None,
-                    "live_data_valid": False,
-                }
+                return {"status": "NO_TICK_YET", "data_age_seconds": None, "live_data_valid": False}
             age = max(0.0, now_epoch - last)
+            valid = age <= self.settings.max_live_age_seconds
             return {
-                "status": "LIVE" if age <= self.settings.max_live_age_seconds else "STALE",
+                "status": "LIVE" if valid else "STALE",
                 "data_age_seconds": round(age, 3),
-                "live_data_valid": age <= self.settings.max_live_age_seconds,
+                "live_data_valid": valid,
             }
 
     def snapshot(self) -> dict:
