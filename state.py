@@ -27,6 +27,7 @@ class PsygridState:
         self.instruments: Dict[str, dict] = {}
         self.live_candles: Dict[str, List[dict]] = defaultdict(list)
         self.current_1m: Dict[str, Optional[dict]] = {}
+        self.indicator_seed_1m: Dict[str, List[dict]] = defaultdict(list)
         self.historical: Dict[str, Dict[str, List[dict]]] = defaultdict(dict)
         self.prev_cumulative_volume: Dict[str, int] = {}
         self.last_trade_key: Dict[str, tuple] = {}
@@ -45,6 +46,7 @@ class PsygridState:
             self.instruments.clear()
             self.live_candles.clear()
             self.current_1m.clear()
+            self.indicator_seed_1m.clear()
             self.historical.clear()
             self.prev_cumulative_volume.clear()
             self.last_trade_key.clear()
@@ -79,6 +81,14 @@ class PsygridState:
             ordered = sorted((dict(c) for c in candles), key=lambda c: int(c["timestamp"]))
             self.historical[security_id][timeframe] = ordered
 
+    def set_indicator_seed_1m(self, security_id: str, candles: List[dict]) -> None:
+        """Store genuine prior 1m candles only for today's indicator warmup."""
+        with self.lock:
+            self.indicator_seed_1m[security_id] = sorted(
+                (dict(c) for c in candles if c.get("complete", True)),
+                key=lambda c: int(c["timestamp"]),
+            )
+
     def merge_today_1m_history(self, security_id: str, candles: List[dict]) -> None:
         with self.lock:
             existing = {
@@ -87,7 +97,6 @@ class PsygridState:
                 if c.get("complete", True)
             }
             for candle in candles:
-                # Only completed native Dhan historical minutes are merged.
                 if candle.get("complete", True):
                     existing[int(candle["timestamp"]) // 60] = dict(candle)
             self.live_candles[security_id] = [existing[k] for k in sorted(existing)]
@@ -170,22 +179,29 @@ class PsygridState:
     def _day_key(self, timestamp: int) -> str:
         return datetime.fromtimestamp(int(timestamp), self.tz).date().isoformat()
 
-    def _enrich_live(self, candles: List[dict], dhan_avg_price: Optional[float] = None) -> List[dict]:
-        ordered = sorted((dict(c) for c in candles), key=lambda c: int(c["epoch"]))
-        closes = [float(c["close"]) for c in ordered]
+    def _enrich_live(self, seed: List[dict], candles: List[dict]) -> List[dict]:
+        """Calculate today's 1m indicators using genuine prior-day warmup + today."""
+        ordered_seed = sorted((dict(c) for c in seed), key=lambda c: int(c["timestamp"]))
+        ordered_today = sorted((dict(c) for c in candles), key=lambda c: int(c["epoch"]))
+        combined = ordered_seed + ordered_today
+        closes = [float(c["close"]) for c in combined]
+
         out: List[dict] = []
         day_candles: List[dict] = []
         current_day: Optional[str] = None
-        for idx, candle in enumerate(ordered):
-            day = self._day_key(int(candle["epoch"]))
+        seed_count = len(ordered_seed)
+        for idx, candle in enumerate(combined):
+            day = self._day_key(int(candle.get("epoch", candle["timestamp"])))
             if day != current_day:
                 day_candles = []
                 current_day = day
             day_candles.append(candle)
             prefix_closes = closes[: idx + 1]
+            if idx < seed_count:
+                continue
             item = dict(candle)
             item["vwap"] = vwap(day_candles)
-            item["dhan_avg_price"] = dhan_avg_price
+            item["dhan_day_vwap"] = self.dhan_day_average_price.get(candle.get("security_id"))
             item["ma9"] = sma(prefix_closes, self.settings.ma_period)
             item["ema20"] = ema(prefix_closes, self.settings.ema_period)
             item["rsi14"] = rsi(prefix_closes, self.settings.rsi_period)
@@ -198,8 +214,11 @@ class PsygridState:
             current = self.current_1m.get(security_id)
             if current is not None:
                 candles.append(dict(current))
-            enriched = self._enrich_live(candles, self.dhan_day_average_price.get(security_id))
+            seed = [dict(c) for c in self.indicator_seed_1m.get(security_id, [])]
+            enriched = self._enrich_live(seed, candles)
+            avg_price = self.dhan_day_average_price.get(security_id)
             for candle in enriched:
+                candle["dhan_day_vwap"] = avg_price
                 candle.pop("epoch", None)
             return enriched
 
