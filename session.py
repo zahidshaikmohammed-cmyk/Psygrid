@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, time, timedelta
+from datetime import datetime, time
 from typing import Optional
 from zoneinfo import ZoneInfo
 
@@ -86,28 +86,25 @@ class SessionManager:
             if self.stop_event.is_set() or not self.in_market():
                 return
             try:
-                # Native Dhan 5m / 15m / 60m historical candles.
                 for interval, key in ((5, "5m"), (15, "15m"), (60, "1h")):
                     rows = self.dhan_api.load_previous_intraday(
                         item, interval, self.settings.intraday_history_days
                     )
                     self.state.set_historical(item.security_id, key, rows)
 
-                # Native Dhan daily candles: keep the previous 7 completed trading days.
                 daily = self.dhan_api.load_previous_daily(item, self.settings.daily_lookback)
                 self.state.set_historical(item.security_id, "1d", daily)
 
-                # Native 1m data for today is used only for genuine restart recovery / indicator warm-up.
-                # We never construct a missing candle from timestamps.
+                # Genuine Dhan 1m candles for today, used only for restart recovery/warm-up.
                 today_1m = self.dhan_api.load_today_1m(item)
-                current_epoch = int(now.timestamp())
+                current_epoch = int(self.now().timestamp())
                 current_minute = current_epoch - (current_epoch % 60)
                 prior = [r for r in today_1m if r["timestamp"] < current_minute]
-                self.state.live_candles[item.security_id] = prior
+                self.state.merge_today_1m_history(item.security_id, prior)
             except Exception as exc:
                 self.state.last_feed_error = f"history:{item.symbol}:{exc}"
 
-        # Dhan Data APIs currently document 5 requests/sec; keep concurrency modest.
+        # Keep concurrency modest against Dhan's documented Data API rate limits.
         with ThreadPoolExecutor(max_workers=4, thread_name_prefix="psygrid-hist") as pool:
             futures = [pool.submit(load_one, item) for item in self.instruments]
             for future in futures:
@@ -125,6 +122,6 @@ class SessionManager:
             except Exception:
                 pass
             self.state.finalize_current()
-            # The requirement is RAM-only session data and complete disappearance after 15:15.
+            # Hard requirement: after 15:15, the session vanishes from RAM and output.
             self.state.reset()
             self._started_for_date = None
