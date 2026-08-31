@@ -63,8 +63,7 @@ class PsygridState:
                 }
                 for i in instruments
             }
-            for item in instruments:
-                self.current_1m.setdefault(item.security_id, None)
+            self.current_1m = {i.security_id: None for i in instruments}
 
     def set_profile(self, profile: dict) -> None:
         with self.lock:
@@ -74,11 +73,15 @@ class PsygridState:
 
     def set_historical(self, security_id: str, timeframe: str, candles: List[dict]) -> None:
         with self.lock:
-            self.historical[security_id][timeframe] = [dict(c) for c in candles]
+            ordered = sorted((dict(c) for c in candles), key=lambda c: int(c["timestamp"]))
+            self.historical[security_id][timeframe] = ordered
 
     def merge_today_1m_history(self, security_id: str, candles: List[dict]) -> None:
         with self.lock:
-            existing = {int(c["timestamp"]) // 60: dict(c) for c in self.live_candles.get(security_id, [])}
+            existing = {
+                int(c["timestamp"]) // 60: dict(c)
+                for c in self.live_candles.get(security_id, [])
+            }
             for candle in candles:
                 existing[int(candle["timestamp"]) // 60] = dict(candle)
             self.live_candles[security_id] = [existing[k] for k in sorted(existing)]
@@ -107,8 +110,11 @@ class PsygridState:
             if previous_volume is None:
                 self.prev_cumulative_volume[security_id] = cumulative_volume
                 return
+
             delta_volume = cumulative_volume - previous_volume
             if delta_volume < 0:
+                # Exchange/session volume reset. Do not manufacture a negative or
+                # replacement volume amount; re-seed from the genuine packet.
                 self.prev_cumulative_volume[security_id] = cumulative_volume
                 return
             self.prev_cumulative_volume[security_id] = cumulative_volume
@@ -122,9 +128,12 @@ class PsygridState:
             candle = self.current_1m.get(security_id)
             if candle is None or candle["epoch"] != minute_key:
                 if candle is not None:
-                    self.live_candles[security_id].append(candle)
+                    candle["complete"] = True
+                    self.live_candles[security_id].append(dict(candle))
                 candle = {
-                    "timestamp": datetime.fromtimestamp(minute_key, timezone.utc).astimezone(self.tz).strftime("%Y-%m-%d %H:%M:00"),
+                    "timestamp": datetime.fromtimestamp(minute_key, timezone.utc)
+                    .astimezone(self.tz)
+                    .strftime("%Y-%m-%d %H:%M:00"),
                     "epoch": minute_key,
                     "open": ltp,
                     "high": ltp,
@@ -132,6 +141,7 @@ class PsygridState:
                     "close": ltp,
                     "volume": max(0, delta_volume),
                     "source": "DHAN_WEBSOCKET_QUOTE",
+                    "complete": False,
                 }
                 self.current_1m[security_id] = candle
             else:
@@ -144,8 +154,35 @@ class PsygridState:
         with self.lock:
             for security_id, candle in list(self.current_1m.items()):
                 if candle is not None:
-                    self.live_candles[security_id].append(dict(candle))
+                    candle = dict(candle)
+                    candle["complete"] = True
+                    self.live_candles[security_id].append(candle)
                     self.current_1m[security_id] = None
+
+    def _day_key(self, timestamp: int) -> str:
+        return datetime.fromtimestamp(int(timestamp), self.tz).date().isoformat()
+
+    def _enrich_live(self, candles: List[dict], dhan_avg_price: Optional[float] = None) -> List[dict]:
+        ordered = sorted((dict(c) for c in candles), key=lambda c: int(c["epoch"]))
+        closes = [float(c["close"]) for c in ordered]
+        out: List[dict] = []
+        day_candles: List[dict] = []
+        current_day: Optional[str] = None
+        for idx, candle in enumerate(ordered):
+            day = self._day_key(int(candle["epoch"]))
+            if day != current_day:
+                day_candles = []
+                current_day = day
+            day_candles.append(candle)
+            prefix_closes = closes[: idx + 1]
+            item = dict(candle)
+            item["vwap"] = vwap(day_candles)
+            item["ma9"] = sma(prefix_closes, self.settings.ma_period)
+            item["ema20"] = ema(prefix_closes, self.settings.ema_period)
+            item["rsi14"] = rsi(prefix_closes, self.settings.rsi_period)
+            item["dhan_avg_price"] = dhan_avg_price
+            out.append(item)
+        return out
 
     def live_enriched(self, security_id: str) -> List[dict]:
         with self.lock:
@@ -153,17 +190,12 @@ class PsygridState:
             current = self.current_1m.get(security_id)
             if current is not None:
                 candles.append(dict(current))
-            closes = [float(c["close"]) for c in candles]
-            for idx, candle in enumerate(candles):
-                window = candles[: idx + 1]
-                close_window = closes[: idx + 1]
-                candle["vwap"] = vwap(window)
-                candle["ma9"] = sma(close_window, self.settings.ma_period)
-                candle["ema20"] = ema(close_window, self.settings.ema_period)
-                candle["rsi14"] = rsi(close_window, self.settings.rsi_period)
-                candle["complete"] = not (current is not None and idx == len(candles) - 1)
+            # Indicators use only the candles actually present. No missing minute
+            # is inserted and no synthetic candle is created.
+            enriched = self._enrich_live(candles)
+            for candle in enriched:
                 candle.pop("epoch", None)
-            return candles
+            return enriched
 
     def snapshot(self) -> dict:
         with self.lock:
