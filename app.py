@@ -48,18 +48,28 @@ def shutdown() -> None:
         manager.stop()
 
 
-def json_response(payload: dict) -> Response:
-    return Response(content=dumps_json(payload), media_type="application/json")
+def json_response(payload: dict, status_code: int = 200) -> Response:
+    return Response(
+        content=dumps_json(payload),
+        media_type="application/json",
+        status_code=status_code,
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
 
 
 @app.get("/", response_class=Response)
 def root() -> Response:
     return json_response({
         "service": "PSYGRID",
-        "status": "ONLINE",
+        "status": "ONLINE" if not config_error else "CONFIG_ERROR",
         "data_source": "DHAN",
         "synthetic_candles": False,
         "storage": "RAM_ONLY",
+        "live_endpoint": "/public/live.json",
     })
 
 
@@ -89,7 +99,7 @@ def public_stock(symbol: str) -> Response:
 def public_stock_timeframe(symbol: str, timeframe: str) -> Response:
     timeframe = timeframe.lower()
     if timeframe not in {"1m", "5m", "15m", "1h", "1d", "1w"}:
-        return json_response({"service": "PSYGRID", "status": "INVALID_TIMEFRAME"})
+        return json_response({"service": "PSYGRID", "status": "INVALID_TIMEFRAME"}, 400)
     if config_error:
         return json_response({"service": "PSYGRID", "status": "CONFIG_ERROR", "error": config_error})
     return json_response(stock_json(state, symbol, timeframe))
