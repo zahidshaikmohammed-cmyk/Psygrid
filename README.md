@@ -12,10 +12,10 @@ Live, machine-readable Dhan Data API service for 90 NSE equities.
 - Live acquisition starts at 09:15 and stops at 15:15 exactly.
 - After 15:15, all session candles, indicators and instrument state are wiped from RAM.
 - Before 09:15 there is no live market acquisition.
-- **Synthetic candles are forbidden.** Psygrid never interpolates, fabricates, gap-fills, reconstructs or aggregates missing OHLCV into a fake candle.
+- **Synthetic candles are forbidden.** Psygrid never interpolates, fabricates, gap-fills, reconstructs or invents missing OHLCV candles.
 - Live 1-minute candles are formed only from genuine Dhan Quote WebSocket events and cumulative-volume deltas.
 - Historical 5m, 15m and 1h candles come directly from Dhan's native intraday historical endpoint.
-- Historical daily candles come directly from Dhan's native daily historical endpoint.
+- Historical daily candles come directly from Dhan's native daily historical endpoint. Psygrid loads indicator warmup history internally but returns exactly the previous 7 completed daily candles.
 - Dhan's documented v2 equity historical endpoints expose daily and minute intervals (1, 5, 15, 25, 60), not a native weekly equity candle. Therefore Psygrid **does not synthesize weekly candles**; the 1w field explicitly reports native-weekly unavailability.
 - Dhan's User Profile endpoint is checked at session start so the service can verify that the paid Data API plan is active.
 
@@ -29,7 +29,7 @@ Live, machine-readable Dhan Data API service for 90 NSE equities.
 
 `/public/live.json`
 
-This is the primary machine/AI endpoint. During the live session it exposes all configured stocks, current/live 1m candles and the native historical 5m, 15m, 1h and 1d context. The 1w field explicitly reports native Dhan weekly unavailability rather than creating a synthetic candle.
+This is the primary machine/AI endpoint. During the live session it exposes all 90 configured stocks, the live 1m candle history from 09:15 onward, and native historical 5m, 15m, 1h and previous-7-day daily context. Each stock also has a `current` object with the latest LTP/candle state.
 
 ### One stock
 
@@ -65,6 +65,8 @@ Every available candle contains:
 
 The current 1m candle has `complete=false`; completed candles have `complete=true`.
 
+VWAP is candle-typical-price weighted with a daily/session reset. Historical VWAP is calculated from the genuine Dhan OHLCV candles; no OHLCV values are altered.
+
 ## Environment
 
 Required:
@@ -81,6 +83,7 @@ Recommended:
 - `MARKET_END=15:15`
 - `INTRADAY_HISTORY_DAYS=5`
 - `DAILY_LOOKBACK=7`
+- `DAILY_INDICATOR_WARMUP=30`
 - `WEEKLY_LOOKBACK=7`
 - `MA_PERIOD=9`
 - `EMA_PERIOD=20`
