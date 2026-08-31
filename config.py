@@ -32,6 +32,7 @@ class Settings:
     ema_period: int = 20
     rsi_period: int = 14
     max_instruments: int = 500
+    max_live_age_seconds: int = 60
 
 
 def _required(name: str) -> str:
@@ -83,10 +84,7 @@ def load_instruments() -> List[Instrument]:
     if len(symbols) > max_instruments:
         raise RuntimeError(f"Configured {len(symbols)} symbols; MAX_INSTRUMENTS={max_instruments}")
     security_ids = fetch_nse_equity_security_ids(symbols)
-    return [
-        Instrument(symbol=symbol, security_id=security_ids[symbol])
-        for symbol in symbols
-    ]
+    return [Instrument(symbol=symbol, security_id=security_ids[symbol]) for symbol in symbols]
 
 
 def load_settings() -> Settings:
@@ -116,4 +114,5 @@ def load_settings() -> Settings:
         ema_period=_positive_int_env("EMA_PERIOD", 20),
         rsi_period=_positive_int_env("RSI_PERIOD", 14),
         max_instruments=_positive_int_env("MAX_INSTRUMENTS", 500),
+        max_live_age_seconds=_positive_int_env("MAX_LIVE_AGE_SECONDS", 60),
     )
