@@ -21,6 +21,8 @@ class PsygridState:
         self.feed_status = "STOPPED"
         self.last_feed_error = ""
         self.last_tick_at: Optional[str] = None
+        self.last_tick_epoch: Optional[float] = None
+        self.last_tick_by_security: Dict[str, float] = {}
         self.data_plan_status = "UNKNOWN"
         self.data_validity = None
         self.token_validity = None
@@ -40,6 +42,8 @@ class PsygridState:
             self.feed_status = "STOPPED"
             self.last_feed_error = ""
             self.last_tick_at = None
+            self.last_tick_epoch = None
+            self.last_tick_by_security.clear()
             self.data_plan_status = "UNKNOWN"
             self.data_validity = None
             self.token_validity = None
@@ -58,6 +62,9 @@ class PsygridState:
             self.session_status = "LIVE"
             self.feed_status = "STARTING"
             self.last_feed_error = ""
+            self.last_tick_at = None
+            self.last_tick_epoch = None
+            self.last_tick_by_security = {}
             self.instruments = {
                 i.security_id: {
                     "symbol": i.symbol,
@@ -75,6 +82,12 @@ class PsygridState:
             self.data_plan_status = str(profile.get("dataPlan", "UNKNOWN"))
             self.data_validity = profile.get("dataValidity")
             self.token_validity = profile.get("tokenValidity")
+
+    def set_feed_status(self, status: str, error: str = "") -> None:
+        with self.lock:
+            self.feed_status = status
+            if error:
+                self.last_feed_error = error
 
     def set_historical(self, security_id: str, timeframe: str, candles: List[dict]) -> None:
         with self.lock:
@@ -123,7 +136,11 @@ class PsygridState:
             if atp is not None and atp > 0:
                 self.dhan_day_average_price[security_id] = atp
 
-            self.last_tick_at = datetime.now(timezone.utc).isoformat()
+            now_epoch = datetime.now(timezone.utc).timestamp()
+            self.last_tick_at = datetime.fromtimestamp(now_epoch, timezone.utc).isoformat()
+            self.last_tick_epoch = now_epoch
+            self.last_tick_by_security[security_id] = now_epoch
+
             previous_volume = self.prev_cumulative_volume.get(security_id)
             if previous_volume is None:
                 self.prev_cumulative_volume[security_id] = cumulative_volume
@@ -180,12 +197,10 @@ class PsygridState:
         return datetime.fromtimestamp(timestamp, self.tz).date().isoformat()
 
     def _enrich_live(self, seed: List[dict], candles: List[dict]) -> List[dict]:
-        """Calculate today's 1m indicators using genuine prior-day warmup + today."""
         ordered_seed = sorted((dict(c) for c in seed), key=lambda c: int(c["timestamp"]))
         ordered_today = sorted((dict(c) for c in candles), key=lambda c: int(c["epoch"]))
         combined = ordered_seed + ordered_today
         closes = [float(c["close"]) for c in combined]
-
         out: List[dict] = []
         day_candles: List[dict] = []
         current_day: Optional[str] = None
@@ -204,6 +219,7 @@ class PsygridState:
             item["ma9"] = sma(prefix_closes, self.settings.ma_period)
             item["ema20"] = ema(prefix_closes, self.settings.ema_period)
             item["rsi14"] = rsi(prefix_closes, self.settings.rsi_period)
+            item["dhan_avg_price"] = self.dhan_day_average_price.get(security_id) if False else None
             out.append(item)
         return out
 
@@ -215,18 +231,40 @@ class PsygridState:
                 candles.append(dict(current))
             seed = [dict(c) for c in self.indicator_seed_1m.get(security_id, [])]
             enriched = self._enrich_live(seed, candles)
+            dhan_avg_price = self.dhan_day_average_price.get(security_id)
             for candle in enriched:
                 candle.pop("epoch", None)
+                candle["dhan_avg_price"] = dhan_avg_price
             return enriched
+
+    def freshness(self, security_id: str, now_epoch: Optional[float] = None) -> dict:
+        with self.lock:
+            now_epoch = now_epoch or datetime.now(timezone.utc).timestamp()
+            last = self.last_tick_by_security.get(security_id)
+            if last is None:
+                return {
+                    "status": "NO_TICK_YET",
+                    "data_age_seconds": None,
+                    "live_data_valid": False,
+                }
+            age = max(0.0, now_epoch - last)
+            return {
+                "status": "LIVE" if age <= self.settings.max_live_age_seconds else "STALE",
+                "data_age_seconds": round(age, 3),
+                "live_data_valid": age <= self.settings.max_live_age_seconds,
+            }
 
     def snapshot(self) -> dict:
         with self.lock:
+            now_epoch = datetime.now(timezone.utc).timestamp()
             return {
                 "session_date": self.session_date,
                 "session_status": self.session_status,
                 "feed_status": self.feed_status,
                 "last_feed_error": self.last_feed_error,
                 "last_tick_at": self.last_tick_at,
+                "last_tick_age_seconds": round(now_epoch - self.last_tick_epoch, 3) if self.last_tick_epoch else None,
+                "max_live_age_seconds": self.settings.max_live_age_seconds,
                 "data_plan_status": self.data_plan_status,
                 "data_validity": self.data_validity,
                 "token_validity": self.token_validity,
