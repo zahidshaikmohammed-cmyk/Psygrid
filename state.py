@@ -30,6 +30,7 @@ class PsygridState:
         self.historical: Dict[str, Dict[str, List[dict]]] = defaultdict(dict)
         self.prev_cumulative_volume: Dict[str, int] = {}
         self.last_trade_key: Dict[str, tuple] = {}
+        self.dhan_day_average_price: Dict[str, Optional[float]] = {}
 
     def reset(self) -> None:
         with self.lock:
@@ -47,6 +48,7 @@ class PsygridState:
             self.historical.clear()
             self.prev_cumulative_volume.clear()
             self.last_trade_key.clear()
+            self.dhan_day_average_price.clear()
 
     def begin(self, session_date: str, instruments: list) -> None:
         with self.lock:
@@ -64,6 +66,7 @@ class PsygridState:
                 for i in instruments
             }
             self.current_1m = {i.security_id: None for i in instruments}
+            self.dhan_day_average_price = {i.security_id: None for i in instruments}
 
     def set_profile(self, profile: dict) -> None:
         with self.lock:
@@ -81,9 +84,12 @@ class PsygridState:
             existing = {
                 int(c["timestamp"]) // 60: dict(c)
                 for c in self.live_candles.get(security_id, [])
+                if c.get("complete", True)
             }
             for candle in candles:
-                existing[int(candle["timestamp"]) // 60] = dict(candle)
+                # Only completed native Dhan historical minutes are merged.
+                if candle.get("complete", True):
+                    existing[int(candle["timestamp"]) // 60] = dict(candle)
             self.live_candles[security_id] = [existing[k] for k in sorted(existing)]
 
     def seed_cumulative_volume(self, security_id: str, cumulative_volume: int) -> None:
@@ -100,10 +106,14 @@ class PsygridState:
                 ltt_epoch = int(quote["LTT_EPOCH"])
                 cumulative_volume = int(quote.get("volume", 0) or 0)
                 ltq = int(quote.get("LTQ", quote.get("ltq", 0)) or 0)
+                atp_raw = quote.get("ATP", quote.get("atp", quote.get("average_price")))
+                atp = float(atp_raw) if atp_raw not in (None, "") else None
             except (KeyError, TypeError, ValueError):
                 return
-            if ltp <= 0 or cumulative_volume < 0:
+            if ltt_epoch <= 0 or ltp <= 0 or cumulative_volume < 0:
                 return
+            if atp is not None and atp > 0:
+                self.dhan_day_average_price[security_id] = atp
 
             self.last_tick_at = datetime.now(timezone.utc).isoformat()
             previous_volume = self.prev_cumulative_volume.get(security_id)
@@ -113,8 +123,6 @@ class PsygridState:
 
             delta_volume = cumulative_volume - previous_volume
             if delta_volume < 0:
-                # Exchange/session volume reset. Do not manufacture a negative or
-                # replacement volume amount; re-seed from the genuine packet.
                 self.prev_cumulative_volume[security_id] = cumulative_volume
                 return
             self.prev_cumulative_volume[security_id] = cumulative_volume
@@ -177,10 +185,10 @@ class PsygridState:
             prefix_closes = closes[: idx + 1]
             item = dict(candle)
             item["vwap"] = vwap(day_candles)
+            item["dhan_avg_price"] = dhan_avg_price
             item["ma9"] = sma(prefix_closes, self.settings.ma_period)
             item["ema20"] = ema(prefix_closes, self.settings.ema_period)
             item["rsi14"] = rsi(prefix_closes, self.settings.rsi_period)
-            item["dhan_avg_price"] = dhan_avg_price
             out.append(item)
         return out
 
@@ -190,9 +198,7 @@ class PsygridState:
             current = self.current_1m.get(security_id)
             if current is not None:
                 candles.append(dict(current))
-            # Indicators use only the candles actually present. No missing minute
-            # is inserted and no synthetic candle is created.
-            enriched = self._enrich_live(candles)
+            enriched = self._enrich_live(candles, self.dhan_day_average_price.get(security_id))
             for candle in enriched:
                 candle.pop("epoch", None)
             return enriched
