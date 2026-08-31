@@ -24,6 +24,7 @@ class Settings:
     market_end: str = "15:15"
     intraday_history_days: int = 5
     daily_lookback: int = 7
+    daily_indicator_warmup: int = 30
     weekly_lookback: int = 7
     ma_period: int = 9
     ema_period: int = 20
@@ -42,16 +43,13 @@ def _load_symbol_universe() -> list[str]:
     path = Path(os.getenv("PSYGRID_STOCKS_FILE", "stocks.json"))
     if not path.exists():
         raise RuntimeError(f"Stock universe file not found: {path}")
-
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise RuntimeError(f"Unable to read stock universe: {path}") from exc
-
     symbols = payload.get("symbols") if isinstance(payload, dict) else None
     if not isinstance(symbols, list) or not symbols:
         raise RuntimeError("stocks.json must contain a non-empty 'symbols' array")
-
     normalized = [str(symbol).strip().upper() for symbol in symbols if str(symbol).strip()]
     if len(normalized) != len(set(normalized)):
         raise RuntimeError("stocks.json contains duplicate symbols")
@@ -63,17 +61,9 @@ def load_instruments() -> List[Instrument]:
     max_instruments = int(os.getenv("MAX_INSTRUMENTS", "500"))
     if len(symbols) > max_instruments:
         raise RuntimeError(f"Configured {len(symbols)} symbols; MAX_INSTRUMENTS={max_instruments}")
-
-    # Resolve current security IDs from Dhan's official instrument master.
-    # IDs are held in RAM only and never persisted.
     security_ids = fetch_nse_equity_security_ids(symbols)
     return [
-        Instrument(
-            symbol=symbol,
-            security_id=security_ids[symbol],
-            exchange_segment="NSE_EQ",
-            instrument="EQUITY",
-        )
+        Instrument(symbol=symbol, security_id=security_ids[symbol], exchange_segment="NSE_EQ", instrument="EQUITY")
         for symbol in symbols
     ]
 
@@ -83,7 +73,6 @@ def load_settings() -> Settings:
     access_token = os.getenv(token_var, "").strip()
     if not access_token:
         raise RuntimeError(f"Missing Dhan token. Expected variable: {token_var}")
-
     return Settings(
         client_id=_required("DHAN_CLIENT_ID"),
         access_token=access_token,
@@ -92,6 +81,7 @@ def load_settings() -> Settings:
         market_end=os.getenv("MARKET_END", "15:15"),
         intraday_history_days=int(os.getenv("INTRADAY_HISTORY_DAYS", "5")),
         daily_lookback=int(os.getenv("DAILY_LOOKBACK", "7")),
+        daily_indicator_warmup=int(os.getenv("DAILY_INDICATOR_WARMUP", "30")),
         weekly_lookback=int(os.getenv("WEEKLY_LOOKBACK", "7")),
         ma_period=int(os.getenv("MA_PERIOD", "9")),
         ema_period=int(os.getenv("EMA_PERIOD", "20")),
