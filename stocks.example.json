@@ -1,8 +1,10 @@
-[
-  {
-    "symbol": "TCS",
-    "security_id": "11536",
-    "exchange_segment": "NSE_EQ",
-    "instrument": "EQUITY"
-  }
-]
+{
+  "universe": "PSYGRID_EXAMPLE",
+  "exchange": "NSE",
+  "instrument": "EQUITY",
+  "symbols": [
+    "TCS",
+    "RELIANCE",
+    "HDFCBANK"
+  ]
+}
