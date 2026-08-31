@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from indicators import ema, rsi, sma, vwap
 
@@ -10,12 +12,26 @@ TIMEFRAMES = ("1m", "5m", "15m", "1h", "1d", "1w")
 
 
 def enrich_history(candles: list, settings) -> list:
+    """Enrich genuine Dhan candles without changing their OHLCV values.
+
+    VWAP resets at each NSE trading date. The OHLCV candle-weighted calculation
+    is used because Dhan's historical candle endpoint does not provide tick ATP.
+    """
     rows = [dict(c) for c in candles]
     closes = [float(c["close"]) for c in rows]
+    day_window = []
+    current_day = None
     for idx, row in enumerate(rows):
-        window = rows[: idx + 1]
+        try:
+            day = datetime.fromtimestamp(int(row["timestamp"]), ZoneInfo(settings.timezone)).date()
+        except (KeyError, TypeError, ValueError, OSError):
+            day = None
+        if day != current_day:
+            day_window = []
+            current_day = day
+        day_window.append(row)
         close_window = closes[: idx + 1]
-        row["vwap"] = vwap(window)
+        row["vwap"] = vwap(day_window)
         row["ma9"] = sma(close_window, settings.ma_period)
         row["ema20"] = ema(close_window, settings.ema_period)
         row["rsi14"] = rsi(close_window, settings.rsi_period)
@@ -46,7 +62,7 @@ def _historical_payload(state, security_id: str, key: str):
             "status": "UNAVAILABLE_NATIVE_DHAN_WEEKLY_CANDLE",
             "synthetic_candles": False,
             "source": "DHAN",
-            "note": "Dhan v2 documented historical candle endpoints provide daily and minute intervals, not a native weekly equity candle. Psygrid never aggregates daily candles into weekly candles."
+            "note": "Dhan v2 documented equity historical endpoints provide daily and minute intervals, not a native weekly equity candle. Psygrid never aggregates daily candles into weekly candles."
         }
     rows = enrich_history(state.historical.get(security_id, {}).get(key, []), state.settings)
     return [normalize_candle(row) for row in rows]
@@ -56,7 +72,7 @@ def market_live_json(state) -> dict:
     snap = state.snapshot()
     payload = {
         "service": "PSYGRID",
-        "schema_version": "1.1",
+        "schema_version": "1.2",
         "session": {
             "status": snap["session_status"],
             "date": snap["session_date"],
@@ -67,12 +83,18 @@ def market_live_json(state) -> dict:
             "last_tick_utc": snap["last_tick_at"],
             "last_feed_error": snap["last_feed_error"] or None,
         },
+        "dhan": {
+            "data_plan": snap["data_plan_status"],
+            "data_validity": snap["data_validity"],
+            "token_validity": snap["token_validity"],
+        },
         "rules": {
             "storage": "RAM_ONLY",
             "synthetic_candles": False,
             "source": "DHAN",
             "live_candle_source": "DHAN_WEBSOCKET_QUOTE",
             "historical_candle_source": "DHAN_HISTORICAL_API",
+            "vwap_method": "CANDLE_TYPICAL_PRICE_WEIGHTED_WITH_DAILY_RESET",
         },
         "stock_count": snap["stock_count"],
         "stocks": {},
@@ -110,7 +132,7 @@ def stock_json(state, symbol: str, timeframe: Optional[str] = None) -> dict:
         security_id, meta = found
         payload = {
             "service": "PSYGRID",
-            "schema_version": "1.1",
+            "schema_version": "1.2",
             "symbol": symbol,
             "security_id": security_id,
             "exchange_segment": meta["exchange_segment"],
@@ -123,7 +145,17 @@ def stock_json(state, symbol: str, timeframe: Optional[str] = None) -> dict:
                 "last_tick_utc": snap["last_tick_at"],
                 "last_feed_error": snap["last_feed_error"] or None,
             },
-            "rules": {"storage": "RAM_ONLY", "synthetic_candles": False, "source": "DHAN"},
+            "dhan": {
+                "data_plan": snap["data_plan_status"],
+                "data_validity": snap["data_validity"],
+                "token_validity": snap["token_validity"],
+            },
+            "rules": {
+                "storage": "RAM_ONLY",
+                "synthetic_candles": False,
+                "source": "DHAN",
+                "vwap_method": "CANDLE_TYPICAL_PRICE_WEIGHTED_WITH_DAILY_RESET",
+            },
             "timeframes": {},
         }
         if snap["session_status"] != "LIVE":
