@@ -7,7 +7,6 @@ from zoneinfo import ZoneInfo
 
 import requests
 
-
 BASE_URL = "https://api.dhan.co/v2"
 
 
@@ -37,17 +36,17 @@ class DhanAPI:
             try:
                 response = self.session.post(BASE_URL + path, headers=headers, json=payload, timeout=30)
                 if response.status_code == 429:
-                    time.sleep(min(8.0, 1.0 * (attempt + 1)))
+                    time.sleep(min(8.0, float(attempt + 1)))
                     continue
                 response.raise_for_status()
                 data = response.json()
-                if isinstance(data, dict) and data.get("status") == "failure":
+                if isinstance(data, dict) and str(data.get("status", "")).lower() == "failure":
                     raise RuntimeError(str(data))
                 return data
             except Exception as exc:
                 last_error = exc
                 if attempt < 4:
-                    time.sleep(min(8.0, 1.0 * (attempt + 1)))
+                    time.sleep(min(8.0, float(attempt + 1)))
         raise RuntimeError(f"Dhan API failed: {last_error}")
 
     def profile(self) -> dict:
@@ -75,29 +74,50 @@ class DhanAPI:
         raw = self._post("/marketfeed/quote", grouped, include_client_id=True)
         result: Dict[str, dict] = {}
         for _segment, rows in raw.get("data", {}).items():
+            if not isinstance(rows, dict):
+                continue
             for security_id, row in rows.items():
-                result[str(security_id)] = row
+                if isinstance(row, dict):
+                    result[str(security_id)] = row
         return result
 
-    def _candles_from_arrays(self, data: dict) -> List[dict]:
-        if not data:
+    @staticmethod
+    def _candles_from_arrays(data: dict) -> List[dict]:
+        if not isinstance(data, dict):
             return []
-        arrays = [data.get(key, []) for key in ("timestamp", "open", "high", "low", "close", "volume")]
+        keys = ("timestamp", "open", "high", "low", "close", "volume")
+        arrays = [data.get(key) for key in keys]
         if not all(isinstance(a, list) for a in arrays):
             return []
-        length = min(len(a) for a in arrays)
-        return [
-            {
-                "timestamp": int(arrays[0][i]),
-                "open": float(arrays[1][i]),
-                "high": float(arrays[2][i]),
-                "low": float(arrays[3][i]),
-                "close": float(arrays[4][i]),
-                "volume": int(arrays[5][i]),
+        length = len(arrays[0])
+        if any(len(a) != length for a in arrays):
+            raise RuntimeError("Dhan historical response arrays have inconsistent lengths")
+        candles: List[dict] = []
+        for i in range(length):
+            try:
+                timestamp = int(arrays[0][i])
+                open_price = float(arrays[1][i])
+                high = float(arrays[2][i])
+                low = float(arrays[3][i])
+                close = float(arrays[4][i])
+                volume = int(arrays[5][i])
+            except (TypeError, ValueError):
+                continue
+            if timestamp <= 0 or min(open_price, high, low, close) <= 0 or volume < 0:
+                continue
+            if high < max(open_price, close) or low > min(open_price, close) or low <= 0 or high <= 0:
+                continue
+            candles.append({
+                "timestamp": timestamp,
+                "open": open_price,
+                "high": high,
+                "low": low,
+                "close": close,
+                "volume": volume,
                 "source": "DHAN_HISTORICAL_API",
-            }
-            for i in range(length)
-        ]
+                "complete": True,
+            })
+        return candles
 
     def intraday(self, item, interval: int, from_dt: datetime, to_dt: datetime) -> List[dict]:
         payload = {
@@ -125,8 +145,16 @@ class DhanAPI:
 
     def load_previous_daily(self, item, lookback: int) -> List[dict]:
         now = datetime.now(self.tz)
-        warmup = max(self.settings.daily_indicator_warmup, self.settings.ma_period, self.settings.ema_period + 1, self.settings.rsi_period + 1)
-        calendar_days = max((lookback + warmup) * 2, 60)
+        warmup = max(
+            self.settings.daily_indicator_warmup,
+            self.settings.ma_period,
+            self.settings.ema_period,
+            self.settings.rsi_period + 1,
+        )
+        # Request enough calendar time to obtain warm-up trading sessions plus
+        # the requested seven completed days. Output layer may retain the full
+        # warm-up series for mathematically valid indicator values.
+        calendar_days = max((lookback + warmup) * 2, 90)
         start = now - timedelta(days=calendar_days)
         rows = self.daily(item, start, now)
         today = now.date()
