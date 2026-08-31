@@ -1,7 +1,10 @@
 import json
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import List
+
+from instrument_master import fetch_nse_equity_security_ids
 
 
 @dataclass(frozen=True)
@@ -35,44 +38,49 @@ def _required(name: str) -> str:
     return value
 
 
-def load_instruments() -> List[Instrument]:
-    raw = os.getenv("PSYGRID_INSTRUMENTS", "").strip()
-    if not raw:
-        return []
+def _load_symbol_universe() -> list[str]:
+    path = Path(os.getenv("PSYGRID_STOCKS_FILE", "stocks.json"))
+    if not path.exists():
+        raise RuntimeError(f"Stock universe file not found: {path}")
 
     try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError("PSYGRID_INSTRUMENTS must be valid JSON") from exc
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"Unable to read stock universe: {path}") from exc
 
-    if not isinstance(parsed, list):
-        raise RuntimeError("PSYGRID_INSTRUMENTS must be a JSON array")
+    symbols = payload.get("symbols") if isinstance(payload, dict) else None
+    if not isinstance(symbols, list) or not symbols:
+        raise RuntimeError("stocks.json must contain a non-empty 'symbols' array")
 
-    instruments: List[Instrument] = []
-    for item in parsed:
-        if not isinstance(item, dict):
-            continue
-        symbol = str(item.get("symbol", "")).strip().upper()
-        security_id = str(item.get("security_id", "")).strip()
-        if not symbol or not security_id:
-            continue
-        instruments.append(
-            Instrument(
-                symbol=symbol,
-                security_id=security_id,
-                exchange_segment=str(item.get("exchange_segment", "NSE_EQ")),
-                instrument=str(item.get("instrument", "EQUITY")),
-            )
+    normalized = [str(symbol).strip().upper() for symbol in symbols if str(symbol).strip()]
+    if len(normalized) != len(set(normalized)):
+        raise RuntimeError("stocks.json contains duplicate symbols")
+    return normalized
+
+
+def load_instruments() -> List[Instrument]:
+    # Resolve security IDs from Dhan's current official master at startup.
+    # IDs are held in RAM only; no instrument master is persisted.
+    symbols = _load_symbol_universe()
+    max_instruments = int(os.getenv("MAX_INSTRUMENTS", "500"))
+    if len(symbols) > max_instruments:
+        raise RuntimeError(
+            f"Configured {len(symbols)} symbols; MAX_INSTRUMENTS={max_instruments}"
         )
 
-    if len(instruments) > 5000:
-        raise RuntimeError("PSYGRID_INSTRUMENTS exceeds Dhan's 5000-instrument single-connection limit")
-    return instruments
+    security_ids = fetch_nse_equity_security_ids(symbols)
+    return [
+        Instrument(
+            symbol=symbol,
+            security_id=security_ids[symbol],
+            exchange_segment="NSE_EQ",
+            instrument="EQUITY",
+        )
+        for symbol in symbols
+    ]
 
 
 def load_settings() -> Settings:
-    # The Environment Group can expose the daily token under any name.
-    # Copy its value into DHAN_ACCESS_TOKEN in Render, or set DHAN_TOKEN_VAR.
     token_var = os.getenv("DHAN_TOKEN_VAR", "DHAN_ACCESS_TOKEN").strip()
     access_token = os.getenv(token_var, "").strip()
     if not access_token:
