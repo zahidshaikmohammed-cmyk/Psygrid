@@ -11,7 +11,9 @@ TIMEFRAMES = ("1m", "5m", "15m", "1h", "1d", "1w")
 
 
 def enrich_history(candles: list, settings) -> list:
+    """Enrich genuine Dhan candles without altering their OHLCV."""
     rows = [dict(c) for c in candles]
+    rows.sort(key=lambda c: int(c["timestamp"]))
     closes = [float(c["close"]) for c in rows]
     day_window = []
     current_day = None
@@ -42,6 +44,7 @@ def normalize_candle(row: dict) -> dict:
         "close": row.get("close"),
         "volume": row.get("volume"),
         "vwap": row.get("vwap"),
+        "dhan_avg_price": row.get("dhan_avg_price"),
         "ma9": row.get("ma9"),
         "ema20": row.get("ema20"),
         "rsi14": row.get("rsi14"),
@@ -56,7 +59,7 @@ def _historical_payload(state, security_id: str, key: str):
             "status": "UNAVAILABLE_NATIVE_DHAN_WEEKLY_CANDLE",
             "synthetic_candles": False,
             "source": "DHAN",
-            "note": "Dhan v2 documented equity historical endpoints provide daily and minute intervals, not a native weekly equity candle. Psygrid never aggregates daily candles into weekly candles."
+            "note": "Weekly candles are never synthesized from daily candles."
         }
     rows = enrich_history(state.historical.get(security_id, {}).get(key, []), state.settings)
     if key == "1d":
@@ -91,7 +94,7 @@ def market_live_json(state) -> dict:
     snap = state.snapshot()
     payload = {
         "service": "PSYGRID",
-        "schema_version": "1.3",
+        "schema_version": "1.4",
         "session": {
             "status": snap["session_status"],
             "date": snap["session_date"],
@@ -113,7 +116,8 @@ def market_live_json(state) -> dict:
             "source": "DHAN",
             "live_candle_source": "DHAN_WEBSOCKET_QUOTE",
             "historical_candle_source": "DHAN_HISTORICAL_API",
-            "vwap_method": "CANDLE_TYPICAL_PRICE_WEIGHTED_WITH_DAILY_RESET",
+            "calculated_indicator_source": "PSYGRID_FROM_GENUINE_DHAN_OHLCV",
+            "vwap_note": "vwap is candle-derived; dhan_avg_price is Dhan's supplied day average-price field when available",
         },
         "stock_count": snap["stock_count"],
         "stocks": {},
@@ -136,7 +140,7 @@ def stock_json(state, symbol: str, timeframe: Optional[str] = None) -> dict:
         security_id, meta = found
         payload = {
             "service": "PSYGRID",
-            "schema_version": "1.3",
+            "schema_version": "1.4",
             "symbol": symbol,
             "security_id": security_id,
             "exchange_segment": meta["exchange_segment"],
@@ -158,7 +162,7 @@ def stock_json(state, symbol: str, timeframe: Optional[str] = None) -> dict:
                 "storage": "RAM_ONLY",
                 "synthetic_candles": False,
                 "source": "DHAN",
-                "vwap_method": "CANDLE_TYPICAL_PRICE_WEIGHTED_WITH_DAILY_RESET",
+                "vwap_note": "vwap is candle-derived; dhan_avg_price is Dhan's supplied day average-price field when available",
             },
             "timeframes": {},
         }
