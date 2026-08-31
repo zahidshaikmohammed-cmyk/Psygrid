@@ -8,12 +8,7 @@ from dhanhq import DhanContext, MarketFeed
 
 
 class LiveFeed:
-    """Dhan v2 Quote websocket.
-
-    Only genuine Dhan Quote packets are passed into the RAM candle engine.
-    The SDK's documented synchronous run_forever/get_data loop is used so the
-    implementation does not depend on undocumented callback arguments.
-    """
+    """Dhan v2 Quote WebSocket feeding only genuine quote events into RAM."""
 
     def __init__(self, settings, state, instruments):
         self.settings = settings
@@ -22,7 +17,6 @@ class LiveFeed:
         self._feed = None
         self._thread: Optional[threading.Thread] = None
         self._stop_requested = threading.Event()
-        self._reconnect_lock = threading.Lock()
 
     def _build_feed(self):
         context = DhanContext(self.settings.client_id, self.settings.access_token)
@@ -39,58 +33,67 @@ class LiveFeed:
                 self._feed = self._build_feed()
                 self.state.feed_status = "CONNECTING"
                 self._feed.run_forever()
+                self.state.feed_status = "CONNECTED"
+                backoff = 2.0
 
+                # run_forever normally owns the socket loop. If it returns, the
+                # connection has ended; reconnect rather than silently stopping.
                 while not self._stop_requested.is_set():
                     data = self._feed.get_data()
-                    if not data:
+                    if data:
+                        self._handle_packet(data)
+                    else:
                         time.sleep(0.01)
-                        continue
-                    self._handle_packet(data)
 
-                try:
-                    self._feed.disconnect()
-                except Exception:
-                    pass
+                self._disconnect()
                 break
             except Exception as exc:
                 if self._stop_requested.is_set():
                     break
                 self.state.feed_status = "RECONNECTING"
                 self.state.last_feed_error = f"websocket:{exc}"
+                self._disconnect()
                 time.sleep(backoff)
                 backoff = min(backoff * 2.0, 30.0)
             finally:
                 self._feed = None
 
+    def _disconnect(self) -> None:
+        feed = self._feed
+        if feed is None:
+            return
+        for method_name in ("disconnect", "close_connection"):
+            try:
+                method = getattr(feed, method_name, None)
+                if method:
+                    method()
+                    return
+            except Exception:
+                continue
+
     def _handle_packet(self, data) -> None:
         if not isinstance(data, dict):
             return
 
-        # DhanHQ-py converts Quote packets to a dictionary. Be tolerant of
-        # capitalization differences across SDK patch versions.
-        packet_type = str(data.get("type", data.get("Type", "")))
-        if packet_type and packet_type.lower() not in {"quote data", "quote"}:
+        packet_type = str(data.get("type", data.get("Type", ""))).strip().lower()
+        if packet_type and packet_type not in {"quote data", "quote"}:
             return
 
         security_id = str(data.get("security_id", data.get("securityId", ""))).strip()
-        if not security_id:
+        if not security_id or security_id not in self.state.instruments:
             return
 
-        # Current SDK Quote packets expose LTT as epoch. Older SDK builds may
-        # expose a time string; those packets are ignored rather than guessed.
+        # Dhan Quote LTT must be a genuine epoch timestamp. Never infer time from
+        # server receipt time, because that could shift a tick into a false candle.
         ltt = data.get("LTT", data.get("ltt", data.get("last_trade_time")))
         try:
             ltt_epoch = int(ltt)
-        except (TypeError, ValueError):
-            return
-
-        try:
             ltp = float(data.get("LTP", data.get("ltp")))
             volume = int(data.get("volume", 0) or 0)
         except (TypeError, ValueError):
             return
 
-        if ltp <= 0 or volume < 0:
+        if ltt_epoch <= 0 or ltp <= 0 or volume < 0:
             return
 
         quote = dict(data)
@@ -98,7 +101,6 @@ class LiveFeed:
         quote["LTP"] = ltp
         quote["volume"] = volume
         self.state.update_quote(security_id, quote)
-        self.state.feed_status = "CONNECTED"
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -110,16 +112,7 @@ class LiveFeed:
     def stop(self) -> None:
         self._stop_requested.set()
         self.state.feed_status = "STOPPING"
-        feed = self._feed
-        if feed is not None:
-            for method_name in ("disconnect", "close_connection"):
-                try:
-                    method = getattr(feed, method_name, None)
-                    if method:
-                        method()
-                        break
-                except Exception:
-                    pass
+        self._disconnect()
         if self._thread is not None:
             self._thread.join(timeout=5)
         self._thread = None
