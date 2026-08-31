@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 import time
 from datetime import datetime, timedelta
 from typing import Dict, List
@@ -11,6 +12,9 @@ BASE_URL = "https://api.dhan.co/v2"
 
 
 class DhanAPI:
+    _rate_lock = threading.Lock()
+    _last_post_at = 0.0
+
     def __init__(self, settings):
         self.settings = settings
         self.session = requests.Session()
@@ -25,6 +29,17 @@ class DhanAPI:
             "client-id": self.settings.client_id,
         }
 
+    @classmethod
+    def _throttle_post(cls, minimum_interval: float = 0.25) -> None:
+        # Dhan documents a 5 requests/sec Data API limit. Keep a single process-
+        # wide gate so concurrent historical workers cannot burst past it.
+        with cls._rate_lock:
+            now = time.monotonic()
+            wait = minimum_interval - (now - cls._last_post_at)
+            if wait > 0:
+                time.sleep(wait)
+            cls._last_post_at = time.monotonic()
+
     def _post(self, path: str, payload: dict, include_client_id: bool = False) -> dict:
         headers = self.headers if include_client_id else {
             "Accept": "application/json",
@@ -34,6 +49,7 @@ class DhanAPI:
         last_error = None
         for attempt in range(5):
             try:
+                self._throttle_post()
                 response = self.session.post(BASE_URL + path, headers=headers, json=payload, timeout=30)
                 if response.status_code == 429:
                     time.sleep(min(8.0, float(attempt + 1)))
@@ -151,9 +167,6 @@ class DhanAPI:
             self.settings.ema_period,
             self.settings.rsi_period + 1,
         )
-        # Request enough calendar time to obtain warm-up trading sessions plus
-        # the requested seven completed days. Output layer may retain the full
-        # warm-up series for mathematically valid indicator values.
         calendar_days = max((lookback + warmup) * 2, 90)
         start = now - timedelta(days=calendar_days)
         rows = self.daily(item, start, now)
