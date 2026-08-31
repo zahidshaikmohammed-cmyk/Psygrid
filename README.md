@@ -1,61 +1,85 @@
 # Psygrid
 
-Live, machine-readable Dhan market-data service.
+Live, machine-readable Dhan Data API service for 90 NSE equities.
 
 ## Locked architecture
 
-- DhanHQ v2 historical APIs + DhanHQ v2 Quote WebSocket.
+- DhanHQ v2 Data APIs + DhanHQ v2 Quote WebSocket.
 - Free Render web service.
 - GitHub repository: Psygrid.
-- RAM only. No database, Redis, Postgres, files, or persistent market-data storage.
-- NSE session: 09:15 to 15:15 Asia/Kolkata.
-- Live acquisition starts only during the market session.
-- Session state is wiped after 15:15.
-- **Synthetic candles are forbidden.** No interpolation, reconstruction, aggregation, gap-filling, or fabricated OHLCV candles.
-- Live 1-minute candles are formed only from genuine Dhan Quote packets.
-- Historical 5m, 15m and 1h candles come directly from Dhan's native intraday historical API.
-- Historical daily candles come directly from Dhan's native daily historical API.
-- Weekly candles are intentionally not generated because Dhan's documented equity historical endpoints do not expose a native weekly candle. Psygrid therefore returns an explicit unavailable status instead of synthesizing a weekly candle.
+- RAM only. No database, Redis, Postgres, SQLite, files, or persistent market-data storage.
+- NSE session: **09:15 to 15:15 Asia/Kolkata**.
+- Live acquisition starts at 09:15 and stops at 15:15 exactly.
+- After 15:15, all session candles, indicators and instrument state are wiped from RAM.
+- Before 09:15 there is no live market acquisition.
+- **Synthetic candles are forbidden.** Psygrid never interpolates, fabricates, gap-fills, reconstructs or aggregates missing OHLCV into a fake candle.
+- Live 1-minute candles are formed only from genuine Dhan Quote WebSocket events and cumulative-volume deltas.
+- Historical 5m, 15m and 1h candles come directly from Dhan's native intraday historical endpoint.
+- Historical daily candles come directly from Dhan's native daily historical endpoint.
+- Dhan's documented v2 equity historical endpoints expose daily and minute intervals (1, 5, 15, 25, 60), not a native weekly equity candle. Therefore Psygrid **does not synthesize weekly candles**; the 1w field explicitly reports native-weekly unavailability.
+- Dhan's User Profile endpoint is checked at session start so the service can verify that the paid Data API plan is active.
 
-## Output
+## 90-stock universe
 
-`/public/live.txt` — latest live 1m state for all configured stocks.
+`stocks.json` contains the 90-symbol test universe. Psygrid resolves the current Dhan security IDs at runtime from Dhan's official instrument master; IDs are never hard-coded or persisted.
 
-`/public/stock/SYMBOL.txt` — complete machine-readable package for one stock.
+## JSON endpoints
 
-`/public/stock/SYMBOL/1m.txt`
-`/public/stock/SYMBOL/5m.txt`
-`/public/stock/SYMBOL/15m.txt`
-`/public/stock/SYMBOL/1h.txt`
-`/public/stock/SYMBOL/1d.txt`
-`/public/stock/SYMBOL/1w.txt`
+### All 90 stocks
 
-## Live fields
+`/public/live.json`
 
-OHLCV, Dhan day VWAP/average-price field, MA9, EMA20 and RSI14.
+This is the primary machine/AI endpoint. During the live session it exposes all configured stocks, current/live 1m candles and the native historical 5m, 15m, 1h and 1d context. The 1w field explicitly reports native Dhan weekly unavailability rather than creating a synthetic candle.
+
+### One stock
+
+`/public/stock/RELIANCE.json`
+
+### One timeframe
+
+`/public/stock/RELIANCE/1m.json`
+`/public/stock/RELIANCE/5m.json`
+`/public/stock/RELIANCE/15m.json`
+`/public/stock/RELIANCE/1h.json`
+`/public/stock/RELIANCE/1d.json`
+`/public/stock/RELIANCE/1w.json`
+
+All public JSON responses use `Cache-Control: no-store` so a machine does not receive stale cached market data.
+
+## Candle and indicator fields
+
+Every available candle contains:
+
+- timestamp
+- open
+- high
+- low
+- close
+- volume
+- VWAP
+- MA9
+- EMA20
+- RSI14
+- complete
+- source
+
+The current 1m candle has `complete=false`; completed candles have `complete=true`.
 
 ## Environment
 
 Required:
 
 - `DHAN_CLIENT_ID`
-- `DHAN_ACCESS_TOKEN` or another environment variable named by `DHAN_TOKEN_VAR`
-- `PSYGRID_INSTRUMENTS` — JSON array of instruments
+- `DHAN_ACCESS_TOKEN`, or the actual daily-token variable name through `DHAN_TOKEN_VAR`
 
-Example:
+The 90-stock universe is read from `stocks.json`, not from a giant Render environment variable.
 
-```json
-[
-  {"symbol":"TCS","security_id":"11536","exchange_segment":"NSE_EQ","instrument":"EQUITY"}
-]
-```
-
-Recommended defaults:
+Recommended:
 
 - `TIMEZONE=Asia/Kolkata`
 - `MARKET_START=09:15`
 - `MARKET_END=15:15`
-- `INTRADAY_HISTORY_DAYS=7`
+- `INTRADAY_HISTORY_DAYS=5`
 - `DAILY_LOOKBACK=7`
 - `WEEKLY_LOOKBACK=7`
 - `MA_PERIOD=9`
@@ -64,3 +88,15 @@ Recommended defaults:
 - `MAX_INSTRUMENTS=500`
 
 The Dhan access token must never be committed to GitHub.
+
+## Render
+
+Build command:
+
+`pip install -r requirements.txt`
+
+Start command:
+
+`python app.py`
+
+Render environment variables supply the Dhan client ID and the daily-rotated access token. No market-data persistence service is required.
