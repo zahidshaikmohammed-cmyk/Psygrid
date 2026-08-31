@@ -1,18 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime
+import json
 from typing import Optional
-from zoneinfo import ZoneInfo
 
 from indicators import ema, rsi, sma, vwap
-
-
-def fmt(value) -> str:
-    if value is None:
-        return "NA"
-    if isinstance(value, float):
-        return f"{value:.4f}"
-    return str(value)
 
 
 def enrich_history(candles: list, settings) -> list:
@@ -28,111 +19,114 @@ def enrich_history(candles: list, settings) -> list:
     return rows
 
 
-def candle_line(row: dict) -> str:
-    return "|".join([
-        str(row.get("timestamp", "")),
-        fmt(row.get("open")),
-        fmt(row.get("high")),
-        fmt(row.get("low")),
-        fmt(row.get("close")),
-        fmt(row.get("volume")),
-        fmt(row.get("vwap")),
-        fmt(row.get("ma9")),
-        fmt(row.get("ema20")),
-        fmt(row.get("rsi14")),
-        str(row.get("source", "")),
-    ])
+def json_value(value):
+    return None if value is None else value
 
 
-HEADER = "TIME|OPEN|HIGH|LOW|CLOSE|VOLUME|VWAP|MA9|EMA20|RSI14|SOURCE"
+def normalize_candle(row: dict) -> dict:
+    return {
+        "timestamp": row.get("timestamp"),
+        "open": json_value(row.get("open")),
+        "high": json_value(row.get("high")),
+        "low": json_value(row.get("low")),
+        "close": json_value(row.get("close")),
+        "volume": json_value(row.get("volume")),
+        "vwap": json_value(row.get("vwap")),
+        "ma9": json_value(row.get("ma9")),
+        "ema20": json_value(row.get("ema20")),
+        "rsi14": json_value(row.get("rsi14")),
+        "source": row.get("source"),
+    }
 
 
-def market_live_text(state) -> str:
+def market_live_json(state) -> dict:
     snap = state.snapshot()
-    lines = [
-        "PSYGRID=LIVE_MARKET_DATA",
-        f"SESSION_STATUS={snap['session_status']}",
-        f"SESSION_DATE={snap['session_date'] or 'NA'}",
-        f"FEED_STATUS={snap['feed_status']}",
-        f"STOCK_COUNT={snap['stock_count']}",
-        f"LAST_TICK_UTC={snap['last_tick_at'] or 'NA'}",
-        "SYNTHETIC_CANDLES=FALSE",
-        "STORAGE=RAM_ONLY",
-        "",
-        "SYMBOL|SECURITY_ID|TIME|OPEN|HIGH|LOW|CLOSE|VOLUME|VWAP|MA9|EMA20|RSI14|SOURCE",
-    ]
+    payload = {
+        "service": "PSYGRID",
+        "schema_version": "1.0",
+        "session": {
+            "status": snap["session_status"],
+            "date": snap["session_date"],
+            "feed_status": snap["feed_status"],
+            "last_tick_utc": snap["last_tick_at"],
+        },
+        "rules": {
+            "storage": "RAM_ONLY",
+            "synthetic_candles": False,
+            "source": "DHAN",
+        },
+        "stock_count": snap["stock_count"],
+        "stocks": {},
+    }
     if snap["session_status"] != "LIVE":
-        lines.append("NO_ACTIVE_MARKET_SESSION")
-        return "\n".join(lines) + "\n"
+        return payload
 
     with state.lock:
         for security_id, meta in sorted(state.instruments.items(), key=lambda x: x[1]["symbol"]):
             rows = state.live_enriched(security_id)
             if not rows:
                 continue
-            row = rows[-1]
-            lines.append("|".join([
-                meta["symbol"],
-                security_id,
-                str(row.get("timestamp", "")),
-                fmt(row.get("open")),
-                fmt(row.get("high")),
-                fmt(row.get("low")),
-                fmt(row.get("close")),
-                fmt(row.get("volume")),
-                fmt(row.get("vwap")),
-                fmt(row.get("ma9")),
-                fmt(row.get("ema20")),
-                fmt(row.get("rsi14")),
-                str(row.get("source", "")),
-            ]))
-    return "\n".join(lines) + "\n"
+            payload["stocks"][meta["symbol"]] = {
+                "security_id": security_id,
+                "exchange_segment": meta["exchange_segment"],
+                "instrument": meta["instrument"],
+                "live_1m": normalize_candle(rows[-1]),
+            }
+    return payload
 
 
-def stock_text(state, symbol: str, timeframe: Optional[str] = None) -> str:
+def stock_json(state, symbol: str, timeframe: Optional[str] = None) -> dict:
     snap = state.snapshot()
     symbol = symbol.upper()
     with state.lock:
-        found = None
-        for security_id, meta in state.instruments.items():
-            if meta["symbol"] == symbol:
-                found = (security_id, meta)
-                break
+        found = next(((sid, meta) for sid, meta in state.instruments.items() if meta["symbol"] == symbol), None)
         if found is None:
-            return f"PSYGRID=STOCK\nSYMBOL={symbol}\nSTATUS=NOT_FOUND\n"
+            return {"service": "PSYGRID", "symbol": symbol, "status": "NOT_FOUND"}
 
         security_id, meta = found
-        lines = [
-            "PSYGRID=STOCK",
-            f"SYMBOL={symbol}",
-            f"SECURITY_ID={security_id}",
-            f"SESSION_STATUS={snap['session_status']}",
-            "SYNTHETIC_CANDLES=FALSE",
-            "STORAGE=RAM_ONLY",
-        ]
+        payload = {
+            "service": "PSYGRID",
+            "schema_version": "1.0",
+            "symbol": symbol,
+            "security_id": security_id,
+            "exchange_segment": meta["exchange_segment"],
+            "instrument": meta["instrument"],
+            "session": {
+                "status": snap["session_status"],
+                "date": snap["session_date"],
+                "feed_status": snap["feed_status"],
+                "last_tick_utc": snap["last_tick_at"],
+            },
+            "rules": {"storage": "RAM_ONLY", "synthetic_candles": False, "source": "DHAN"},
+            "timeframes": {},
+        }
         if snap["session_status"] != "LIVE":
-            lines.append("NO_ACTIVE_MARKET_SESSION")
-            return "\n".join(lines) + "\n"
+            return payload
 
-        if timeframe in (None, "1m"):
-            lines += ["", "TIMEFRAME=1m", HEADER]
-            rows = state.live_enriched(security_id)
-            lines.extend(candle_line(row) for row in rows)
-            if timeframe == "1m" or timeframe is None:
-                if timeframe == "1m":
-                    return "\n".join(lines) + "\n"
-
-        if timeframe in (None, "5m", "15m", "1h", "1d", "1w"):
-            requested = [timeframe] if timeframe else ["5m", "15m", "1h", "1d", "1w"]
-            for key in requested:
-                lines += ["", f"TIMEFRAME={key}", HEADER]
-                if key == "1w":
-                    # Dhan's documented historical candle APIs expose daily and intraday intervals,
-                    # but no native weekly equity candle endpoint. Never aggregate daily candles here:
-                    # that would violate Psygrid's zero-synthetic-candle rule.
-                    lines.append("STATUS=UNAVAILABLE_NATIVE_DHAN_WEEKLY_CANDLE")
-                    lines.append("SYNTHETIC_WEEKLY_CANDLE=FORBIDDEN")
-                    continue
+        requested = [timeframe] if timeframe else ["1m", "5m", "15m", "1h", "1d", "1w"]
+        for key in requested:
+            if key == "1m":
+                rows = state.live_enriched(security_id)
+                payload["timeframes"][key] = [normalize_candle(r) for r in rows]
+            elif key == "1w":
+                payload["timeframes"][key] = {
+                    "status": "UNAVAILABLE_NATIVE_DHAN_WEEKLY_CANDLE",
+                    "synthetic_candles": False,
+                    "note": "Weekly candles are never synthesized from daily candles."
+                }
+            else:
                 rows = enrich_history(state.historical.get(security_id, {}).get(key, []), state.settings)
-                lines.extend(candle_line(row) for row in rows)
-        return "\n".join(lines) + "\n"
+                payload["timeframes"][key] = [normalize_candle(r) for r in rows]
+        return payload
+
+
+def dumps_json(payload: dict) -> str:
+    return json.dumps(payload, separators=(",", ":"), allow_nan=False) + "\n"
+
+
+def market_live_text(state) -> str:
+    return dumps_json(market_live_json(state))
+
+
+def stock_text(state, symbol: str, timeframe: Optional[str] = None) -> str:
+    return dumps_json(stock_json(state, symbol, timeframe))
