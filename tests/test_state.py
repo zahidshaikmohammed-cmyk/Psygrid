@@ -67,7 +67,7 @@ class CandleStateTests(unittest.TestCase):
             "123",
             {"LTP": 100.0, "LTT_EPOCH": 1788234300, "volume": 1001, "LTQ": 1},
         )
-        last = self.state.last_tick_epoch["__test__"] if False else self.state.last_tick_epoch
+        last = self.state.last_tick_epoch
         self.assertIsNotNone(last)
         fresh = self.state.freshness("123", now_epoch=last + 59.9)
         stale = self.state.freshness("123", now_epoch=last + 60.1)
