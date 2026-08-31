@@ -74,8 +74,7 @@ class DhanAPI:
             grouped.setdefault(item.exchange_segment, []).append(int(item.security_id))
         raw = self._post("/marketfeed/quote", grouped, include_client_id=True)
         result: Dict[str, dict] = {}
-        data = raw.get("data", {})
-        for segment, rows in data.items():
+        for _segment, rows in raw.get("data", {}).items():
             for security_id, row in rows.items():
                 result[str(security_id)] = row
         return result
@@ -87,9 +86,8 @@ class DhanAPI:
         if not all(isinstance(a, list) for a in arrays):
             return []
         length = min(len(a) for a in arrays)
-        candles = []
-        for i in range(length):
-            candles.append({
+        return [
+            {
                 "timestamp": int(arrays[0][i]),
                 "open": float(arrays[1][i]),
                 "high": float(arrays[2][i]),
@@ -97,8 +95,9 @@ class DhanAPI:
                 "close": float(arrays[4][i]),
                 "volume": int(arrays[5][i]),
                 "source": "DHAN_HISTORICAL_API",
-            })
-        return candles
+            }
+            for i in range(length)
+        ]
 
     def intraday(self, item, interval: int, from_dt: datetime, to_dt: datetime) -> List[dict]:
         payload = {
@@ -126,12 +125,14 @@ class DhanAPI:
 
     def load_previous_daily(self, item, lookback: int) -> List[dict]:
         now = datetime.now(self.tz)
-        start = now - timedelta(days=max(lookback * 4, 30))
+        warmup = max(self.settings.daily_indicator_warmup, self.settings.ma_period, self.settings.ema_period + 1, self.settings.rsi_period + 1)
+        calendar_days = max((lookback + warmup) * 2, 60)
+        start = now - timedelta(days=calendar_days)
         rows = self.daily(item, start, now)
         today = now.date()
         rows = [r for r in rows if datetime.fromtimestamp(r["timestamp"], self.tz).date() < today]
         rows.sort(key=lambda r: r["timestamp"])
-        return rows[-lookback:]
+        return rows[-(lookback + warmup):]
 
     def load_previous_intraday(self, item, interval: int, days: int) -> List[dict]:
         now = datetime.now(self.tz)
