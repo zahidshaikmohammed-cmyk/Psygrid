@@ -32,6 +32,8 @@ class SessionManager:
         return time(start_h, start_m) <= now.time() < time(end_h, end_m)
 
     def start(self) -> None:
+        if self.thread and self.thread.is_alive():
+            return
         self.stop_event.clear()
         self.thread = threading.Thread(target=self._loop, daemon=True, name="psygrid-session")
         self.thread.start()
@@ -44,10 +46,12 @@ class SessionManager:
         except Exception:
             pass
         if self.history_thread:
-            self.history_thread.join(timeout=5)
+            self.history_thread.join(timeout=10)
+            self.history_thread = None
         self.state.reset()
-        if self.thread:
+        if self.thread and self.thread is not threading.current_thread():
             self.thread.join(timeout=3)
+        self.thread = None
 
     def _loop(self) -> None:
         while not self.stop_event.is_set():
@@ -98,10 +102,22 @@ class SessionManager:
             if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
                 return
             try:
+                # Dhan's documented intraday history currently covers the last
+                # 5 trading days. Use genuine prior 1m candles as indicator
+                # warmup; never manufacture missing warmup candles.
+                seed_1m = self.dhan_api.load_previous_intraday(
+                    item, 1, self.settings.intraday_history_days
+                )
+                if self.history_stop.is_set() or not self.in_market():
+                    return
+                self.state.set_indicator_seed_1m(item.security_id, seed_1m)
+
                 for interval, key in ((5, "5m"), (15, "15m"), (60, "1h")):
                     if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
                         return
-                    rows = self.dhan_api.load_previous_intraday(item, interval, self.settings.intraday_history_days)
+                    rows = self.dhan_api.load_previous_intraday(
+                        item, interval, self.settings.intraday_history_days
+                    )
                     if not self.history_stop.is_set():
                         self.state.set_historical(item.security_id, key, rows)
 
@@ -123,7 +139,9 @@ class SessionManager:
                 if not self.history_stop.is_set():
                     self.state.last_feed_error = f"history:{item.symbol}:{exc}"
 
-        with ThreadPoolExecutor(max_workers=4, thread_name_prefix="psygrid-hist") as pool:
+        # Keep concurrency deliberately bounded on a free Render instance and
+        # avoid creating a burst of hundreds of Dhan historical requests.
+        with ThreadPoolExecutor(max_workers=2, thread_name_prefix="psygrid-hist") as pool:
             futures = [pool.submit(load_one, item) for item in self.instruments]
             for future in futures:
                 if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
@@ -141,7 +159,7 @@ class SessionManager:
             except Exception:
                 pass
             if self.history_thread:
-                self.history_thread.join(timeout=5)
+                self.history_thread.join(timeout=10)
             self.history_thread = None
             self.state.finalize_current()
             # Hard requirement: after 15:15, all session data disappears from RAM.
