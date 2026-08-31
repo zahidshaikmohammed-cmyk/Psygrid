@@ -44,7 +44,6 @@ def normalize_candle(row: dict) -> dict:
         "close": row.get("close"),
         "volume": row.get("volume"),
         "vwap": row.get("vwap"),
-        "dhan_avg_price": row.get("dhan_avg_price"),
         "ma9": row.get("ma9"),
         "ema20": row.get("ema20"),
         "rsi14": row.get("rsi14"),
@@ -78,6 +77,7 @@ def _stock_payload(state, security_id: str, meta: dict) -> dict:
             "ltp": current.get("close") if current else None,
             "timestamp": current.get("timestamp") if current else None,
             "candle_complete": bool(current.get("complete")) if current else False,
+            "dhan_day_vwap": state.dhan_day_average_price.get(security_id),
         },
         "timeframes": {
             "1m": [normalize_candle(row) for row in live_rows],
@@ -94,7 +94,7 @@ def market_live_json(state) -> dict:
     snap = state.snapshot()
     payload = {
         "service": "PSYGRID",
-        "schema_version": "1.4",
+        "schema_version": "1.5",
         "session": {
             "status": snap["session_status"],
             "date": snap["session_date"],
@@ -117,7 +117,8 @@ def market_live_json(state) -> dict:
             "live_candle_source": "DHAN_WEBSOCKET_QUOTE",
             "historical_candle_source": "DHAN_HISTORICAL_API",
             "calculated_indicator_source": "PSYGRID_FROM_GENUINE_DHAN_OHLCV",
-            "vwap_note": "vwap is candle-derived; dhan_avg_price is Dhan's supplied day average-price field when available",
+            "candle_vwap_method": "TYPICAL_PRICE_VOLUME_WEIGHTED_DAILY_RESET",
+            "dhan_day_vwap_source": "DHAN_MARKET_QUOTE_AVERAGE_PRICE",
         },
         "stock_count": snap["stock_count"],
         "stocks": {},
@@ -140,7 +141,7 @@ def stock_json(state, symbol: str, timeframe: Optional[str] = None) -> dict:
         security_id, meta = found
         payload = {
             "service": "PSYGRID",
-            "schema_version": "1.4",
+            "schema_version": "1.5",
             "symbol": symbol,
             "security_id": security_id,
             "exchange_segment": meta["exchange_segment"],
@@ -162,7 +163,8 @@ def stock_json(state, symbol: str, timeframe: Optional[str] = None) -> dict:
                 "storage": "RAM_ONLY",
                 "synthetic_candles": False,
                 "source": "DHAN",
-                "vwap_note": "vwap is candle-derived; dhan_avg_price is Dhan's supplied day average-price field when available",
+                "candle_vwap_method": "TYPICAL_PRICE_VOLUME_WEIGHTED_DAILY_RESET",
+                "dhan_day_vwap_source": "DHAN_MARKET_QUOTE_AVERAGE_PRICE",
             },
             "timeframes": {},
         }
@@ -174,6 +176,7 @@ def stock_json(state, symbol: str, timeframe: Optional[str] = None) -> dict:
             payload["timeframes"] = full["timeframes"]
             return payload
         if timeframe == "1m":
+            payload["current"] = _stock_payload(state, security_id, meta)["current"]
             payload["timeframes"]["1m"] = [normalize_candle(row) for row in state.live_enriched(security_id)]
         else:
             payload["timeframes"][timeframe] = _historical_payload(state, security_id, timeframe)
