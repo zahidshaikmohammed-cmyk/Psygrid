@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 import threading
-from datetime import datetime, timezone
-from time import sleep
+import time
 from typing import Optional
 
 from dhanhq import DhanContext, MarketFeed
 
 
 class LiveFeed:
-    """Dhan v2 Quote websocket. Only genuine Dhan Quote packets become live candles."""
+    """Dhan v2 Quote websocket.
+
+    Only genuine Dhan Quote packets are passed into the RAM candle engine.
+    The SDK's documented synchronous run_forever/get_data loop is used so the
+    implementation does not depend on undocumented callback arguments.
+    """
 
     def __init__(self, settings, state, instruments):
         self.settings = settings
@@ -18,70 +22,106 @@ class LiveFeed:
         self._feed = None
         self._thread: Optional[threading.Thread] = None
         self._stop_requested = threading.Event()
+        self._reconnect_lock = threading.Lock()
 
-    def _on_connect(self, _feed):
-        self.state.feed_status = "CONNECTED"
+    def _build_feed(self):
+        context = DhanContext(self.settings.client_id, self.settings.access_token)
+        subscriptions = [
+            (MarketFeed.NSE, item.security_id, MarketFeed.Quote)
+            for item in self.instruments
+        ]
+        return MarketFeed(context, subscriptions, version="v2")
 
-    def _on_error(self, _feed, error):
-        self.state.feed_status = "ERROR"
-        self.state.last_feed_error = str(error)
+    def _run(self) -> None:
+        backoff = 2.0
+        while not self._stop_requested.is_set():
+            try:
+                self._feed = self._build_feed()
+                self.state.feed_status = "CONNECTING"
+                self._feed.run_forever()
 
-    def _on_close(self, _feed):
-        if not self._stop_requested.is_set():
-            self.state.feed_status = "RECONNECTING"
+                while not self._stop_requested.is_set():
+                    data = self._feed.get_data()
+                    if not data:
+                        time.sleep(0.01)
+                        continue
+                    self._handle_packet(data)
 
-    def _on_message(self, _feed, data):
+                try:
+                    self._feed.disconnect()
+                except Exception:
+                    pass
+                break
+            except Exception as exc:
+                if self._stop_requested.is_set():
+                    break
+                self.state.feed_status = "RECONNECTING"
+                self.state.last_feed_error = f"websocket:{exc}"
+                time.sleep(backoff)
+                backoff = min(backoff * 2.0, 30.0)
+            finally:
+                self._feed = None
+
+    def _handle_packet(self, data) -> None:
         if not isinstance(data, dict):
             return
-        if data.get("type") != "Quote Data":
+
+        # DhanHQ-py converts Quote packets to a dictionary. Be tolerant of
+        # capitalization differences across SDK patch versions.
+        packet_type = str(data.get("type", data.get("Type", "")))
+        if packet_type and packet_type.lower() not in {"quote data", "quote"}:
             return
-        security_id = str(data.get("security_id", ""))
-        ltt = data.get("LTT", "")
+
+        security_id = str(data.get("security_id", data.get("securityId", ""))).strip()
+        if not security_id:
+            return
+
+        # Current SDK Quote packets expose LTT as epoch. Older SDK builds may
+        # expose a time string; those packets are ignored rather than guessed.
+        ltt = data.get("LTT", data.get("ltt", data.get("last_trade_time")))
         try:
-            # Dhan SDK returns LTT as UTC HH:MM:SS. NSE session date is the same UTC date.
-            parsed = datetime.strptime(ltt, "%H:%M:%S").replace(
-                year=datetime.now(timezone.utc).year,
-                month=datetime.now(timezone.utc).month,
-                day=datetime.now(timezone.utc).day,
-                tzinfo=timezone.utc,
-            )
-            epoch = int(parsed.timestamp())
-        except Exception:
+            ltt_epoch = int(ltt)
+        except (TypeError, ValueError):
+            return
+
+        try:
+            ltp = float(data.get("LTP", data.get("ltp")))
+            volume = int(data.get("volume", 0) or 0)
+        except (TypeError, ValueError):
+            return
+
+        if ltp <= 0 or volume < 0:
             return
 
         quote = dict(data)
-        quote["LTT_EPOCH"] = epoch
+        quote["LTT_EPOCH"] = ltt_epoch
+        quote["LTP"] = ltp
+        quote["volume"] = volume
         self.state.update_quote(security_id, quote)
+        self.state.feed_status = "CONNECTED"
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
             return
         self._stop_requested.clear()
-        context = DhanContext(self.settings.client_id, self.settings.access_token)
-        feed_instruments = []
-        for item in self.instruments:
-            feed_instruments.append((MarketFeed.NSE, item.security_id, MarketFeed.Quote))
-
-        self._feed = MarketFeed(
-            context,
-            feed_instruments,
-            version="v2",
-            on_connect=self._on_connect,
-            on_message=self._on_message,
-            on_close=self._on_close,
-            on_error=self._on_error,
-        )
-
-        self._thread = self._feed.start()
+        self._thread = threading.Thread(target=self._run, daemon=True, name="psygrid-dhan-feed")
+        self._thread.start()
 
     def stop(self) -> None:
         self._stop_requested.set()
         self.state.feed_status = "STOPPING"
-        if self._feed is not None:
-            try:
-                self._feed.close_connection()
-            except Exception:
-                pass
+        feed = self._feed
+        if feed is not None:
+            for method_name in ("disconnect", "close_connection"):
+                try:
+                    method = getattr(feed, method_name, None)
+                    if method:
+                        method()
+                        break
+                except Exception:
+                    pass
         if self._thread is not None:
             self._thread.join(timeout=5)
+        self._thread = None
+        self._feed = None
         self.state.feed_status = "STOPPED"
