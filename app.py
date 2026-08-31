@@ -8,7 +8,7 @@ from fastapi import FastAPI, Response
 from config import load_instruments, load_settings
 from dhan_api import DhanAPI
 from feed import LiveFeed
-from output import market_live_text, stock_text
+from output import dumps_json, market_live_json, stock_json
 from session import SessionManager
 from state import PsygridState
 
@@ -48,51 +48,51 @@ def shutdown() -> None:
         manager.stop()
 
 
+def json_response(payload: dict) -> Response:
+    return Response(content=dumps_json(payload), media_type="application/json")
+
+
 @app.get("/", response_class=Response)
 def root() -> Response:
-    return Response(
-        content="PSYGRID\nSTATUS=ONLINE\nDATA=DHAN\nSYNTHETIC_CANDLES=FALSE\n",
-        media_type="text/plain",
-    )
+    return json_response({
+        "service": "PSYGRID",
+        "status": "ONLINE",
+        "data_source": "DHAN",
+        "synthetic_candles": False,
+        "storage": "RAM_ONLY",
+    })
 
 
 @app.get("/health", response_class=Response)
 def health() -> Response:
     if config_error:
-        return Response(content=f"STATUS=CONFIG_ERROR\nERROR={config_error}\n", media_type="text/plain", status_code=200)
+        return json_response({"service": "PSYGRID", "status": "CONFIG_ERROR", "error": config_error})
     snap = state.snapshot() if state else {}
-    return Response(
-        content=(
-            "STATUS=OK\n"
-            f"SESSION_STATUS={snap.get('session_status', 'CLOSED')}\n"
-            f"FEED_STATUS={snap.get('feed_status', 'STOPPED')}\n"
-        ),
-        media_type="text/plain",
-    )
+    return json_response({"service": "PSYGRID", **snap})
 
 
-@app.get("/public/live.txt", response_class=Response)
+@app.get("/public/live.json", response_class=Response)
 def public_live() -> Response:
     if config_error:
-        return Response(content=f"PSYGRID=LIVE_MARKET_DATA\nSTATUS=CONFIG_ERROR\nERROR={config_error}\n", media_type="text/plain")
-    return Response(content=market_live_text(state), media_type="text/plain")
+        return json_response({"service": "PSYGRID", "status": "CONFIG_ERROR", "error": config_error})
+    return json_response(market_live_json(state))
 
 
-@app.get("/public/stock/{symbol}.txt", response_class=Response)
+@app.get("/public/stock/{symbol}.json", response_class=Response)
 def public_stock(symbol: str) -> Response:
     if config_error:
-        return Response(content=f"PSYGRID=STOCK\nSTATUS=CONFIG_ERROR\nERROR={config_error}\n", media_type="text/plain")
-    return Response(content=stock_text(state, symbol), media_type="text/plain")
+        return json_response({"service": "PSYGRID", "status": "CONFIG_ERROR", "error": config_error})
+    return json_response(stock_json(state, symbol))
 
 
-@app.get("/public/stock/{symbol}/{timeframe}.txt", response_class=Response)
+@app.get("/public/stock/{symbol}/{timeframe}.json", response_class=Response)
 def public_stock_timeframe(symbol: str, timeframe: str) -> Response:
     timeframe = timeframe.lower()
     if timeframe not in {"1m", "5m", "15m", "1h", "1d", "1w"}:
-        return Response(content="STATUS=INVALID_TIMEFRAME\n", media_type="text/plain", status_code=400)
+        return json_response({"service": "PSYGRID", "status": "INVALID_TIMEFRAME"})
     if config_error:
-        return Response(content=f"PSYGRID=STOCK\nSTATUS=CONFIG_ERROR\nERROR={config_error}\n", media_type="text/plain")
-    return Response(content=stock_text(state, symbol, timeframe), media_type="text/plain")
+        return json_response({"service": "PSYGRID", "status": "CONFIG_ERROR", "error": config_error})
+    return json_response(stock_json(state, symbol, timeframe))
 
 
 if __name__ == "__main__":
