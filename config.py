@@ -22,7 +22,7 @@ class Settings:
     timezone: str = "Asia/Kolkata"
     market_start: str = "09:15"
     market_end: str = "15:15"
-    intraday_history_days: int = 7
+    intraday_history_days: int = 5
     daily_lookback: int = 7
     weekly_lookback: int = 7
     ma_period: int = 9
@@ -59,15 +59,13 @@ def _load_symbol_universe() -> list[str]:
 
 
 def load_instruments() -> List[Instrument]:
-    # Resolve security IDs from Dhan's current official master at startup.
-    # IDs are held in RAM only; no instrument master is persisted.
     symbols = _load_symbol_universe()
     max_instruments = int(os.getenv("MAX_INSTRUMENTS", "500"))
     if len(symbols) > max_instruments:
-        raise RuntimeError(
-            f"Configured {len(symbols)} symbols; MAX_INSTRUMENTS={max_instruments}"
-        )
+        raise RuntimeError(f"Configured {len(symbols)} symbols; MAX_INSTRUMENTS={max_instruments}")
 
+    # Resolve current security IDs from Dhan's official instrument master.
+    # IDs are held in RAM only and never persisted.
     security_ids = fetch_nse_equity_security_ids(symbols)
     return [
         Instrument(
@@ -92,7 +90,7 @@ def load_settings() -> Settings:
         timezone=os.getenv("TIMEZONE", "Asia/Kolkata"),
         market_start=os.getenv("MARKET_START", "09:15"),
         market_end=os.getenv("MARKET_END", "15:15"),
-        intraday_history_days=int(os.getenv("INTRADAY_HISTORY_DAYS", "7")),
+        intraday_history_days=int(os.getenv("INTRADAY_HISTORY_DAYS", "5")),
         daily_lookback=int(os.getenv("DAILY_LOOKBACK", "7")),
         weekly_lookback=int(os.getenv("WEEKLY_LOOKBACK", "7")),
         ma_period=int(os.getenv("MA_PERIOD", "9")),
