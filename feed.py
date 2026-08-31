@@ -8,7 +8,7 @@ from dhanhq import DhanContext, MarketFeed
 
 
 class LiveFeed:
-    """Dhan v2 Quote WebSocket feeding only genuine quote events into RAM."""
+    """Persistent Dhan v2 Quote WebSocket; live data flows continuously into RAM."""
 
     def __init__(self, settings, state, instruments):
         self.settings = settings
@@ -35,28 +35,28 @@ class LiveFeed:
                 feed = self._build_feed()
                 with self._lock:
                     self._feed = feed
-                self.state.feed_status = "CONNECTING"
+                self.state.set_feed_status("CONNECTING")
 
-                # DhanHQ-py documents run_forever() as the event-loop starter.
-                # get_data() must be called after it returns from each loop turn;
-                # do not call run_forever once and then expect get_data to run.
+                # DhanHQ-py v2's documented synchronous pattern is a persistent
+                # run_forever/get_data loop. Each run_forever call advances the
+                # socket event loop; get_data retrieves the next decoded packet.
                 while not self._stop_requested.is_set():
                     feed.run_forever()
                     if self._stop_requested.is_set():
                         break
                     data = feed.get_data()
                     if data:
+                        self.state.set_feed_status("CONNECTED")
                         self._handle_packet(data)
                     else:
-                        time.sleep(0.01)
+                        time.sleep(0.001)
 
                 self._disconnect(feed)
                 break
             except Exception as exc:
                 if self._stop_requested.is_set():
                     break
-                self.state.feed_status = "RECONNECTING"
-                self.state.last_feed_error = f"websocket:{exc}"
+                self.state.set_feed_status("RECONNECTING", f"websocket:{exc}")
                 self._disconnect(feed)
                 time.sleep(backoff)
                 backoff = min(backoff * 2.0, 30.0)
@@ -117,7 +117,7 @@ class LiveFeed:
 
     def stop(self) -> None:
         self._stop_requested.set()
-        self.state.feed_status = "STOPPING"
+        self.state.set_feed_status("STOPPING")
         with self._lock:
             feed = self._feed
         self._disconnect(feed)
@@ -126,4 +126,4 @@ class LiveFeed:
         self._thread = None
         with self._lock:
             self._feed = None
-        self.state.feed_status = "STOPPED"
+        self.state.set_feed_status("STOPPED")
