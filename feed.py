@@ -17,6 +17,7 @@ class LiveFeed:
         self._feed = None
         self._thread: Optional[threading.Thread] = None
         self._stop_requested = threading.Event()
+        self._lock = threading.Lock()
 
     def _build_feed(self):
         context = DhanContext(self.settings.client_id, self.settings.access_token)
@@ -29,37 +30,43 @@ class LiveFeed:
     def _run(self) -> None:
         backoff = 2.0
         while not self._stop_requested.is_set():
+            feed = None
             try:
-                self._feed = self._build_feed()
+                feed = self._build_feed()
+                with self._lock:
+                    self._feed = feed
                 self.state.feed_status = "CONNECTING"
-                self._feed.run_forever()
-                self.state.feed_status = "CONNECTED"
-                backoff = 2.0
 
-                # run_forever normally owns the socket loop. If it returns, the
-                # connection has ended; reconnect rather than silently stopping.
+                # DhanHQ-py documents run_forever() as the event-loop starter.
+                # get_data() must be called after it returns from each loop turn;
+                # do not call run_forever once and then expect get_data to run.
                 while not self._stop_requested.is_set():
-                    data = self._feed.get_data()
+                    feed.run_forever()
+                    if self._stop_requested.is_set():
+                        break
+                    data = feed.get_data()
                     if data:
                         self._handle_packet(data)
                     else:
                         time.sleep(0.01)
 
-                self._disconnect()
+                self._disconnect(feed)
                 break
             except Exception as exc:
                 if self._stop_requested.is_set():
                     break
                 self.state.feed_status = "RECONNECTING"
                 self.state.last_feed_error = f"websocket:{exc}"
-                self._disconnect()
+                self._disconnect(feed)
                 time.sleep(backoff)
                 backoff = min(backoff * 2.0, 30.0)
             finally:
-                self._feed = None
+                with self._lock:
+                    if self._feed is feed:
+                        self._feed = None
 
-    def _disconnect(self) -> None:
-        feed = self._feed
+    @staticmethod
+    def _disconnect(feed) -> None:
         if feed is None:
             return
         for method_name in ("disconnect", "close_connection"):
@@ -83,8 +90,7 @@ class LiveFeed:
         if not security_id or security_id not in self.state.instruments:
             return
 
-        # Dhan Quote LTT must be a genuine epoch timestamp. Never infer time from
-        # server receipt time, because that could shift a tick into a false candle.
+        # LTT comes from Dhan's packet and determines the genuine candle minute.
         ltt = data.get("LTT", data.get("ltt", data.get("last_trade_time")))
         try:
             ltt_epoch = int(ltt)
@@ -112,9 +118,12 @@ class LiveFeed:
     def stop(self) -> None:
         self._stop_requested.set()
         self.state.feed_status = "STOPPING"
-        self._disconnect()
+        with self._lock:
+            feed = self._feed
+        self._disconnect(feed)
         if self._thread is not None:
             self._thread.join(timeout=5)
         self._thread = None
-        self._feed = None
+        with self._lock:
+            self._feed = None
         self.state.feed_status = "STOPPED"
