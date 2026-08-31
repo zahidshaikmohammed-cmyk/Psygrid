@@ -28,7 +28,7 @@ class SessionManager:
         now = now or self.now()
         start_h, start_m = map(int, self.settings.market_start.split(":"))
         end_h, end_m = map(int, self.settings.market_end.split(":"))
-        return time(start_h, start_m) <= now.time() <= time(end_h, end_m)
+        return time(start_h, start_m) <= now.time() < time(end_h, end_m)
 
     def start(self) -> None:
         self.stop_event.clear()
@@ -58,20 +58,29 @@ class SessionManager:
 
     def _start_session(self, now: datetime) -> None:
         with self._lock:
-            if self._started_for_date == now.date().isoformat():
+            session_date = now.date().isoformat()
+            if self._started_for_date == session_date:
                 return
-            self._started_for_date = now.date().isoformat()
-            self.state.begin(self._started_for_date, self.instruments)
+            self._started_for_date = session_date
+            self.state.begin(session_date, self.instruments)
             try:
-                # Snapshot seeds cumulative day volume before websocket ticks arrive.
+                profile = self.dhan_api.verify_data_access()
+                self.state.set_profile(profile)
+            except Exception as exc:
+                self.state.last_feed_error = f"profile:{exc}"
+                self._started_for_date = None
+                self.state.reset()
+                return
+
+            try:
                 snapshot = self.dhan_api.quote_snapshot(self.instruments)
                 for item in self.instruments:
                     row = snapshot.get(item.security_id, {})
                     self.state.seed_cumulative_volume(item.security_id, int(row.get("volume", 0) or 0))
             except Exception as exc:
-                self.state.last_feed_error = f"snapshot: {exc}"
+                self.state.last_feed_error = f"snapshot:{exc}"
 
-            # Start live acquisition immediately. Historical context loads in the background.
+            # Live acquisition starts immediately; historical context loads in parallel.
             self.feed.start()
             self.history_thread = threading.Thread(
                 target=self._load_history,
@@ -95,7 +104,7 @@ class SessionManager:
                 daily = self.dhan_api.load_previous_daily(item, self.settings.daily_lookback)
                 self.state.set_historical(item.security_id, "1d", daily)
 
-                # Genuine Dhan 1m candles for today, used only for restart recovery/warm-up.
+                # Genuine Dhan 1m candles for today are used only for restart recovery.
                 today_1m = self.dhan_api.load_today_1m(item)
                 current_epoch = int(self.now().timestamp())
                 current_minute = current_epoch - (current_epoch % 60)
@@ -104,7 +113,6 @@ class SessionManager:
             except Exception as exc:
                 self.state.last_feed_error = f"history:{item.symbol}:{exc}"
 
-        # Keep concurrency modest against Dhan's documented Data API rate limits.
         with ThreadPoolExecutor(max_workers=4, thread_name_prefix="psygrid-hist") as pool:
             futures = [pool.submit(load_one, item) for item in self.instruments]
             for future in futures:
@@ -122,6 +130,6 @@ class SessionManager:
             except Exception:
                 pass
             self.state.finalize_current()
-            # Hard requirement: after 15:15, the session vanishes from RAM and output.
+            # Hard requirement: after 15:15, all session data disappears from RAM.
             self.state.reset()
             self._started_for_date = None
