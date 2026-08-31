@@ -4,6 +4,7 @@ import threading
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
+from zoneinfo import ZoneInfo
 
 from indicators import ema, rsi, sma
 
@@ -13,6 +14,7 @@ class PsygridState:
 
     def __init__(self, settings):
         self.settings = settings
+        self.tz = ZoneInfo(settings.timezone)
         self.lock = threading.RLock()
         self.session_date: Optional[str] = None
         self.session_status = "CLOSED"
@@ -64,6 +66,13 @@ class PsygridState:
         with self.lock:
             self.historical[security_id][timeframe] = candles
 
+    def merge_today_1m_history(self, security_id: str, candles: List[dict]) -> None:
+        with self.lock:
+            existing = {int(c["timestamp"]) // 60: c for c in self.live_candles.get(security_id, [])}
+            for candle in candles:
+                existing[int(candle["timestamp"]) // 60] = candle
+            self.live_candles[security_id] = [existing[k] for k in sorted(existing)]
+
     def seed_cumulative_volume(self, security_id: str, cumulative_volume: int) -> None:
         with self.lock:
             self.prev_cumulative_volume[security_id] = max(0, int(cumulative_volume))
@@ -81,8 +90,6 @@ class PsygridState:
             cumulative_volume = int(quote["volume"])
             ltq = int(quote.get("LTQ", 0) or 0)
             avg_price = float(quote.get("avg_price", 0) or 0)
-            ts = datetime.fromtimestamp(ltt_epoch, timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M:%S")
-            # Render runs in UTC by default; the feed timestamp itself is authoritative.
             minute_key = ltt_epoch - (ltt_epoch % 60)
 
             previous_volume = self.prev_cumulative_volume.get(security_id, cumulative_volume)
@@ -110,7 +117,7 @@ class PsygridState:
                 if candle is not None:
                     self.live_candles[security_id].append(candle)
                 candle = {
-                    "timestamp": datetime.fromtimestamp(minute_key, timezone.utc).strftime("%Y-%m-%d %H:%M:00"),
+                    "timestamp": datetime.fromtimestamp(minute_key, timezone.utc).astimezone(self.tz).strftime("%Y-%m-%d %H:%M:00"),
                     "epoch": minute_key,
                     "open": ltp,
                     "high": ltp,
@@ -126,8 +133,7 @@ class PsygridState:
                 candle["close"] = ltp
                 candle["volume"] += delta_volume
 
-            # Dhan's quote packet exposes the day's volume-weighted average price.
-            # Prefer that genuine broker-provided value for the live stream.
+            # Dhan's Quote packet exposes the day's volume-weighted average price.
             candle["vwap"] = avg_price if avg_price > 0 else None
             self.last_tick_at = now
 
@@ -150,7 +156,6 @@ class PsygridState:
                 candle["ma9"] = sma(window, self.settings.ma_period)
                 candle["ema20"] = ema(window, self.settings.ema_period)
                 candle["rsi14"] = rsi(window, self.settings.rsi_period)
-                candle["vwap"] = candle.get("vwap")
             return candles
 
     def snapshot(self) -> dict:
