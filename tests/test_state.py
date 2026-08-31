@@ -1,7 +1,6 @@
 import unittest
 from types import SimpleNamespace
 
-from config import Instrument
 from state import PsygridState
 
 
@@ -14,7 +13,12 @@ class CandleStateTests(unittest.TestCase):
             rsi_period=14,
         )
         self.state = PsygridState(settings)
-        self.instrument = Instrument("TEST", "123")
+        self.instrument = SimpleNamespace(
+            symbol="TEST",
+            security_id="123",
+            exchange_segment="NSE_EQ",
+            instrument="EQUITY",
+        )
         self.state.begin("2026-09-01", [self.instrument])
         self.state.seed_cumulative_volume("123", 1000)
 
