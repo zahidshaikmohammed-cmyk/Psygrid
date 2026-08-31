@@ -44,6 +44,7 @@ def normalize_candle(row: dict) -> dict:
         "close": row.get("close"),
         "volume": row.get("volume"),
         "vwap": row.get("vwap"),
+        "dhan_day_vwap": row.get("dhan_day_vwap"),
         "ma9": row.get("ma9"),
         "ema20": row.get("ema20"),
         "rsi14": row.get("rsi14"),
@@ -94,7 +95,7 @@ def market_live_json(state) -> dict:
     snap = state.snapshot()
     payload = {
         "service": "PSYGRID",
-        "schema_version": "1.5",
+        "schema_version": "1.6",
         "session": {
             "status": snap["session_status"],
             "date": snap["session_date"],
@@ -119,6 +120,8 @@ def market_live_json(state) -> dict:
             "calculated_indicator_source": "PSYGRID_FROM_GENUINE_DHAN_OHLCV",
             "candle_vwap_method": "TYPICAL_PRICE_VOLUME_WEIGHTED_DAILY_RESET",
             "dhan_day_vwap_source": "DHAN_MARKET_QUOTE_AVERAGE_PRICE",
+            "intraday_history_limit": "DHAN_DOCUMENTED_LAST_5_TRADING_DAYS",
+            "weekly_candles": "NATIVE_DHAN_ONLY",
         },
         "stock_count": snap["stock_count"],
         "stocks": {},
@@ -141,7 +144,7 @@ def stock_json(state, symbol: str, timeframe: Optional[str] = None) -> dict:
         security_id, meta = found
         payload = {
             "service": "PSYGRID",
-            "schema_version": "1.5",
+            "schema_version": "1.6",
             "symbol": symbol,
             "security_id": security_id,
             "exchange_segment": meta["exchange_segment"],
