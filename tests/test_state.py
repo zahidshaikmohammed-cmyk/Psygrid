@@ -11,6 +11,7 @@ class CandleStateTests(unittest.TestCase):
             ma_period=9,
             ema_period=20,
             rsi_period=14,
+            max_live_age_seconds=60,
         )
         self.state = PsygridState(settings)
         self.instrument = SimpleNamespace(
@@ -60,6 +61,20 @@ class CandleStateTests(unittest.TestCase):
         rows = self.state.live_enriched("123")
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["volume"], 1)
+
+    def test_freshness_turns_stale_after_sixty_seconds(self):
+        self.state.update_quote(
+            "123",
+            {"LTP": 100.0, "LTT_EPOCH": 1788234300, "volume": 1001, "LTQ": 1},
+        )
+        last = self.state.last_tick_epoch["__test__"] if False else self.state.last_tick_epoch
+        self.assertIsNotNone(last)
+        fresh = self.state.freshness("123", now_epoch=last + 59.9)
+        stale = self.state.freshness("123", now_epoch=last + 60.1)
+        self.assertEqual(fresh["status"], "LIVE")
+        self.assertTrue(fresh["live_data_valid"])
+        self.assertEqual(stale["status"], "STALE")
+        self.assertFalse(stale["live_data_valid"])
 
 
 if __name__ == "__main__":
