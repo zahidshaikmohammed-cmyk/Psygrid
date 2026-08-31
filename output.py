@@ -74,6 +74,7 @@ def _stock_payload(state, security_id: str, meta: dict) -> dict:
         "security_id": security_id,
         "exchange_segment": meta["exchange_segment"],
         "instrument": meta["instrument"],
+        "freshness": state.freshness(security_id),
         "current": {
             "ltp": current.get("close") if current else None,
             "timestamp": current.get("timestamp") if current else None,
@@ -95,7 +96,7 @@ def market_live_json(state) -> dict:
     snap = state.snapshot()
     payload = {
         "service": "PSYGRID",
-        "schema_version": "1.6",
+        "schema_version": "1.7",
         "session": {
             "status": snap["session_status"],
             "date": snap["session_date"],
@@ -104,6 +105,8 @@ def market_live_json(state) -> dict:
             "market_end": state.settings.market_end,
             "feed_status": snap["feed_status"],
             "last_tick_utc": snap["last_tick_at"],
+            "last_tick_age_seconds": snap["last_tick_age_seconds"],
+            "max_live_age_seconds": snap["max_live_age_seconds"],
             "last_feed_error": snap["last_feed_error"] or None,
         },
         "dhan": {
@@ -122,6 +125,8 @@ def market_live_json(state) -> dict:
             "dhan_day_vwap_source": "DHAN_MARKET_QUOTE_AVERAGE_PRICE",
             "intraday_history_limit": "DHAN_DOCUMENTED_LAST_5_TRADING_DAYS",
             "weekly_candles": "NATIVE_DHAN_ONLY",
+            "live_freshness_policy": "MAX_60_SECONDS",
+            "live_acquisition": "PERSISTENT_WEBSOCKET_NO_POLLING",
         },
         "stock_count": snap["stock_count"],
         "stocks": {},
@@ -144,7 +149,7 @@ def stock_json(state, symbol: str, timeframe: Optional[str] = None) -> dict:
         security_id, meta = found
         payload = {
             "service": "PSYGRID",
-            "schema_version": "1.6",
+            "schema_version": "1.7",
             "symbol": symbol,
             "security_id": security_id,
             "exchange_segment": meta["exchange_segment"],
@@ -155,6 +160,7 @@ def stock_json(state, symbol: str, timeframe: Optional[str] = None) -> dict:
                 "timezone": state.settings.timezone,
                 "feed_status": snap["feed_status"],
                 "last_tick_utc": snap["last_tick_at"],
+                "max_live_age_seconds": snap["max_live_age_seconds"],
                 "last_feed_error": snap["last_feed_error"] or None,
             },
             "dhan": {
@@ -168,18 +174,21 @@ def stock_json(state, symbol: str, timeframe: Optional[str] = None) -> dict:
                 "source": "DHAN",
                 "candle_vwap_method": "TYPICAL_PRICE_VOLUME_WEIGHTED_DAILY_RESET",
                 "dhan_day_vwap_source": "DHAN_MARKET_QUOTE_AVERAGE_PRICE",
+                "live_freshness_policy": "MAX_60_SECONDS",
+                "live_acquisition": "PERSISTENT_WEBSOCKET_NO_POLLING",
             },
             "timeframes": {},
         }
         if snap["session_status"] != "LIVE":
             return payload
+        full = _stock_payload(state, security_id, meta)
+        payload["freshness"] = full["freshness"]
         if timeframe is None:
-            full = _stock_payload(state, security_id, meta)
             payload["current"] = full["current"]
             payload["timeframes"] = full["timeframes"]
             return payload
         if timeframe == "1m":
-            payload["current"] = _stock_payload(state, security_id, meta)["current"]
+            payload["current"] = full["current"]
             payload["timeframes"]["1m"] = [normalize_candle(row) for row in state.live_enriched(security_id)]
         else:
             payload["timeframes"][timeframe] = _historical_payload(state, security_id, timeframe)
