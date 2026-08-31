@@ -16,6 +16,7 @@ class SessionManager:
         self.instruments = instruments
         self.tz = ZoneInfo(settings.timezone)
         self.stop_event = threading.Event()
+        self.history_stop = threading.Event()
         self.thread: Optional[threading.Thread] = None
         self.history_thread: Optional[threading.Thread] = None
         self._lock = threading.RLock()
@@ -37,10 +38,13 @@ class SessionManager:
 
     def stop(self) -> None:
         self.stop_event.set()
+        self.history_stop.set()
         try:
             self.feed.stop()
         except Exception:
             pass
+        if self.history_thread:
+            self.history_thread.join(timeout=5)
         self.state.reset()
         if self.thread:
             self.thread.join(timeout=3)
@@ -51,9 +55,8 @@ class SessionManager:
             if self.in_market(now):
                 if self._started_for_date != now.date().isoformat():
                     self._start_session(now)
-            else:
-                if self._started_for_date is not None:
-                    self._end_session()
+            elif self._started_for_date is not None:
+                self._end_session()
             self.stop_event.wait(2.0)
 
     def _start_session(self, now: datetime) -> None:
@@ -62,6 +65,7 @@ class SessionManager:
             if self._started_for_date == session_date:
                 return
             self._started_for_date = session_date
+            self.history_stop.clear()
             self.state.begin(session_date, self.instruments)
             try:
                 profile = self.dhan_api.verify_data_access()
@@ -80,7 +84,6 @@ class SessionManager:
             except Exception as exc:
                 self.state.last_feed_error = f"snapshot:{exc}"
 
-            # Live acquisition starts immediately; historical context loads in parallel.
             self.feed.start()
             self.history_thread = threading.Thread(
                 target=self._load_history,
@@ -92,31 +95,38 @@ class SessionManager:
 
     def _load_history(self, now: datetime) -> None:
         def load_one(item):
-            if self.stop_event.is_set() or not self.in_market():
+            if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
                 return
             try:
                 for interval, key in ((5, "5m"), (15, "15m"), (60, "1h")):
-                    rows = self.dhan_api.load_previous_intraday(
-                        item, interval, self.settings.intraday_history_days
-                    )
-                    self.state.set_historical(item.security_id, key, rows)
+                    if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
+                        return
+                    rows = self.dhan_api.load_previous_intraday(item, interval, self.settings.intraday_history_days)
+                    if not self.history_stop.is_set():
+                        self.state.set_historical(item.security_id, key, rows)
 
+                if self.history_stop.is_set() or not self.in_market():
+                    return
                 daily = self.dhan_api.load_previous_daily(item, self.settings.daily_lookback)
-                self.state.set_historical(item.security_id, "1d", daily)
+                if not self.history_stop.is_set():
+                    self.state.set_historical(item.security_id, "1d", daily)
 
-                # Genuine Dhan 1m candles for today are used only for restart recovery.
+                if self.history_stop.is_set() or not self.in_market():
+                    return
                 today_1m = self.dhan_api.load_today_1m(item)
                 current_epoch = int(self.now().timestamp())
                 current_minute = current_epoch - (current_epoch % 60)
                 prior = [r for r in today_1m if r["timestamp"] < current_minute]
-                self.state.merge_today_1m_history(item.security_id, prior)
+                if not self.history_stop.is_set():
+                    self.state.merge_today_1m_history(item.security_id, prior)
             except Exception as exc:
-                self.state.last_feed_error = f"history:{item.symbol}:{exc}"
+                if not self.history_stop.is_set():
+                    self.state.last_feed_error = f"history:{item.symbol}:{exc}"
 
         with ThreadPoolExecutor(max_workers=4, thread_name_prefix="psygrid-hist") as pool:
             futures = [pool.submit(load_one, item) for item in self.instruments]
             for future in futures:
-                if self.stop_event.is_set() or not self.in_market():
+                if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
                     break
                 try:
                     future.result()
@@ -125,10 +135,14 @@ class SessionManager:
 
     def _end_session(self) -> None:
         with self._lock:
+            self.history_stop.set()
             try:
                 self.feed.stop()
             except Exception:
                 pass
+            if self.history_thread:
+                self.history_thread.join(timeout=5)
+            self.history_thread = None
             self.state.finalize_current()
             # Hard requirement: after 15:15, all session data disappears from RAM.
             self.state.reset()
