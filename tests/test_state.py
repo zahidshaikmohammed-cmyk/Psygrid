@@ -49,6 +49,32 @@ class CandleStateTests(unittest.TestCase):
         self.assertFalse(rows[1]["complete"])
         self.assertEqual([r["volume"] for r in rows], [1, 1])
 
+    def test_raw_tick_ring_is_flushed_when_minute_closes(self):
+        self.state.update_quote(
+            "123",
+            {"LTP": 100.0, "LTT_EPOCH": 1788234301, "volume": 1001, "LTQ": 1},
+        )
+        self.state.update_quote(
+            "123",
+            {"LTP": 100.5, "LTT_EPOCH": 1788234305, "volume": 1002, "LTQ": 1},
+        )
+        self.assertEqual(len(self.state.raw_tick_ring["123"]), 2)
+
+        self.state.update_quote(
+            "123",
+            {"LTP": 101.0, "LTT_EPOCH": 1788234360, "volume": 1003, "LTQ": 1},
+        )
+
+        self.assertEqual(len(self.state.raw_tick_ring["123"]), 1)
+        self.assertEqual(self.state.raw_tick_ring["123"][0]["epoch"], 1788234360)
+        self.assertEqual(len(self.state.live_candles["123"]), 1)
+        self.assertTrue(self.state.live_candles["123"][0]["complete"])
+        self.assertEqual(self.state.live_candles["123"][0]["open"], 100.0)
+        self.assertEqual(self.state.live_candles["123"][0]["high"], 100.5)
+        self.assertEqual(self.state.live_candles["123"][0]["low"], 100.0)
+        self.assertEqual(self.state.live_candles["123"][0]["close"], 100.5)
+        self.assertEqual(self.state.live_candles["123"][0]["volume"], 2)
+
     def test_negative_cumulative_volume_reset_is_not_converted_to_fake_volume(self):
         self.state.update_quote(
             "123",
