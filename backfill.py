@@ -4,14 +4,14 @@ import queue
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional
 
 
 class HistoricalBackfill:
     """Bounded, rate-limited historical backfill that never blocks the live feed."""
 
-    REQUEST_INTERVAL_SECONDS = 0.21  # <= 4.8 requests/sec, below Dhan's 5 rps ceiling.
+    REQUEST_INTERVAL_SECONDS = 0.21  # 4.76 requests/sec maximum per process.
     WORKERS = 4
     MAX_RETRIES = 5
 
@@ -36,34 +36,38 @@ class HistoricalBackfill:
                 time.sleep(wait)
             self._last_request = time.monotonic()
 
-    def _enqueue(self, item, from_dt: datetime, to_dt: datetime) -> None:
-        key = str(item.security_id)
-        with self._lock:
-            if self._closed or key in self._queued:
-                return
-            self._queued.add(key)
-        self._queue.put((item, from_dt, to_dt))
+    def _last_completed_epoch(self, security_id: str) -> Optional[int]:
+        with self.state.lock:
+            rows = self.state.live_candles.get(security_id, [])
+            completed = [int(c.get("epoch", c["timestamp"])) for c in rows if c.get("complete", True)]
+            return max(completed) if completed else None
 
     def enqueue_gap(self, now: Optional[datetime] = None) -> int:
-        """Queue only the missing 1m interval for every stock after a feed interruption."""
+        """Queue the exact missing 1m interval; the WebSocket remains independent."""
         if self._closed or not self.instruments:
             return 0
-        now = now or datetime.now(self.settings.tz)
+        now = now or datetime.now(self.state.tz)
         to_dt = now.replace(second=0, microsecond=0)
         queued = 0
         for item in self.instruments:
-            start_epoch = self.state.last_completed_candle_epoch(item.security_id)
+            start_epoch = self._last_completed_epoch(item.security_id)
             if start_epoch is None:
                 continue
-            # Start strictly after the last completed candle. No duplicate minute.
             from_epoch = int(start_epoch) + 60
             if from_epoch >= int(to_dt.timestamp()):
                 continue
-            from_dt = datetime.fromtimestamp(from_epoch, self.settings.tz)
-            self._enqueue(item, from_dt, to_dt)
+            key = str(item.security_id)
+            with self._lock:
+                if self._closed or key in self._queued:
+                    continue
+                self._queued.add(key)
+            self._queue.put((item, datetime.fromtimestamp(from_epoch, self.state.tz), to_dt))
             queued += 1
-        for _ in range(self.WORKERS):
-            self._executor.submit(self._worker)
+        if queued:
+            with self.state.lock:
+                self.state.backfill_runs += 1
+            for _ in range(self.WORKERS):
+                self._executor.submit(self._worker)
         return queued
 
     def _worker(self) -> None:
@@ -82,15 +86,16 @@ class HistoricalBackfill:
                         break
                     except Exception as exc:
                         text = str(exc).lower()
-                        if "429" not in text and "too many" not in text and attempt >= 1:
+                        rate_limited = "429" in text or "too many" in text or "rate limit" in text
+                        if not rate_limited or attempt >= self.MAX_RETRIES - 1:
                             raise
-                        if attempt >= self.MAX_RETRIES - 1:
-                            raise
-                        time.sleep(min(8.0, 0.5 * (2 ** attempt)))
+                        time.sleep(min(10.0, 0.75 * (2 ** attempt)))
                 if rows:
                     self.state.merge_today_1m_history(item.security_id, rows)
             except Exception as exc:
-                self.state.record_backfill_error(item.symbol, str(exc))
+                with self.state.lock:
+                    self.state.backfill_errors += 1
+                    self.state.last_backfill_error = f"{item.symbol}:{exc}"
             finally:
                 with self._lock:
                     self._queued.discard(key)
