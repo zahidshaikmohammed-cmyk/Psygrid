@@ -64,8 +64,6 @@ class HistoricalBackfill:
             self._queue.put((item, datetime.fromtimestamp(from_epoch, self.state.tz), to_dt))
             queued += 1
         if queued:
-            with self.state.lock:
-                self.state.backfill_runs += 1
             for _ in range(self.WORKERS):
                 self._executor.submit(self._worker)
         return queued
@@ -93,9 +91,10 @@ class HistoricalBackfill:
                 if rows:
                     self.state.merge_today_1m_history(item.security_id, rows)
             except Exception as exc:
+                # Do not crash the live-feed thread. The normal feed/reconnect
+                # path remains authoritative for current prices.
                 with self.state.lock:
-                    self.state.backfill_errors += 1
-                    self.state.last_backfill_error = f"{item.symbol}:{exc}"
+                    self.state.last_feed_error = f"backfill:{item.symbol}:{exc}"
             finally:
                 with self._lock:
                     self._queued.discard(key)
