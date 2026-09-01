@@ -23,6 +23,8 @@ class PsygridState:
         self.last_tick_at: Optional[str] = None
         self.last_tick_epoch: Optional[float] = None
         self.last_tick_by_security: Dict[str, float] = {}
+        self.last_ltp_by_security: Dict[str, float] = {}
+        self.last_ltt_by_security: Dict[str, int] = {}
         self.data_plan_status = "UNKNOWN"
         self.data_validity = None
         self.token_validity = None
@@ -34,6 +36,13 @@ class PsygridState:
         self.prev_cumulative_volume: Dict[str, int] = {}
         self.last_trade_key: Dict[str, tuple] = {}
         self.dhan_day_average_price: Dict[str, Optional[float]] = {}
+        self.feed_messages = 0
+        self.quote_packets = 0
+        self.live_quotes = 0
+        self.websocket_reconnects = 0
+        self.last_message_type: Optional[str] = None
+        self.last_message_at: Optional[str] = None
+        self.websocket_connected_at: Optional[str] = None
 
     def reset(self) -> None:
         with self.lock:
@@ -44,6 +53,8 @@ class PsygridState:
             self.last_tick_at = None
             self.last_tick_epoch = None
             self.last_tick_by_security.clear()
+            self.last_ltp_by_security.clear()
+            self.last_ltt_by_security.clear()
             self.data_plan_status = "UNKNOWN"
             self.data_validity = None
             self.token_validity = None
@@ -55,6 +66,13 @@ class PsygridState:
             self.prev_cumulative_volume.clear()
             self.last_trade_key.clear()
             self.dhan_day_average_price.clear()
+            self.feed_messages = 0
+            self.quote_packets = 0
+            self.live_quotes = 0
+            self.websocket_reconnects = 0
+            self.last_message_type = None
+            self.last_message_at = None
+            self.websocket_connected_at = None
 
     def begin(self, session_date: str, instruments: list) -> None:
         with self.lock:
@@ -65,6 +83,8 @@ class PsygridState:
             self.last_tick_at = None
             self.last_tick_epoch = None
             self.last_tick_by_security = {}
+            self.last_ltp_by_security = {}
+            self.last_ltt_by_security = {}
             self.instruments = {
                 i.security_id: {
                     "symbol": i.symbol,
@@ -76,6 +96,13 @@ class PsygridState:
             }
             self.current_1m = {i.security_id: None for i in instruments}
             self.dhan_day_average_price = {i.security_id: None for i in instruments}
+            self.feed_messages = 0
+            self.quote_packets = 0
+            self.live_quotes = 0
+            self.websocket_reconnects = 0
+            self.last_message_type = None
+            self.last_message_at = None
+            self.websocket_connected_at = None
 
     def set_profile(self, profile: dict) -> None:
         with self.lock:
@@ -88,6 +115,42 @@ class PsygridState:
             self.feed_status = status
             if error:
                 self.last_feed_error = error
+
+    def mark_websocket_connected(self, subscribed_count: int) -> None:
+        with self.lock:
+            self.feed_status = "CONNECTED"
+            self.websocket_connected_at = datetime.now(timezone.utc).isoformat()
+            self.last_feed_error = ""
+            self.subscribed_count = int(subscribed_count)
+
+    def mark_websocket_reconnecting(self, reason: str) -> None:
+        with self.lock:
+            self.feed_status = "RECONNECTING"
+            self.websocket_reconnects += 1
+            self.last_feed_error = reason
+
+    def mark_websocket_error(self, error: str) -> None:
+        with self.lock:
+            self.feed_status = "ERROR"
+            self.last_feed_error = error
+
+    def record_feed_message(self, packet_type: str) -> None:
+        with self.lock:
+            now = datetime.now(timezone.utc).isoformat()
+            self.feed_messages += 1
+            self.last_message_type = packet_type
+            self.last_message_at = now
+            if packet_type.lower() in {"quote data", "quote", "full data", "full"}:
+                self.quote_packets += 1
+
+    def record_live_quote(self, security_id: str, ltt_epoch: int) -> None:
+        with self.lock:
+            now = datetime.now(timezone.utc).timestamp()
+            self.live_quotes += 1
+            self.last_tick_epoch = now
+            self.last_tick_at = datetime.fromtimestamp(now, timezone.utc).isoformat()
+            self.last_tick_by_security[security_id] = now
+            self.last_ltt_by_security[security_id] = int(ltt_epoch)
 
     def set_historical(self, security_id: str, timeframe: str, candles: List[dict]) -> None:
         with self.lock:
@@ -132,29 +195,25 @@ class PsygridState:
                 ltt_epoch = int(quote["LTT_EPOCH"])
                 cumulative_volume = int(quote.get("volume", 0) or 0)
                 ltq = int(quote.get("LTQ", quote.get("ltq", 0)) or 0)
-                atp_raw = quote.get("ATP", quote.get("atp", quote.get("average_price")))
+                atp_raw = quote.get("average_price", quote.get("ATP", quote.get("atp", quote.get("avg_price"))))
                 atp = float(atp_raw) if atp_raw not in (None, "") else None
             except (KeyError, TypeError, ValueError):
                 return
             if ltt_epoch <= 0 or ltp <= 0 or cumulative_volume < 0:
                 return
+
+            self.last_ltp_by_security[security_id] = ltp
             if atp is not None and atp > 0:
                 self.dhan_day_average_price[security_id] = atp
-
-            now_epoch = datetime.now(timezone.utc).timestamp()
-            self.last_tick_at = datetime.fromtimestamp(now_epoch, timezone.utc).isoformat()
-            self.last_tick_epoch = now_epoch
-            self.last_tick_by_security[security_id] = now_epoch
 
             previous_volume = self.prev_cumulative_volume.get(security_id)
             if previous_volume is None:
                 self.prev_cumulative_volume[security_id] = cumulative_volume
-                return
+                previous_volume = cumulative_volume
 
             delta_volume = cumulative_volume - previous_volume
             if delta_volume < 0:
-                self.prev_cumulative_volume[security_id] = cumulative_volume
-                return
+                delta_volume = 0
             self.prev_cumulative_volume[security_id] = cumulative_volume
 
             trade_key = (ltt_epoch, cumulative_volume, ltq, ltp)
@@ -230,7 +289,7 @@ class PsygridState:
             item["ma9"] = sma(prefix_closes, self.settings.ma_period)
             item["ema20"] = ema(prefix_closes, self.settings.ema_period)
             item["rsi14"] = rsi(prefix_closes, self.settings.rsi_period)
-            item["dhan_avg_price"] = dhan_avg_price
+            item["dhan_day_vwap"] = dhan_avg_price
             out.append(item)
         return out
 
@@ -264,6 +323,8 @@ class PsygridState:
     def snapshot(self) -> dict:
         with self.lock:
             now_epoch = datetime.now(timezone.utc).timestamp()
+            ages = [now_epoch - value for value in self.last_tick_by_security.values()]
+            live_count = sum(1 for age in ages if age <= self.settings.max_live_age_seconds)
             return {
                 "session_date": self.session_date,
                 "session_status": self.session_status,
@@ -272,6 +333,15 @@ class PsygridState:
                 "last_tick_at": self.last_tick_at,
                 "last_tick_age_seconds": round(now_epoch - self.last_tick_epoch, 3) if self.last_tick_epoch else None,
                 "max_live_age_seconds": self.settings.max_live_age_seconds,
+                "live_stock_count": live_count,
+                "subscribed_count": getattr(self, "subscribed_count", len(self.instruments)),
+                "feed_messages": self.feed_messages,
+                "quote_packets": self.quote_packets,
+                "live_quotes": self.live_quotes,
+                "websocket_reconnects": self.websocket_reconnects,
+                "last_message_type": self.last_message_type,
+                "last_message_at": self.last_message_at,
+                "websocket_connected_at": self.websocket_connected_at,
                 "data_plan_status": self.data_plan_status,
                 "data_validity": self.data_validity,
                 "token_validity": self.token_validity,
