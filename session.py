@@ -7,6 +7,7 @@ from typing import Optional
 from zoneinfo import ZoneInfo
 
 from config import refresh_access_token
+from dhan_auth import DhanTokenRateLimited
 
 
 class SessionManager:
@@ -23,6 +24,7 @@ class SessionManager:
         self.history_thread: Optional[threading.Thread] = None
         self._lock = threading.RLock()
         self._started_for_date: Optional[str] = None
+        self._auth_retry_at = 0.0
 
     def now(self) -> datetime:
         return datetime.now(self.tz)
@@ -70,23 +72,40 @@ class SessionManager:
             session_date = now.date().isoformat()
             if self._started_for_date == session_date:
                 return
-            self._started_for_date = session_date
+
+            if now.timestamp() < self._auth_retry_at:
+                remaining = int(self._auth_retry_at - now.timestamp())
+                self.state.set_feed_status("AUTH_WAITING", f"Dhan authentication retry in {remaining}s")
+                return
+
             self.history_stop.clear()
             self.state.begin(session_date, self.instruments)
+            self.state.set_feed_status("AUTHENTICATING")
+
             try:
-                # If the linked Render environment group provides DHAN_PIN and
-                # DHAN_TOTP_SECRET, generate a fresh 24-hour token for this
-                # session. The secret itself is never printed or exposed.
+                # TOTP authentication is intentionally lazy. Render can restart
+                # without blocking HTTP startup or repeatedly hammering Dhan.
+                # An environment token is reused; PIN+TOTP is generated only
+                # when the market session actually needs authentication.
                 refresh_access_token(self.settings)
                 self.dhan_api.settings = self.settings
                 self.feed.settings = self.settings
                 profile = self.dhan_api.verify_data_access()
                 self.state.set_profile(profile)
-            except Exception as exc:
-                self.state.last_feed_error = f"profile:{exc}"
-                self._started_for_date = None
-                self.state.reset()
+            except DhanTokenRateLimited as exc:
+                self._auth_retry_at = now.timestamp() + exc.retry_after
+                self.state.set_feed_status(
+                    "AUTH_WAITING",
+                    f"Dhan token generation rate-limited; retrying in {exc.retry_after}s",
+                )
                 return
+            except Exception as exc:
+                self._auth_retry_at = now.timestamp() + 30
+                self.state.set_feed_status("AUTH_ERROR", f"authentication:{exc}")
+                return
+
+            self._started_for_date = session_date
+            self._auth_retry_at = 0.0
 
             try:
                 snapshot = self.dhan_api.quote_snapshot(self.instruments)
@@ -167,3 +186,4 @@ class SessionManager:
             self.state.finalize_current()
             self.state.reset()
             self._started_for_date = None
+            self._auth_retry_at = 0.0
