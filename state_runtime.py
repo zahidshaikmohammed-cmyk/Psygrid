@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import time
-from datetime import datetime, timezone
 from typing import Optional
 
 from state import PsygridState
@@ -36,6 +35,7 @@ class RuntimeFreshnessState(PsygridState):
         with self.lock:
             if self.session_status == "LIVE" and security_id in self.instruments:
                 self.last_tick_received_by_security[security_id] = received_now
+                self.last_tick_received_epoch = received_now
 
     def freshness(self, security_id: str, now_epoch: Optional[float] = None) -> dict:
         with self.lock:
@@ -54,6 +54,19 @@ class RuntimeFreshnessState(PsygridState):
                 "data_age_seconds": round(age, 3),
                 "live_data_valid": valid,
             }
+
+    def all_live_stale(self, now_epoch: Optional[float] = None) -> bool:
+        with self.lock:
+            if self.session_status != "LIVE" or not self.instruments:
+                return False
+            now_epoch = now_epoch or time.time()
+            if not self.last_tick_received_by_security:
+                return True
+            return all(
+                now_epoch - self.last_tick_received_by_security.get(security_id, 0.0)
+                > self.settings.max_live_age_seconds
+                for security_id in self.instruments
+            )
 
     def snapshot(self) -> dict:
         with self.lock:
