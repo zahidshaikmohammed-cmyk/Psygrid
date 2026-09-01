@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List
 
-from dhan_auth import token_from_environment
+from dhan_auth import generate_access_token, token_from_environment
 from instrument_master import fetch_nse_equity_security_ids
 
 
@@ -125,7 +125,7 @@ def refresh_access_token(settings: Settings) -> None:
     totp_secret = os.getenv("DHAN_TOTP_SECRET", "").strip()
     if not pin or not totp_secret:
         return
-    token, expiry = token_from_environment(settings.client_id)
+    token, expiry = generate_access_token(settings.client_id, pin, totp_secret)
     settings.access_token = token
     settings.token_expiry = expiry
     settings.token_source = "AUTO_GENERATED_TOTP"
