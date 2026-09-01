@@ -43,6 +43,7 @@ class PsygridState:
         self.last_message_type: Optional[str] = None
         self.last_message_at: Optional[str] = None
         self.websocket_connected_at: Optional[str] = None
+        self.subscribed_count = 0
 
     def reset(self) -> None:
         with self.lock:
@@ -73,6 +74,7 @@ class PsygridState:
             self.last_message_type = None
             self.last_message_at = None
             self.websocket_connected_at = None
+            self.subscribed_count = 0
 
     def begin(self, session_date: str, instruments: list) -> None:
         with self.lock:
@@ -103,6 +105,7 @@ class PsygridState:
             self.last_message_type = None
             self.last_message_at = None
             self.websocket_connected_at = None
+            self.subscribed_count = len(instruments)
 
     def set_profile(self, profile: dict) -> None:
         with self.lock:
@@ -325,16 +328,25 @@ class PsygridState:
             now_epoch = datetime.now(timezone.utc).timestamp()
             ages = [now_epoch - value for value in self.last_tick_by_security.values()]
             live_count = sum(1 for age in ages if age <= self.settings.max_live_age_seconds)
+            if self.feed_status == "CONNECTED" and live_count == 0 and self.session_status == "LIVE":
+                stream_health = "CONNECTED_NO_TICKS"
+            elif live_count < len(self.instruments) and self.session_status == "LIVE":
+                stream_health = "PARTIAL_LIVE"
+            elif live_count == len(self.instruments) and self.instruments:
+                stream_health = "FULL_LIVE"
+            else:
+                stream_health = self.feed_status
             return {
                 "session_date": self.session_date,
                 "session_status": self.session_status,
                 "feed_status": self.feed_status,
+                "stream_health": stream_health,
                 "last_feed_error": self.last_feed_error,
                 "last_tick_at": self.last_tick_at,
                 "last_tick_age_seconds": round(now_epoch - self.last_tick_epoch, 3) if self.last_tick_epoch else None,
                 "max_live_age_seconds": self.settings.max_live_age_seconds,
                 "live_stock_count": live_count,
-                "subscribed_count": getattr(self, "subscribed_count", len(self.instruments)),
+                "subscribed_count": self.subscribed_count,
                 "feed_messages": self.feed_messages,
                 "quote_packets": self.quote_packets,
                 "live_quotes": self.live_quotes,
