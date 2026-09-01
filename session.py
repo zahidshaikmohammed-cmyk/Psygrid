@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, time
@@ -7,7 +8,7 @@ from typing import Optional
 from zoneinfo import ZoneInfo
 
 from config import refresh_access_token
-from dhan_auth import DhanTokenRateLimited
+from dhan_auth import DhanTokenRateLimited, generate_access_token
 
 
 class SessionManager:
@@ -67,6 +68,30 @@ class SessionManager:
                 self._end_session()
             self.stop_event.wait(2.0)
 
+    def _auth_retry_with_totp(self) -> None:
+        """Regenerate once when Dhan explicitly says the current token is invalid/expired."""
+        pin = os.getenv("DHAN_PIN", "").strip()
+        totp_secret = os.getenv("DHAN_TOTP_SECRET", "").strip()
+        if not pin or not totp_secret:
+            raise RuntimeError("Dhan token expired/invalid and TOTP credentials are unavailable")
+        token, expiry = generate_access_token(self.settings.client_id, pin, totp_secret)
+        self.settings.access_token = token
+        self.settings.token_expiry = expiry
+        self.settings.token_source = "AUTO_GENERATED_TOTP"
+
+    @staticmethod
+    def _looks_like_auth_failure(exc: Exception) -> bool:
+        text = str(exc).lower()
+        return (
+            "807" in text
+            or "808" in text
+            or "809" in text
+            or "expired" in text
+            or "invalid token" in text
+            or "authentication failed" in text
+            or "unauthorized" in text
+        )
+
     def _start_session(self, now: datetime) -> None:
         with self._lock:
             session_date = now.date().isoformat()
@@ -87,7 +112,18 @@ class SessionManager:
                 refresh_access_token(self.settings)
                 self.dhan_api.settings = self.settings
                 self.feed.settings = self.settings
-                profile = self.dhan_api.verify_data_access()
+                try:
+                    profile = self.dhan_api.verify_data_access()
+                except Exception as first_exc:
+                    if not self._looks_like_auth_failure(first_exc):
+                        raise
+                    # A running Render process can outlive the daily token.
+                    # Regenerate exactly once through TOTP, then retry profile.
+                    self.state.set_feed_status("TOKEN_REFRESHING", "Dhan token expired/invalid; generating one fresh token")
+                    self._auth_retry_with_totp()
+                    self.dhan_api.settings = self.settings
+                    self.feed.settings = self.settings
+                    profile = self.dhan_api.verify_data_access()
                 self.state.set_profile(profile)
             except DhanTokenRateLimited as exc:
                 self._auth_retry_at = now.timestamp() + exc.retry_after
