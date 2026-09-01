@@ -5,6 +5,7 @@ import threading
 import time
 from datetime import datetime, timezone
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from dhanhq import DhanContext, MarketFeed
 
@@ -26,6 +27,7 @@ class LiveFeed:
     NORMAL_INITIAL_BACKOFF = 5.0
     NORMAL_MAX_BACKOFF = 120.0
     RATE_LIMIT_COOLDOWN = 300.0
+    FUTURE_TIMESTAMP_TOLERANCE_SECONDS = 5
 
     def __init__(self, settings, state, instruments):
         self.settings = settings
@@ -67,40 +69,99 @@ class LiveFeed:
             self.state.mark_websocket_error(f"websocket:{message}")
 
     @staticmethod
-    def _parse_ltt(value) -> int | None:
-        """Normalize DhanHQ-py's LTT into a real UTC epoch.
+    def _timezone_offset_seconds(timezone_name: str, now_epoch: float) -> int:
+        """Return the exchange timezone UTC offset at the current instant."""
+        try:
+            tz = ZoneInfo(timezone_name)
+            offset = datetime.fromtimestamp(now_epoch, timezone.utc).astimezone(tz).utcoffset()
+            return int(offset.total_seconds()) if offset is not None else 0
+        except Exception:
+            # TIMEZONE is validated by normal application startup. If a bad
+            # value somehow reaches this helper, keep the strict future check
+            # rather than inventing a timezone correction.
+            return 0
 
-        Dhan's wire protocol defines LTT as Unix epoch seconds. The current
-        Python client converts it to an HH:MM:SS UTC string before invoking the
-        callback, so both forms are accepted for SDK-version resilience.
+    @classmethod
+    def _normalize_future_epoch(cls, epoch: int, timezone_name: str, now_epoch: float) -> int | None:
+        """Normalize a Dhan wall-clock epoch when it is exactly one TZ offset ahead.
+
+        DhanHQ-py's MarketFeed currently converts the wire LTT epoch to a UTC
+        HH:MM:SS string before returning the packet. Some live NSE packets have
+        been observed with the exchange-local wall clock encoded as the epoch,
+        which makes that returned clock appear exactly one Asia/Kolkata offset
+        (19,800 seconds) in the future. We correct only that narrow, provable
+        case. A genuinely future timestamp is still rejected.
+        """
+        tolerance = cls.FUTURE_TIMESTAMP_TOLERANCE_SECONDS
+        if epoch <= int(now_epoch) + tolerance:
+            return epoch
+
+        offset = cls._timezone_offset_seconds(timezone_name, now_epoch)
+        if offset <= 0:
+            return None
+
+        corrected = epoch - offset
+        if corrected <= int(now_epoch) + tolerance:
+            return corrected
+
+        return None
+
+    @classmethod
+    def _parse_ltt(cls, value, timezone_name: str = "Asia/Kolkata") -> int | None:
+        """Normalize Dhan LTT into a real UTC epoch.
+
+        Dhan's wire protocol carries LTT as epoch seconds, while the current
+        DhanHQ Python client converts that value to a UTC HH:MM:SS string before
+        returning it from ``get_instrument_data``. Psygrid accepts both forms.
+
+        A known Dhan/exchange-local wall-clock representation can appear one
+        timezone offset ahead of real UTC. That representation is corrected only
+        when subtracting the configured exchange offset brings the timestamp
+        back to now (within the strict future tolerance). All other future
+        timestamps are rejected, preserving the anti-future-timestamp safety gate.
         """
         if value in (None, ""):
             return None
+
+        now_epoch = time.time()
+
         if isinstance(value, (int, float)):
             epoch = int(value)
-            return epoch if epoch > 0 else None
+            if epoch <= 0:
+                return None
+            return cls._normalize_future_epoch(epoch, timezone_name, now_epoch)
+
         text = str(value).strip()
+        if not text:
+            return None
+
         if text.isdigit():
             epoch = int(text)
-            return epoch if epoch > 0 else None
+            if epoch <= 0:
+                return None
+            return cls._normalize_future_epoch(epoch, timezone_name, now_epoch)
+
+        # DhanHQ-py currently returns LTT as UTC HH:MM:SS. Parse it as UTC first,
+        # then apply the same narrow future-offset correction used for raw epochs.
         for fmt in ("%H:%M:%S", "%H:%M:%S.%f"):
             try:
-                parsed = datetime.strptime(text, fmt)
-                now_utc = datetime.now(timezone.utc)
+                parsed = datetime.strptime(text, fmt).replace(tzinfo=timezone.utc)
                 parsed = parsed.replace(
-                    year=now_utc.year,
-                    month=now_utc.month,
-                    day=now_utc.day,
-                    tzinfo=timezone.utc,
+                    year=datetime.now(timezone.utc).year,
+                    month=datetime.now(timezone.utc).month,
+                    day=datetime.now(timezone.utc).day,
                 )
-                return int(parsed.timestamp())
+                epoch = int(parsed.timestamp())
+                return cls._normalize_future_epoch(epoch, timezone_name, now_epoch)
             except ValueError:
                 continue
+
         try:
             parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
             if parsed.tzinfo is None:
                 parsed = parsed.replace(tzinfo=timezone.utc)
-            return int(parsed.timestamp())
+            epoch = int(parsed.timestamp())
+            return cls._normalize_future_epoch(epoch, timezone_name, now_epoch)
         except ValueError:
             return None
 
@@ -142,7 +203,8 @@ class LiveFeed:
             return
 
         ltt_epoch = self._parse_ltt(
-            data.get("LTT", data.get("ltt", data.get("last_trade_time")))
+            data.get("LTT", data.get("ltt", data.get("last_trade_time"))),
+            self.settings.timezone,
         )
         try:
             ltp = float(data.get("LTP", data.get("ltp")))
@@ -157,14 +219,6 @@ class LiveFeed:
             return
 
         if ltt_epoch is None or ltp <= 0 or volume < 0:
-            return
-
-        # Reject impossible future-dated feed timestamps. They would otherwise
-        # make the freshness gate falsely report LIVE.
-        if ltt_epoch > int(time.time()) + 5:
-            self.state.mark_websocket_error(
-                f"invalid future Dhan LTT for {security_id}: {ltt_epoch}"
-            )
             return
 
         quote = dict(data)
