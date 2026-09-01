@@ -3,9 +3,10 @@ from __future__ import annotations
 import asyncio
 import json
 import random
+import threading
 import time
 
-from feed import LiveFeed as BaseLiveFeed
+from feed import DhanConnectionLimited, LiveFeed as BaseLiveFeed
 
 
 class LiveFeed(BaseLiveFeed):
@@ -67,8 +68,8 @@ class LiveFeed(BaseLiveFeed):
             if age is None or age > 30.0:
                 stale.append(item)
 
-        # Re-subscribe only stale stocks. Dhan v2 explicitly supports JSON
-        # subscription packets and a maximum of 100 instruments per message.
+        # Dhan v2 supports JSON subscription packets. RequestCode 17 is the
+        # Quote subscription and each message can contain up to 100 instruments.
         for item in stale:
             key = str(item.security_id)
             last = self._last_resubscribe.get(key, 0.0)
@@ -89,8 +90,8 @@ class LiveFeed(BaseLiveFeed):
                     f"LIVE_HEALTH: failed to re-subscribe {item.symbol}"
                 ) from exc
 
-        # If the whole feed has gone quiet, a REST snapshot can keep the public
-        # endpoint current while the WebSocket recovery proceeds independently.
+        # Dhan's market-quote endpoint accepts the entire 180-stock universe in
+        # one request, so fallback never creates a 180-request REST burst.
         if stale and now - self._last_rest_fallback >= self.REST_FALLBACK_AFTER_SECONDS:
             if self.dhan_api is not None:
                 try:
@@ -121,9 +122,6 @@ class LiveFeed(BaseLiveFeed):
                         )
                     )
                 except asyncio.TimeoutError:
-                    # Five-second receive checks let the heartbeat task run and
-                    # detect a dead socket without treating a quiet interval as
-                    # an immediate disconnect.
                     continue
                 self._on_message(feed, data)
         finally:
@@ -131,7 +129,7 @@ class LiveFeed(BaseLiveFeed):
                 heartbeat.cancel()
                 try:
                     feed.loop.run_until_complete(heartbeat)
-                except (asyncio.CancelledError, Exception):
+                except BaseException:
                     pass
 
     def _run(self) -> None:
@@ -183,7 +181,7 @@ class LiveFeed(BaseLiveFeed):
         if self._thread and self._thread.is_alive():
             return
         self._stop_requested.clear()
-        self._thread = __import__("threading").Thread(
+        self._thread = threading.Thread(
             target=self._run,
             daemon=True,
             name="psygrid-dhan-feed",
