@@ -139,6 +139,8 @@ class PsygridState:
 
     def record_feed_message(self, packet_type: str) -> None:
         with self.lock:
+            if self.session_status != "LIVE":
+                return
             now = datetime.now(timezone.utc).isoformat()
             self.feed_messages += 1
             self.last_message_type = packet_type
@@ -148,6 +150,8 @@ class PsygridState:
 
     def record_live_quote(self, security_id: str, ltt_epoch: int) -> None:
         with self.lock:
+            if self.session_status != "LIVE" or security_id not in self.instruments:
+                return
             now = datetime.now(timezone.utc).timestamp()
             self.live_quotes += 1
             self.last_tick_epoch = now
