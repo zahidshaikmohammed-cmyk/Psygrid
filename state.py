@@ -22,6 +22,7 @@ class PsygridState:
         self.last_feed_error = ""
         self.last_tick_at: Optional[str] = None
         self.last_tick_epoch: Optional[float] = None
+        self.last_tick_received_epoch: Optional[float] = None
         self.last_tick_by_security: Dict[str, float] = {}
         self.last_ltp_by_security: Dict[str, float] = {}
         self.last_ltt_by_security: Dict[str, int] = {}
@@ -53,6 +54,7 @@ class PsygridState:
             self.last_feed_error = ""
             self.last_tick_at = None
             self.last_tick_epoch = None
+            self.last_tick_received_epoch = None
             self.last_tick_by_security.clear()
             self.last_ltp_by_security.clear()
             self.last_ltt_by_security.clear()
@@ -84,6 +86,7 @@ class PsygridState:
             self.last_feed_error = ""
             self.last_tick_at = None
             self.last_tick_epoch = None
+            self.last_tick_received_epoch = None
             self.last_tick_by_security = {}
             self.last_ltp_by_security = {}
             self.last_ltt_by_security = {}
@@ -152,11 +155,12 @@ class PsygridState:
         with self.lock:
             if self.session_status != "LIVE" or security_id not in self.instruments:
                 return
-            now = datetime.now(timezone.utc).timestamp()
+            received_now = datetime.now(timezone.utc).timestamp()
             self.live_quotes += 1
-            self.last_tick_epoch = now
-            self.last_tick_at = datetime.fromtimestamp(now, timezone.utc).isoformat()
-            self.last_tick_by_security[security_id] = now
+            self.last_tick_epoch = float(ltt_epoch)
+            self.last_tick_at = datetime.fromtimestamp(ltt_epoch, timezone.utc).isoformat()
+            self.last_tick_received_epoch = received_now
+            self.last_tick_by_security[security_id] = float(ltt_epoch)
             self.last_ltt_by_security[security_id] = int(ltt_epoch)
 
     def set_historical(self, security_id: str, timeframe: str, candles: List[dict]) -> None:
@@ -330,7 +334,7 @@ class PsygridState:
     def snapshot(self) -> dict:
         with self.lock:
             now_epoch = datetime.now(timezone.utc).timestamp()
-            ages = [now_epoch - value for value in self.last_tick_by_security.values()]
+            ages = [max(0.0, now_epoch - value) for value in self.last_tick_by_security.values()]
             live_count = sum(1 for age in ages if age <= self.settings.max_live_age_seconds)
             if self.feed_status == "CONNECTED" and live_count == 0 and self.session_status == "LIVE":
                 stream_health = "CONNECTED_NO_TICKS"
