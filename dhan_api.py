@@ -175,6 +175,18 @@ class DhanAPI:
         rows.sort(key=lambda r: r["timestamp"])
         return rows[-(lookback + warmup):]
 
+    def load_today_intraday(self, item, interval: int) -> List[dict]:
+        """Load only today's native Dhan intraday candles; never fetch prior days."""
+        now = datetime.now(self.tz)
+        start = now.replace(hour=9, minute=15, second=0, microsecond=0)
+        if now < start:
+            return []
+        rows = self.intraday(item, interval, start, now)
+        today = now.date()
+        rows = [r for r in rows if datetime.fromtimestamp(r["timestamp"], self.tz).date() == today]
+        rows.sort(key=lambda r: r["timestamp"])
+        return rows
+
     def load_previous_intraday(self, item, interval: int, days: int) -> List[dict]:
         now = datetime.now(self.tz)
         start = now - timedelta(days=max(days, 1))
@@ -185,10 +197,4 @@ class DhanAPI:
         return rows
 
     def load_today_1m(self, item) -> List[dict]:
-        now = datetime.now(self.tz)
-        start = now.replace(hour=9, minute=15, second=0, microsecond=0)
-        if now < start:
-            return []
-        rows = self.intraday(item, 1, start, now)
-        rows.sort(key=lambda r: r["timestamp"])
-        return rows
+        return self.load_today_intraday(item, 1)
