@@ -15,6 +15,7 @@ class LiveFeed(BaseLiveFeed):
     """
 
     SOCKET_READ_TIMEOUT_SECONDS = 20.0
+    RATE_LIMIT_COOLDOWN = 120.0
 
     def _run_connected_session(self, feed) -> None:
         feed.loop.run_until_complete(feed.connect())
