@@ -6,10 +6,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List
 
+from dhan_auth import token_from_environment
 from instrument_master import fetch_nse_equity_security_ids
 
 
-@dataclass(frozen=True)
+@dataclass
 class Instrument:
     symbol: str
     security_id: str
@@ -17,10 +18,12 @@ class Instrument:
     instrument: str = "EQUITY"
 
 
-@dataclass(frozen=True)
+@dataclass
 class Settings:
     client_id: str
     access_token: str
+    token_source: str = "UNKNOWN"
+    token_expiry: str | None = None
     timezone: str = "Asia/Kolkata"
     market_start: str = "09:15"
     market_end: str = "15:15"
@@ -88,12 +91,8 @@ def load_instruments() -> List[Instrument]:
 
 
 def load_settings() -> Settings:
-    token_var = os.getenv("DHAN_TOKEN_VAR", "DHAN_ACCESS_TOKEN").strip()
-    if not token_var:
-        raise RuntimeError("DHAN_TOKEN_VAR cannot be empty")
-    access_token = os.getenv(token_var, "").strip()
-    if not access_token:
-        raise RuntimeError(f"Missing Dhan token. Expected variable: {token_var}")
+    client_id = _required("DHAN_CLIENT_ID")
+    access_token, token_expiry, token_source = token_from_environment(client_id)
 
     market_start = os.getenv("MARKET_START", "09:15").strip()
     market_end = os.getenv("MARKET_END", "15:15").strip()
@@ -101,8 +100,10 @@ def load_settings() -> Settings:
         raise RuntimeError("MARKET_START and MARKET_END must use HH:MM")
 
     return Settings(
-        client_id=_required("DHAN_CLIENT_ID"),
+        client_id=client_id,
         access_token=access_token,
+        token_source=token_source,
+        token_expiry=token_expiry,
         timezone=os.getenv("TIMEZONE", "Asia/Kolkata").strip(),
         market_start=market_start,
         market_end=market_end,
@@ -116,3 +117,15 @@ def load_settings() -> Settings:
         max_instruments=_positive_int_env("MAX_INSTRUMENTS", 500),
         max_live_age_seconds=_positive_int_env("MAX_LIVE_AGE_SECONDS", 60),
     )
+
+
+def refresh_access_token(settings: Settings) -> None:
+    """Refresh the token at each new market session when TOTP credentials exist."""
+    pin = os.getenv("DHAN_PIN", "").strip()
+    totp_secret = os.getenv("DHAN_TOTP_SECRET", "").strip()
+    if not pin or not totp_secret:
+        return
+    token, expiry = token_from_environment(settings.client_id)
+    settings.access_token = token
+    settings.token_expiry = expiry
+    settings.token_source = "AUTO_GENERATED_TOTP"
