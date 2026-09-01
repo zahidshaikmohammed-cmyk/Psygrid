@@ -129,17 +129,18 @@ class SessionManager:
             if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
                 return
             try:
+                # Previous 1m data is used only as an internal indicator seed.
+                # It is never exposed as the public 1m session history.
                 seed_1m = self.dhan_api.load_previous_intraday(item, 1, self.settings.intraday_history_days)
                 if self.history_stop.is_set() or not self.in_market():
                     return
                 self.state.set_indicator_seed_1m(item.security_id, seed_1m)
 
+                # Public 5m/15m/1h history is current-day native Dhan data only.
                 for interval, key in ((5, "5m"), (15, "15m"), (60, "1h")):
                     if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
                         return
-                    rows = self.dhan_api.load_previous_intraday(
-                        item, interval, self.settings.intraday_history_days
-                    )
+                    rows = self.dhan_api.load_today_intraday(item, interval)
                     if not self.history_stop.is_set():
                         self.state.set_historical(item.security_id, key, rows)
 
