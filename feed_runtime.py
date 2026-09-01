@@ -6,23 +6,17 @@ import random
 import threading
 import time
 
+from dhan_api import DhanAPI
 from feed import DhanConnectionLimited, LiveFeed as BaseLiveFeed
+from self_keepalive import SelfKeepAlive
 
 
 class LiveFeed(BaseLiveFeed):
-    """Runtime anti-staleness layer around the Dhan v2 WebSocket.
-
-    The Dhan SDK handles protocol parsing and automatic pong responses. Psygrid
-    additionally sends an active application-level WebSocket ping every 15s,
-    watches per-stock receive timestamps, re-subscribes stale instruments,
-    performs a batched REST snapshot after 45s without usable ticks, and owns a
-    short jittered reconnect schedule.
-    """
+    """Runtime anti-staleness layer around the Dhan v2 WebSocket."""
 
     SOCKET_READ_CHECK_SECONDS = 5.0
     PING_INTERVAL_SECONDS = 15.0
     PONG_TIMEOUT_SECONDS = 30.0
-    STOCK_HEALTH_CHECK_SECONDS = 5.0
     REST_FALLBACK_AFTER_SECONDS = 45.0
     RESUBSCRIBE_COOLDOWN_SECONDS = 30.0
     BACKOFF_INITIAL_SECONDS = 1.0
@@ -32,19 +26,21 @@ class LiveFeed(BaseLiveFeed):
 
     def __init__(self, settings, state, instruments, dhan_api=None):
         super().__init__(settings, state, instruments)
-        self.dhan_api = dhan_api
+        self.dhan_api = dhan_api or DhanAPI(settings)
         self._last_resubscribe: dict[str, float] = {}
         self._last_rest_fallback = 0.0
+        keepalive_url = "https://psygrid.onrender.com/public/live-a.json"
+        self.self_keepalive = SelfKeepAlive(keepalive_url)
 
     def _market_hours(self) -> bool:
         return self.state.session_status == "LIVE"
 
     async def _heartbeat_and_health(self, feed) -> None:
-        """Active ping/pong + per-stock freshness watchdog."""
+        """Ping every 15s and enforce 30s per-stock freshness."""
         last_ping = 0.0
         while not self._stop_requested.is_set():
-            now = time.monotonic()
-            if now - last_ping >= self.PING_INTERVAL_SECONDS:
+            now_mono = time.monotonic()
+            if now_mono - last_ping >= self.PING_INTERVAL_SECONDS:
                 ws = getattr(feed, "ws", None)
                 if ws is None:
                     raise RuntimeError("LIVE_HEARTBEAT: websocket object missing")
@@ -68,12 +64,11 @@ class LiveFeed(BaseLiveFeed):
             if age is None or age > 30.0:
                 stale.append(item)
 
-        # Dhan v2 supports JSON subscription packets. RequestCode 17 is the
-        # Quote subscription and each message can contain up to 100 instruments.
+        # Dhan v2 Quote subscription is RequestCode 17. Re-subscribe only the
+        # affected stock and never more often than once per 30 seconds.
         for item in stale:
             key = str(item.security_id)
-            last = self._last_resubscribe.get(key, 0.0)
-            if now - last < self.RESUBSCRIBE_COOLDOWN_SECONDS:
+            if now - self._last_resubscribe.get(key, 0.0) < self.RESUBSCRIBE_COOLDOWN_SECONDS:
                 continue
             try:
                 await feed.ws.send(json.dumps({
@@ -86,23 +81,17 @@ class LiveFeed(BaseLiveFeed):
                 }))
                 self._last_resubscribe[key] = now
             except Exception as exc:
-                raise RuntimeError(
-                    f"LIVE_HEALTH: failed to re-subscribe {item.symbol}"
-                ) from exc
+                raise RuntimeError(f"LIVE_HEALTH: failed to re-subscribe {item.symbol}") from exc
 
-        # Dhan's market-quote endpoint accepts the entire 180-stock universe in
-        # one request, so fallback never creates a 180-request REST burst.
+        # Dhan Quote API accepts the full 180-stock universe in one request, so
+        # REST fallback never produces a 180-request burst.
         if stale and now - self._last_rest_fallback >= self.REST_FALLBACK_AFTER_SECONDS:
-            if self.dhan_api is not None:
-                try:
-                    snapshot = self.dhan_api.quote_snapshot(self.instruments)
-                    self.state.apply_rest_snapshot(snapshot)
-                    self._last_rest_fallback = now
-                except Exception as exc:
-                    self.state.set_feed_status(
-                        self.state.feed_status,
-                        f"REST_FALLBACK:{exc}",
-                    )
+            try:
+                snapshot = self.dhan_api.quote_snapshot(self.instruments)
+                self.state.apply_rest_snapshot(snapshot)
+                self._last_rest_fallback = now
+            except Exception as exc:
+                self.state.set_feed_status(self.state.feed_status, f"REST_FALLBACK:{exc}")
 
     def _run_connected_session(self, feed) -> None:
         feed.loop.run_until_complete(feed.connect())
@@ -116,10 +105,7 @@ class LiveFeed(BaseLiveFeed):
                     raise RuntimeError("LIVE_HEARTBEAT: watchdog stopped unexpectedly")
                 try:
                     data = feed.loop.run_until_complete(
-                        asyncio.wait_for(
-                            feed.get_instrument_data(),
-                            timeout=self.SOCKET_READ_CHECK_SECONDS,
-                        )
+                        asyncio.wait_for(feed.get_instrument_data(), timeout=self.SOCKET_READ_CHECK_SECONDS)
                     )
                 except asyncio.TimeoutError:
                     continue
@@ -156,9 +142,7 @@ class LiveFeed(BaseLiveFeed):
             except Exception as exc:
                 message = str(exc)
                 self.state.mark_websocket_error(f"websocket:{message}")
-                self.state.mark_websocket_reconnecting(
-                    f"websocket reconnect scheduled after failure: {message}"
-                )
+                self.state.mark_websocket_reconnecting(f"websocket reconnect scheduled: {message}")
             finally:
                 self._close_feed(feed)
                 with self._lock:
@@ -167,13 +151,11 @@ class LiveFeed(BaseLiveFeed):
 
             if self._stop_requested.is_set():
                 break
-
             if rate_limited or "805" in str(getattr(self.state, "last_feed_error", "")):
                 delay = self.RATE_LIMIT_COOLDOWN
                 backoff = self.BACKOFF_INITIAL_SECONDS
             else:
-                delay = min(backoff, self.BACKOFF_MAX_SECONDS)
-                delay += random.uniform(0.0, self.NORMAL_RETRY_JITTER_SECONDS)
+                delay = min(backoff, self.BACKOFF_MAX_SECONDS) + random.uniform(0.0, self.NORMAL_RETRY_JITTER_SECONDS)
                 backoff = min(backoff * 2.0, self.BACKOFF_MAX_SECONDS)
             self._stop_requested.wait(delay)
 
@@ -181,9 +163,11 @@ class LiveFeed(BaseLiveFeed):
         if self._thread and self._thread.is_alive():
             return
         self._stop_requested.clear()
-        self._thread = threading.Thread(
-            target=self._run,
-            daemon=True,
-            name="psygrid-dhan-feed",
-        )
+        self.self_keepalive.start()
+        self._thread = threading.Thread(target=self._run, daemon=True, name="psygrid-dhan-feed")
         self._thread.start()
+
+    def stop(self) -> None:
+        self._stop_requested.set()
+        self.self_keepalive.stop()
+        super().stop()
