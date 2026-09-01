@@ -78,6 +78,34 @@ def _stock_payload(state, security_id: str, meta: dict) -> dict:
     }
 
 
+def _rules(state) -> dict:
+    return {
+        "storage": "RAM_ONLY",
+        "synthetic_candles": False,
+        "source": "DHAN",
+        "live_candle_source": "DHAN_WEBSOCKET_QUOTE",
+        "historical_candle_source": "DHAN_HISTORICAL_API",
+        "calculated_indicator_source": "PSYGRID_FROM_GENUINE_DHAN_OHLCV",
+        "candle_vwap_method": "TYPICAL_PRICE_VOLUME_WEIGHTED_DAILY_RESET",
+        "dhan_day_vwap_source": "DHAN_MARKET_QUOTE_AVERAGE_PRICE",
+        "public_timeframe_retention": {
+            "1m": "CURRENT_SESSION_DAY_ONLY",
+            "5m": "CURRENT_SESSION_DAY_ONLY",
+            "15m": "CURRENT_SESSION_DAY_ONLY",
+            "1h": "CURRENT_SESSION_DAY_ONLY",
+            "1d": f"PREVIOUS_{state.settings.daily_lookback}_TRADING_DAYS",
+            "1w": f"PREVIOUS_{state.settings.weekly_lookback}_NATIVE_DHAN_CANDLES_ONLY",
+        },
+        "indicator_seed_policy": {
+            "1m": f"UP_TO_{state.settings.intraday_history_days}_PRIOR_DAYS_INTERNAL_ONLY",
+            "public_seed_exposure": False,
+        },
+        "weekly_synthetic_policy": "FORBIDDEN",
+        "live_freshness_policy": f"MAX_{state.settings.max_live_age_seconds}_SECONDS",
+        "live_acquisition": "PERSISTENT_WEBSOCKET_NO_POLLING",
+    }
+
+
 def market_live_json(state, stock_range: Optional[tuple[int, int]] = None) -> dict:
     snap = state.snapshot()
     payload = {
@@ -90,15 +118,7 @@ def market_live_json(state, stock_range: Optional[tuple[int, int]] = None) -> di
                     "last_feed_error": snap["last_feed_error"] or None, "websocket_connected_at": snap["websocket_connected_at"],
                     "last_message_at": snap["last_message_at"], "last_message_type": snap["last_message_type"]},
         "dhan": {"data_plan": snap["data_plan_status"], "data_validity": snap["data_validity"], "token_validity": snap["token_validity"]},
-        "rules": {"storage": "RAM_ONLY", "synthetic_candles": False, "source": "DHAN",
-                   "live_candle_source": "DHAN_WEBSOCKET_QUOTE", "historical_candle_source": "DHAN_HISTORICAL_API",
-                   "calculated_indicator_source": "PSYGRID_FROM_GENUINE_DHAN_OHLCV",
-                   "candle_vwap_method": "TYPICAL_PRICE_VOLUME_WEIGHTED_DAILY_RESET",
-                   "dhan_day_vwap_source": "DHAN_MARKET_QUOTE_AVERAGE_PRICE",
-                   "intraday_history_days": state.settings.intraday_history_days, "daily_history_candles": state.settings.daily_lookback,
-                   "weekly_candles": "NATIVE_DHAN_ONLY", "weekly_synthetic_policy": "FORBIDDEN",
-                   "live_freshness_policy": f"MAX_{state.settings.max_live_age_seconds}_SECONDS",
-                   "live_acquisition": "PERSISTENT_WEBSOCKET_NO_POLLING"},
+        "rules": _rules(state),
         "feed_diagnostics": {"stock_count": snap["stock_count"], "subscribed_count": snap["subscribed_count"],
                              "feed_messages": snap["feed_messages"], "quote_packets": snap["quote_packets"],
                              "live_quotes": snap["live_quotes"], "websocket_reconnects": snap["websocket_reconnects"]},
@@ -130,11 +150,7 @@ def stock_json(state, symbol: str, timeframe: Optional[str] = None) -> dict:
                                "last_tick_utc": snap["last_tick_at"], "last_tick_age_seconds": snap["last_tick_age_seconds"],
                                "max_live_age_seconds": snap["max_live_age_seconds"], "last_feed_error": snap["last_feed_error"] or None},
                    "dhan": {"data_plan": snap["data_plan_status"], "data_validity": snap["data_validity"], "token_validity": snap["token_validity"]},
-                   "rules": {"storage": "RAM_ONLY", "synthetic_candles": False, "source": "DHAN",
-                             "candle_vwap_method": "TYPICAL_PRICE_VOLUME_WEIGHTED_DAILY_RESET",
-                             "dhan_day_vwap_source": "DHAN_MARKET_QUOTE_AVERAGE_PRICE", "intraday_history_days": state.settings.intraday_history_days,
-                             "weekly_candles": "NATIVE_DHAN_ONLY", "weekly_synthetic_policy": "FORBIDDEN",
-                             "live_freshness_policy": f"MAX_{state.settings.max_live_age_seconds}_SECONDS", "live_acquisition": "PERSISTENT_WEBSOCKET_NO_POLLING"},
+                   "rules": _rules(state),
                    "timeframes": {}}
         if snap["session_status"] != "LIVE": return payload
         full = _stock_payload(state, security_id, meta); payload["freshness"] = full["freshness"]
