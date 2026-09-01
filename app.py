@@ -70,6 +70,7 @@ def root() -> Response:
         "synthetic_candles": False,
         "storage": "RAM_ONLY",
         "live_endpoint": "/public/live.json",
+        "live_endpoints": ["/public/live-a.json", "/public/live-b.json"],
     })
 
 
@@ -86,6 +87,20 @@ def public_live() -> Response:
     if config_error:
         return json_response({"service": "PSYGRID", "status": "CONFIG_ERROR", "error": config_error})
     return json_response(market_live_json(state))
+
+
+@app.get("/public/live-a.json", response_class=Response)
+def public_live_a() -> Response:
+    if config_error:
+        return json_response({"service": "PSYGRID", "status": "CONFIG_ERROR", "error": config_error})
+    return json_response(market_live_json(state, (0, 45)))
+
+
+@app.get("/public/live-b.json", response_class=Response)
+def public_live_b() -> Response:
+    if config_error:
+        return json_response({"service": "PSYGRID", "status": "CONFIG_ERROR", "error": config_error})
+    return json_response(market_live_json(state, (45, 90)))
 
 
 @app.get("/public/stock/{symbol}.json", response_class=Response)
