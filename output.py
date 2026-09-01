@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from zoneinfo import ZoneInfo
 
@@ -58,8 +58,9 @@ def _historical_payload(state, security_id: str, key: str):
         return {
             "status": "UNAVAILABLE_NATIVE_DHAN_WEEKLY_CANDLE",
             "synthetic_candles": False,
+            "requested_count": state.settings.weekly_lookback,
             "source": "DHAN",
-            "note": "Weekly candles are never synthesized from daily candles."
+            "note": "Dhan's documented historical candle API exposes daily and minute intervals, not a native weekly equity candle endpoint. Psygrid never synthesizes weekly candles.",
         }
     rows = enrich_history(state.historical.get(security_id, {}).get(key, []), state.settings)
     if key == "1d":
@@ -69,16 +70,25 @@ def _historical_payload(state, security_id: str, key: str):
 
 def _stock_payload(state, security_id: str, meta: dict) -> dict:
     live_rows = state.live_enriched(security_id)
-    current = live_rows[-1] if live_rows else None
+    freshness = state.freshness(security_id)
+    live_valid = freshness["live_data_valid"]
+    live_ltp = state.last_ltp_by_security.get(security_id) if live_valid else None
+    live_ltt_epoch = state.last_ltt_by_security.get(security_id) if live_valid else None
+    live_ltt_utc = (
+        datetime.fromtimestamp(live_ltt_epoch, timezone.utc).isoformat()
+        if live_ltt_epoch else None
+    )
+    current_candle = state.current_1m.get(security_id)
     return {
         "security_id": security_id,
         "exchange_segment": meta["exchange_segment"],
         "instrument": meta["instrument"],
-        "freshness": state.freshness(security_id),
+        "freshness": freshness,
         "current": {
-            "ltp": current.get("close") if current else None,
-            "timestamp": current.get("timestamp") if current else None,
-            "candle_complete": bool(current.get("complete")) if current else False,
+            "ltp": live_ltp,
+            "timestamp": current_candle.get("timestamp") if current_candle else None,
+            "last_trade_time_utc": live_ltt_utc,
+            "candle_complete": bool(current_candle.get("complete")) if current_candle else False,
             "dhan_day_vwap": state.dhan_day_average_price.get(security_id),
         },
         "timeframes": {
@@ -96,7 +106,7 @@ def market_live_json(state) -> dict:
     snap = state.snapshot()
     payload = {
         "service": "PSYGRID",
-        "schema_version": "1.7",
+        "schema_version": "2.0",
         "session": {
             "status": snap["session_status"],
             "date": snap["session_date"],
@@ -107,7 +117,11 @@ def market_live_json(state) -> dict:
             "last_tick_utc": snap["last_tick_at"],
             "last_tick_age_seconds": snap["last_tick_age_seconds"],
             "max_live_age_seconds": snap["max_live_age_seconds"],
+            "live_stock_count": snap["live_stock_count"],
             "last_feed_error": snap["last_feed_error"] or None,
+            "websocket_connected_at": snap["websocket_connected_at"],
+            "last_message_at": snap["last_message_at"],
+            "last_message_type": snap["last_message_type"],
         },
         "dhan": {
             "data_plan": snap["data_plan_status"],
@@ -123,10 +137,20 @@ def market_live_json(state) -> dict:
             "calculated_indicator_source": "PSYGRID_FROM_GENUINE_DHAN_OHLCV",
             "candle_vwap_method": "TYPICAL_PRICE_VOLUME_WEIGHTED_DAILY_RESET",
             "dhan_day_vwap_source": "DHAN_MARKET_QUOTE_AVERAGE_PRICE",
-            "intraday_history_limit": "DHAN_DOCUMENTED_LAST_5_TRADING_DAYS",
+            "intraday_history_days": state.settings.intraday_history_days,
+            "daily_history_candles": state.settings.daily_lookback,
             "weekly_candles": "NATIVE_DHAN_ONLY",
-            "live_freshness_policy": "MAX_60_SECONDS",
+            "weekly_synthetic_policy": "FORBIDDEN",
+            "live_freshness_policy": f"MAX_{state.settings.max_live_age_seconds}_SECONDS",
             "live_acquisition": "PERSISTENT_WEBSOCKET_NO_POLLING",
+        },
+        "feed_diagnostics": {
+            "stock_count": snap["stock_count"],
+            "subscribed_count": snap["subscribed_count"],
+            "feed_messages": snap["feed_messages"],
+            "quote_packets": snap["quote_packets"],
+            "live_quotes": snap["live_quotes"],
+            "websocket_reconnects": snap["websocket_reconnects"],
         },
         "stock_count": snap["stock_count"],
         "stocks": {},
@@ -149,7 +173,7 @@ def stock_json(state, symbol: str, timeframe: Optional[str] = None) -> dict:
         security_id, meta = found
         payload = {
             "service": "PSYGRID",
-            "schema_version": "1.7",
+            "schema_version": "2.0",
             "symbol": symbol,
             "security_id": security_id,
             "exchange_segment": meta["exchange_segment"],
@@ -160,6 +184,7 @@ def stock_json(state, symbol: str, timeframe: Optional[str] = None) -> dict:
                 "timezone": state.settings.timezone,
                 "feed_status": snap["feed_status"],
                 "last_tick_utc": snap["last_tick_at"],
+                "last_tick_age_seconds": snap["last_tick_age_seconds"],
                 "max_live_age_seconds": snap["max_live_age_seconds"],
                 "last_feed_error": snap["last_feed_error"] or None,
             },
@@ -174,7 +199,10 @@ def stock_json(state, symbol: str, timeframe: Optional[str] = None) -> dict:
                 "source": "DHAN",
                 "candle_vwap_method": "TYPICAL_PRICE_VOLUME_WEIGHTED_DAILY_RESET",
                 "dhan_day_vwap_source": "DHAN_MARKET_QUOTE_AVERAGE_PRICE",
-                "live_freshness_policy": "MAX_60_SECONDS",
+                "intraday_history_days": state.settings.intraday_history_days,
+                "weekly_candles": "NATIVE_DHAN_ONLY",
+                "weekly_synthetic_policy": "FORBIDDEN",
+                "live_freshness_policy": f"MAX_{state.settings.max_live_age_seconds}_SECONDS",
                 "live_acquisition": "PERSISTENT_WEBSOCKET_NO_POLLING",
             },
             "timeframes": {},
