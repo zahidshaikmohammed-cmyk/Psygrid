@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import time
 from typing import Any
 
@@ -10,12 +11,19 @@ import requests
 TOKEN_URL = "https://auth.dhan.co/app/generateAccessToken"
 
 
+class DhanTokenRateLimited(RuntimeError):
+    """Dhan rejected token generation because another token was generated recently."""
+
+    def __init__(self, message: str, retry_after: int = 120):
+        super().__init__(message)
+        self.retry_after = max(30, int(retry_after))
+
+
 def _env(name: str) -> str:
     return os.getenv(name, "").strip()
 
 
 def _generate_totp(secret: str) -> str:
-    # Dhan supplies a Base32 TOTP secret. Ignore visual spaces from copied secrets.
     normalized = "".join(secret.split()).upper()
     if not normalized:
         raise RuntimeError("Invalid DHAN_TOTP_SECRET")
@@ -46,16 +54,31 @@ def _request_token(client_id: str, pin: str, totp: str) -> tuple[str | None, str
     if token:
         return token, expiry, ""
 
-    message = str(payload.get("errorMessage") or payload.get("message") or payload).strip()
+    message = str(
+        payload.get("errorMessage")
+        or payload.get("message")
+        or payload.get("remarks", {}).get("error_message") if isinstance(payload.get("remarks"), dict) else ""
+        or payload
+    ).strip()
     return None, None, message
 
 
-def generate_access_token(client_id: str, pin: str, totp_secret: str) -> tuple[str, str | None]:
-    """Generate a fresh Dhan 24-hour access token using PIN + TOTP.
+def _rate_limit_seconds(message: str) -> int | None:
+    text = message.lower()
+    if "once every 2 minutes" not in text and "2 minutes" not in text and "two minutes" not in text:
+        return None
+    match = re.search(r"(\d+)\s*(?:second|seconds|sec|secs)", text)
+    if match:
+        return max(30, int(match.group(1)) + 2)
+    return 120
 
-    Dhan TOTP codes rotate every 30 seconds. If the first request lands across
-    that boundary and Dhan rejects the just-expired code, wait for the next
-    code and retry once. No token or credential is ever logged.
+
+def generate_access_token(client_id: str, pin: str, totp_secret: str) -> tuple[str, str | None]:
+    """Generate a fresh Dhan 24-hour token using PIN + TOTP.
+
+    The Dhan endpoint is rate-limited. A rate-limit response is surfaced as a
+    structured exception so the application can wait without repeatedly
+    hammering authentication or killing the HTTP server.
     """
     if not client_id or not pin or not totp_secret:
         raise RuntimeError(
@@ -67,12 +90,10 @@ def generate_access_token(client_id: str, pin: str, totp_secret: str) -> tuple[s
         raise RuntimeError("Invalid DHAN_TOTP_SECRET")
 
     try:
-        # Validate the secret locally before making an HTTP request.
         pyotp.TOTP(normalized_secret).now()
     except Exception as exc:
         raise RuntimeError("Invalid DHAN_TOTP_SECRET") from exc
 
-    last_message = ""
     for attempt in range(2):
         totp = _generate_totp(normalized_secret)
         try:
@@ -83,20 +104,25 @@ def generate_access_token(client_id: str, pin: str, totp_secret: str) -> tuple[s
         if token:
             return token, expiry
 
-        last_message = message
+        retry_after = _rate_limit_seconds(message)
+        if retry_after is not None:
+            raise DhanTokenRateLimited(
+                "Dhan token generation is temporarily rate-limited; no credentials were exposed.",
+                retry_after,
+            )
+
         if attempt == 0 and "totp" in message.lower():
-            # Wait into the next RFC-6238 30-second window so the retry cannot
-            # reuse the same code at a rollover boundary.
             remaining = 30.0 - (time.time() % 30.0)
             time.sleep(max(0.75, remaining + 0.25))
             continue
-        break
 
-    raise RuntimeError(f"Dhan access-token generation returned no token: {last_message}")
+        raise RuntimeError(f"Dhan access-token generation returned no token: {message}")
+
+    raise RuntimeError("Dhan access-token generation failed after TOTP rollover retry")
 
 
 def token_from_environment(client_id: str) -> tuple[str, str | None, str]:
-    """Return an existing token or generate one from the linked Render group."""
+    """Use an explicitly supplied token first; otherwise prepare TOTP auth for session start."""
     token_var = _env("DHAN_TOKEN_VAR") or "DHAN_ACCESS_TOKEN"
     existing = _env(token_var)
     if existing:
@@ -105,8 +131,9 @@ def token_from_environment(client_id: str) -> tuple[str, str | None, str]:
     pin = _env("DHAN_PIN")
     totp_secret = _env("DHAN_TOTP_SECRET")
     if pin and totp_secret:
-        token, expiry = generate_access_token(client_id, pin, totp_secret)
-        return token, expiry, "AUTO_GENERATED_TOTP"
+        # Do not generate during FastAPI startup. SessionManager owns the
+        # market-session authentication attempt and can safely back off.
+        return "", None, "TOTP_PENDING"
 
     raise RuntimeError(
         f"Missing Dhan token. Expected {token_var}, or provide DHAN_PIN + DHAN_TOTP_SECRET for automatic daily token generation"
