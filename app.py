@@ -4,6 +4,7 @@ import os
 
 import uvicorn
 from fastapi import FastAPI, Response
+from starlette.middleware.gzip import GZipMiddleware
 
 from config import load_instruments, load_settings
 from dhan_api import DhanAPI
@@ -14,6 +15,10 @@ from state import PsygridState
 
 
 app = FastAPI(title="Psygrid", docs_url=None, redoc_url=None)
+# Compress large JSON responses on the wire. The underlying JSON/state is unchanged.
+# This materially reduces transfer size while preserving every public data field.
+app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=6)
+
 settings = None
 state = None
 manager = None
@@ -57,6 +62,7 @@ def json_response(payload: dict, status_code: int = 200) -> Response:
             "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
             "Pragma": "no-cache",
             "Expires": "0",
+            "Vary": "Accept-Encoding",
         },
     )
 
