@@ -9,10 +9,10 @@ from starlette.middleware.gzip import GZipMiddleware
 
 from config import load_instruments, load_settings
 from dhan_api import DhanAPI
-from feed import LiveFeed
+from feed_runtime import LiveFeed
 from output import market_live_json, stock_json
 from session import SessionManager
-from state import PsygridState
+from state_runtime import RuntimeFreshnessState
 
 
 app = FastAPI(title="Psygrid", docs_url=None, redoc_url=None)
@@ -37,7 +37,7 @@ def startup() -> None:
             raise RuntimeError(
                 f"Configured {len(instruments)} instruments; MAX_INSTRUMENTS={settings.max_instruments}"
             )
-        state = PsygridState(settings)
+        state = RuntimeFreshnessState(settings)
         dhan_api = DhanAPI(settings)
         feed = LiveFeed(settings, state, instruments)
         manager = SessionManager(settings, state, dhan_api, feed, instruments)
