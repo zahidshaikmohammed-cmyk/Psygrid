@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List
@@ -119,13 +121,36 @@ def load_settings() -> Settings:
     )
 
 
-def refresh_access_token(settings: Settings) -> None:
-    """Generate a new token only for TOTP-managed sessions, never for an env token."""
-    if settings.token_source == "ENVIRONMENT_TOKEN" and settings.access_token:
-        return
+def _token_expiry_epoch(token: str) -> int | None:
+    """Read JWT exp without verifying it; used only to decide whether to refresh."""
+    try:
+        parts = token.split(".")
+        if len(parts) != 3:
+            return None
+        payload = parts[1] + "=" * (-len(parts[1]) % 4)
+        decoded = json.loads(base64.urlsafe_b64decode(payload.encode("ascii")).decode("utf-8"))
+        value = decoded.get("exp")
+        return int(value) if value is not None else None
+    except (ValueError, TypeError, KeyError, UnicodeError, json.JSONDecodeError):
+        return None
 
+
+def refresh_access_token(settings: Settings) -> None:
+    """Refresh once per market session when the current token is absent/near expiry.
+
+    If a valid environment token is supplied, it is reused. If the token is
+    expired or within the safety window and TOTP credentials exist, generate one
+    fresh 24-hour token. This prevents the next trading day from inheriting a
+    yesterday's Render-process token while avoiding token-generation loops.
+    """
     pin = os.getenv("DHAN_PIN", "").strip()
     totp_secret = os.getenv("DHAN_TOTP_SECRET", "").strip()
+
+    if settings.access_token:
+        expiry_epoch = _token_expiry_epoch(settings.access_token)
+        if expiry_epoch is None or expiry_epoch > int(time.time()) + 1800:
+            return
+
     if not pin or not totp_secret:
         if settings.access_token:
             return
