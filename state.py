@@ -103,14 +103,19 @@ class PsygridState:
 
     def merge_today_1m_history(self, security_id: str, candles: List[dict]) -> None:
         with self.lock:
-            existing = {
-                int(c["timestamp"]) // 60: dict(c)
-                for c in self.live_candles.get(security_id, [])
-                if c.get("complete", True)
-            }
+            existing = {}
+            for c in self.live_candles.get(security_id, []):
+                if c.get("complete", True):
+                    item = dict(c)
+                    epoch = int(item.get("epoch", item["timestamp"]))
+                    item["epoch"] = epoch
+                    existing[epoch // 60] = item
             for candle in candles:
                 if candle.get("complete", True):
-                    existing[int(candle["timestamp"]) // 60] = dict(candle)
+                    item = dict(candle)
+                    epoch = int(item.get("epoch", item["timestamp"]))
+                    item["epoch"] = epoch
+                    existing[epoch // 60] = item
             self.live_candles[security_id] = [existing[k] for k in sorted(existing)]
 
     def seed_cumulative_volume(self, security_id: str, cumulative_volume: int) -> None:
@@ -198,7 +203,13 @@ class PsygridState:
 
     def _enrich_live(self, seed: List[dict], candles: List[dict], dhan_avg_price: Optional[float]) -> List[dict]:
         ordered_seed = sorted((dict(c) for c in seed), key=lambda c: int(c["timestamp"]))
-        ordered_today = sorted((dict(c) for c in candles), key=lambda c: int(c["epoch"]))
+        normalized_today = []
+        for c in candles:
+            item = dict(c)
+            if "epoch" not in item:
+                item["epoch"] = int(item["timestamp"])
+            normalized_today.append(item)
+        ordered_today = sorted(normalized_today, key=lambda c: int(c["epoch"]))
         combined = ordered_seed + ordered_today
         closes = [float(c["close"]) for c in combined]
         out: List[dict] = []
