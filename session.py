@@ -6,6 +6,8 @@ from datetime import datetime, time
 from typing import Optional
 from zoneinfo import ZoneInfo
 
+from config import refresh_access_token
+
 
 class SessionManager:
     def __init__(self, settings, state, dhan_api, feed, instruments):
@@ -72,6 +74,12 @@ class SessionManager:
             self.history_stop.clear()
             self.state.begin(session_date, self.instruments)
             try:
+                # If the linked Render environment group provides DHAN_PIN and
+                # DHAN_TOTP_SECRET, generate a fresh 24-hour token for this
+                # session. The secret itself is never printed or exposed.
+                refresh_access_token(self.settings)
+                self.dhan_api.settings = self.settings
+                self.feed.settings = self.settings
                 profile = self.dhan_api.verify_data_access()
                 self.state.set_profile(profile)
             except Exception as exc:
@@ -102,9 +110,6 @@ class SessionManager:
             if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
                 return
             try:
-                # Dhan's documented intraday history currently covers the last
-                # 5 trading days. Use genuine prior 1m candles as indicator
-                # warmup; never manufacture missing warmup candles.
                 seed_1m = self.dhan_api.load_previous_intraday(
                     item, 1, self.settings.intraday_history_days
                 )
@@ -139,8 +144,6 @@ class SessionManager:
                 if not self.history_stop.is_set():
                     self.state.last_feed_error = f"history:{item.symbol}:{exc}"
 
-        # Keep concurrency deliberately bounded on a free Render instance and
-        # avoid creating a burst of hundreds of Dhan historical requests.
         with ThreadPoolExecutor(max_workers=2, thread_name_prefix="psygrid-hist") as pool:
             futures = [pool.submit(load_one, item) for item in self.instruments]
             for future in futures:
@@ -162,6 +165,5 @@ class SessionManager:
                 self.history_thread.join(timeout=10)
             self.history_thread = None
             self.state.finalize_current()
-            # Hard requirement: after 15:15, all session data disappears from RAM.
             self.state.reset()
             self._started_for_date = None
