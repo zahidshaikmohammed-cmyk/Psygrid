@@ -7,6 +7,7 @@ from datetime import datetime, time
 from typing import Optional
 from zoneinfo import ZoneInfo
 
+from backfill import HistoricalBackfill
 from config import refresh_access_token
 from dhan_auth import DhanTokenRateLimited, generate_access_token
 
@@ -26,6 +27,8 @@ class SessionManager:
         self._lock = threading.RLock()
         self._started_for_date: Optional[str] = None
         self._auth_retry_at = 0.0
+        self._last_reconnect_seen = 0
+        self.backfill = HistoricalBackfill(settings, state, dhan_api, instruments)
 
     def now(self) -> datetime:
         return datetime.now(self.tz)
@@ -50,6 +53,10 @@ class SessionManager:
             self.feed.stop()
         except Exception:
             pass
+        try:
+            self.backfill.close()
+        except Exception:
+            pass
         if self.history_thread:
             self.history_thread.join(timeout=10)
             self.history_thread = None
@@ -64,12 +71,22 @@ class SessionManager:
             if self.in_market(now):
                 if self._started_for_date != now.date().isoformat():
                     self._start_session(now)
+                self._check_for_feed_interruption(now)
             elif self._started_for_date is not None:
                 self._end_session()
             self.stop_event.wait(2.0)
 
+    def _check_for_feed_interruption(self, now: datetime) -> None:
+        """Launch non-blocking historical recovery whenever the feed reconnects."""
+        with self.state.lock:
+            reconnects = self.state.websocket_reconnects
+        if reconnects <= self._last_reconnect_seen:
+            return
+        self._last_reconnect_seen = reconnects
+        if self.state.session_status == "LIVE":
+            self.backfill.enqueue_gap(now)
+
     def _auth_retry_with_totp(self) -> None:
-        """Regenerate once when Dhan explicitly says the current token is invalid/expired."""
         pin = os.getenv("DHAN_PIN", "").strip()
         totp_secret = os.getenv("DHAN_TOTP_SECRET", "").strip()
         if not pin or not totp_secret:
@@ -82,32 +99,21 @@ class SessionManager:
     @staticmethod
     def _looks_like_auth_failure(exc: Exception) -> bool:
         text = str(exc).lower()
-        return (
-            "807" in text
-            or "808" in text
-            or "809" in text
-            or "expired" in text
-            or "invalid token" in text
-            or "authentication failed" in text
-            or "unauthorized" in text
-        )
+        return ("807" in text or "808" in text or "809" in text or "expired" in text or "invalid token" in text or "authentication failed" in text or "unauthorized" in text)
 
     def _start_session(self, now: datetime) -> None:
         with self._lock:
             session_date = now.date().isoformat()
             if self._started_for_date == session_date:
                 return
-
             if now.timestamp() < self._auth_retry_at:
                 remaining = int(self._auth_retry_at - now.timestamp())
                 self.state.set_feed_status("AUTH_WAITING", f"Dhan authentication retry in {remaining}s")
                 return
-
             self.history_stop.clear()
             self.state.begin(session_date, self.instruments)
             self.state.session_status = "AUTHENTICATING"
             self.state.set_feed_status("AUTHENTICATING")
-
             try:
                 refresh_access_token(self.settings)
                 self.dhan_api.settings = self.settings
@@ -117,8 +123,6 @@ class SessionManager:
                 except Exception as first_exc:
                     if not self._looks_like_auth_failure(first_exc):
                         raise
-                    # A running Render process can outlive the daily token.
-                    # Regenerate exactly once through TOTP, then retry profile.
                     self.state.set_feed_status("TOKEN_REFRESHING", "Dhan token expired/invalid; generating one fresh token")
                     self._auth_retry_with_totp()
                     self.dhan_api.settings = self.settings
@@ -128,21 +132,17 @@ class SessionManager:
             except DhanTokenRateLimited as exc:
                 self._auth_retry_at = now.timestamp() + exc.retry_after
                 self.state.session_status = "AUTH_WAITING"
-                self.state.set_feed_status(
-                    "AUTH_WAITING",
-                    f"Dhan token generation rate-limited; retrying in {exc.retry_after}s",
-                )
+                self.state.set_feed_status("AUTH_WAITING", f"Dhan token generation rate-limited; retrying in {exc.retry_after}s")
                 return
             except Exception as exc:
                 self._auth_retry_at = now.timestamp() + 30
                 self.state.session_status = "AUTH_ERROR"
                 self.state.set_feed_status("AUTH_ERROR", f"authentication:{exc}")
                 return
-
             self.state.session_status = "LIVE"
             self._started_for_date = session_date
             self._auth_retry_at = 0.0
-
+            self._last_reconnect_seen = self.state.websocket_reconnects
             try:
                 snapshot = self.dhan_api.quote_snapshot(self.instruments)
                 for item in self.instruments:
@@ -150,14 +150,8 @@ class SessionManager:
                     self.state.seed_cumulative_volume(item.security_id, int(row.get("volume", 0) or 0))
             except Exception as exc:
                 self.state.last_feed_error = f"snapshot:{exc}"
-
             self.feed.start()
-            self.history_thread = threading.Thread(
-                target=self._load_history,
-                args=(now,),
-                daemon=True,
-                name="psygrid-history",
-            )
+            self.history_thread = threading.Thread(target=self._load_history, args=(now,), daemon=True, name="psygrid-history")
             self.history_thread.start()
 
     def _load_history(self, now: datetime) -> None:
@@ -165,27 +159,21 @@ class SessionManager:
             if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
                 return
             try:
-                # Previous 1m data is used only as an internal indicator seed.
-                # It is never exposed as the public 1m session history.
                 seed_1m = self.dhan_api.load_previous_intraday(item, 1, self.settings.intraday_history_days)
                 if self.history_stop.is_set() or not self.in_market():
                     return
                 self.state.set_indicator_seed_1m(item.security_id, seed_1m)
-
-                # Public 5m/15m/1h history is current-day native Dhan data only.
                 for interval, key in ((5, "5m"), (15, "15m"), (60, "1h")):
                     if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
                         return
                     rows = self.dhan_api.load_today_intraday(item, interval)
                     if not self.history_stop.is_set():
                         self.state.set_historical(item.security_id, key, rows)
-
                 if self.history_stop.is_set() or not self.in_market():
                     return
                 daily = self.dhan_api.load_previous_daily(item, self.settings.daily_lookback)
                 if not self.history_stop.is_set():
                     self.state.set_historical(item.security_id, "1d", daily)
-
                 if self.history_stop.is_set() or not self.in_market():
                     return
                 today_1m = self.dhan_api.load_today_1m(item)
@@ -197,7 +185,6 @@ class SessionManager:
             except Exception as exc:
                 if not self.history_stop.is_set():
                     self.state.last_feed_error = f"history:{item.symbol}:{exc}"
-
         with ThreadPoolExecutor(max_workers=2, thread_name_prefix="psygrid-hist") as pool:
             futures = [pool.submit(load_one, item) for item in self.instruments]
             for future in futures:
@@ -222,3 +209,4 @@ class SessionManager:
             self.state.reset()
             self._started_for_date = None
             self._auth_retry_at = 0.0
+            self._last_reconnect_seen = 0
