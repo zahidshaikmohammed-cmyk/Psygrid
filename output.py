@@ -102,11 +102,20 @@ def _stock_payload(state, security_id: str, meta: dict) -> dict:
     }
 
 
-def market_live_json(state) -> dict:
+def market_live_json(state, stock_range: Optional[tuple[int, int]] = None) -> dict:
     snap = state.snapshot()
+    ordered = sorted(state.instruments.items(), key=lambda x: x[1]["symbol"])
+    total_stock_count = len(ordered)
+    if stock_range is not None:
+        start, end = stock_range
+        ordered = ordered[start:end]
+    selected_count = len(ordered)
     payload = {
         "service": "PSYGRID",
-        "schema_version": "2.0",
+        "schema_version": "2.1",
+        "view": "MASTER" if stock_range is None else ("A" if stock_range == (0, 45) else "B"),
+        "universe_stock_count": total_stock_count,
+        "returned_stock_count": selected_count,
         "session": {
             "status": snap["session_status"],
             "date": snap["session_date"],
@@ -153,13 +162,12 @@ def market_live_json(state) -> dict:
             "live_quotes": snap["live_quotes"],
             "websocket_reconnects": snap["websocket_reconnects"],
         },
-        "stock_count": snap["stock_count"],
         "stocks": {},
     }
     if snap["session_status"] != "LIVE":
         return payload
     with state.lock:
-        for security_id, meta in sorted(state.instruments.items(), key=lambda x: x[1]["symbol"]):
+        for security_id, meta in ordered:
             payload["stocks"][meta["symbol"]] = _stock_payload(state, security_id, meta)
     return payload
 
