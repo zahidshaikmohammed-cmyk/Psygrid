@@ -9,6 +9,8 @@ from indicators import ema, rsi, sma, vwap
 
 TIMEFRAMES = ("1m", "5m", "15m", "1h", "1d", "1w")
 PUBLIC_PRICE_DECIMALS = 4
+PUBLIC_TIMEZONE = ZoneInfo("Asia/Kolkata")
+PUBLIC_TIMEZONE_NAME = "Asia/Kolkata"
 
 
 def _price(value):
@@ -18,6 +20,60 @@ def _price(value):
         return round(float(value), PUBLIC_PRICE_DECIMALS)
     except (TypeError, ValueError):
         return value
+
+
+def _ist_timestamp(value) -> Optional[str]:
+    """Return every public timestamp in explicit Indian Standard Time.
+
+    Internal state may use UTC ISO strings, epoch seconds, or the already-local
+    candle timestamp. The public API deliberately exposes only IST so a human
+    can judge freshness at a glance without doing timezone conversion.
+    """
+    if value in (None, ""):
+        return None
+    try:
+        if isinstance(value, (int, float)):
+            dt = datetime.fromtimestamp(float(value), timezone.utc).astimezone(PUBLIC_TIMEZONE)
+        elif isinstance(value, str):
+            text = value.strip()
+            try:
+                numeric = float(text)
+                dt = datetime.fromtimestamp(numeric, timezone.utc).astimezone(PUBLIC_TIMEZONE)
+            except ValueError:
+                parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=PUBLIC_TIMEZONE)
+                dt = parsed.astimezone(PUBLIC_TIMEZONE)
+        else:
+            return None
+        return dt.strftime("%Y-%m-%d %H:%M:%S IST")
+    except (TypeError, ValueError, OSError, OverflowError):
+        return None
+
+
+def _age_display(age_seconds) -> str:
+    if age_seconds is None:
+        return "NO LIVE TICK"
+    seconds = max(0, int(round(float(age_seconds))))
+    if seconds < 60:
+        return f"{seconds}s OLD"
+    minutes, seconds = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{minutes}m {seconds:02d}s OLD"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}h {minutes:02d}m OLD"
+
+
+def _public_freshness(freshness: dict, last_trade_epoch=None) -> dict:
+    age = freshness.get("data_age_seconds")
+    status = freshness.get("status", "NO_TICK_YET")
+    return {
+        "status": status,
+        "data_age_seconds": age,
+        "age_display": _age_display(age),
+        "last_trade_time_ist": _ist_timestamp(last_trade_epoch),
+        "live_data_valid": bool(freshness.get("live_data_valid", False)),
+    }
 
 
 def enrich_history(candles: list, settings) -> list:
@@ -47,9 +103,9 @@ def enrich_history(candles: list, settings) -> list:
 def normalize_candle(row: dict) -> dict:
     # Public representation is intentionally compact. Validation/provenance
     # remain in the backend and at timeframe/rules level rather than repeating
-    # the same strings on every candle.
+    # the same strings on every candle. Timestamp is deliberately IST-only.
     return {
-        "timestamp": row.get("timestamp"),
+        "timestamp": _ist_timestamp(row.get("timestamp") or row.get("epoch")),
         "open": _price(row.get("open")),
         "high": _price(row.get("high")),
         "low": _price(row.get("low")),
@@ -80,11 +136,10 @@ def _historical_payload(state, security_id: str, key: str):
 
 def _stock_payload(state, security_id: str, meta: dict) -> dict:
     live_rows = state.live_enriched(security_id)
-    freshness = state.freshness(security_id)
+    raw_freshness = state.freshness(security_id)
+    freshness = _public_freshness(raw_freshness, state.last_ltt_by_security.get(security_id))
     live_valid = freshness["live_data_valid"]
     live_ltp = state.last_ltp_by_security.get(security_id) if live_valid else None
-    live_ltt_epoch = state.last_ltt_by_security.get(security_id) if live_valid else None
-    live_ltt_utc = datetime.fromtimestamp(live_ltt_epoch, timezone.utc).isoformat() if live_ltt_epoch else None
     current_candle = state.current_1m.get(security_id)
     return {
         "security_id": security_id,
@@ -93,8 +148,8 @@ def _stock_payload(state, security_id: str, meta: dict) -> dict:
         "freshness": freshness,
         "current": {
             "ltp": _price(live_ltp),
-            "timestamp": current_candle.get("timestamp") if current_candle else None,
-            "last_trade_time_utc": live_ltt_utc,
+            "timestamp": _ist_timestamp(current_candle.get("timestamp")) if current_candle else None,
+            "last_trade_time_ist": freshness["last_trade_time_ist"],
             "candle_complete": bool(current_candle.get("complete")) if current_candle else False,
             "dhan_day_vwap": _price(state.dhan_day_average_price.get(security_id)),
         },
@@ -128,6 +183,9 @@ def _rules(state) -> dict:
             "1w": f"PREVIOUS_{state.settings.weekly_lookback}_NATIVE_DHAN_CANDLES_ONLY",
         },
         "public_candle_fields": "timestamp,open,high,low,close,volume,vwap,dhan_day_vwap,ma9,ema20,rsi14",
+        "public_timestamp_timezone": PUBLIC_TIMEZONE_NAME,
+        "public_timestamp_format": "YYYY-MM-DD HH:MM:SS IST",
+        "public_freshness_display": "data_age_seconds + age_display + last_trade_time_ist",
         "public_candle_repeated_metadata": "OMITTED_FROM_EACH_CANDLE; PRESERVED_AT_RULES/SOURCE LEVEL",
         "public_numeric_precision": f"PRICES_AND_INDICATORS_ROUNDED_TO_{PUBLIC_PRICE_DECIMALS}_DECIMALS_FOR_TRANSPORT_ONLY",
         "indicator_seed_policy": {
@@ -143,20 +201,43 @@ def _rules(state) -> dict:
 def market_live_json(state, stock_range: Optional[tuple[int, int]] = None) -> dict:
     snap = state.snapshot()
     payload = {
-        "service": "PSYGRID", "schema_version": "2.1",
-        "session": {"status": snap["session_status"], "date": snap["session_date"], "timezone": state.settings.timezone,
-                    "market_start": state.settings.market_start, "market_end": state.settings.market_end,
-                    "feed_status": snap["feed_status"], "stream_health": snap["stream_health"],
-                    "last_tick_utc": snap["last_tick_at"], "last_tick_age_seconds": snap["last_tick_age_seconds"],
-                    "max_live_age_seconds": snap["max_live_age_seconds"], "live_stock_count": snap["live_stock_count"],
-                    "last_feed_error": snap["last_feed_error"] or None, "websocket_connected_at": snap["websocket_connected_at"],
-                    "last_message_at": snap["last_message_at"], "last_message_type": snap["last_message_type"]},
-        "dhan": {"data_plan": snap["data_plan_status"], "data_validity": snap["data_validity"], "token_validity": snap["token_validity"]},
+        "service": "PSYGRID",
+        "schema_version": "2.2",
+        "session": {
+            "status": snap["session_status"],
+            "date": snap["session_date"],
+            "timezone": PUBLIC_TIMEZONE_NAME,
+            "current_time_ist": datetime.now(PUBLIC_TIMEZONE).strftime("%Y-%m-%d %H:%M:%S IST"),
+            "market_start": state.settings.market_start,
+            "market_end": state.settings.market_end,
+            "feed_status": snap["feed_status"],
+            "stream_health": snap["stream_health"],
+            "last_tick_ist": _ist_timestamp(snap["last_tick_at"]),
+            "last_tick_age_seconds": snap["last_tick_age_seconds"],
+            "last_tick_age_display": _age_display(snap["last_tick_age_seconds"]),
+            "max_live_age_seconds": snap["max_live_age_seconds"],
+            "live_stock_count": snap["live_stock_count"],
+            "last_feed_error": snap["last_feed_error"] or None,
+            "websocket_connected_ist": _ist_timestamp(snap["websocket_connected_at"]),
+            "last_message_ist": _ist_timestamp(snap["last_message_at"]),
+            "last_message_type": snap["last_message_type"],
+        },
+        "dhan": {
+            "data_plan": snap["data_plan_status"],
+            "data_validity": snap["data_validity"],
+            "token_validity": snap["token_validity"],
+        },
         "rules": _rules(state),
-        "feed_diagnostics": {"stock_count": snap["stock_count"], "subscribed_count": snap["subscribed_count"],
-                             "feed_messages": snap["feed_messages"], "quote_packets": snap["quote_packets"],
-                             "live_quotes": snap["live_quotes"], "websocket_reconnects": snap["websocket_reconnects"]},
-        "stock_count": 0, "stocks": {}
+        "feed_diagnostics": {
+            "stock_count": snap["stock_count"],
+            "subscribed_count": snap["subscribed_count"],
+            "feed_messages": snap["feed_messages"],
+            "quote_packets": snap["quote_packets"],
+            "live_quotes": snap["live_quotes"],
+            "websocket_reconnects": snap["websocket_reconnects"],
+        },
+        "stock_count": 0,
+        "stocks": {},
     }
     if snap["session_status"] != "LIVE":
         return payload
@@ -171,26 +252,54 @@ def market_live_json(state, stock_range: Optional[tuple[int, int]] = None) -> di
 
 
 def stock_json(state, symbol: str, timeframe: Optional[str] = None) -> dict:
-    snap = state.snapshot(); symbol = symbol.upper()
+    snap = state.snapshot()
+    symbol = symbol.upper()
     with state.lock:
         found = next(((sid, meta) for sid, meta in state.instruments.items() if meta["symbol"] == symbol), None)
         if found is None:
             return {"service": "PSYGRID", "symbol": symbol, "status": "NOT_FOUND"}
         security_id, meta = found
-        payload = {"service": "PSYGRID", "schema_version": "2.1", "symbol": symbol, "security_id": security_id,
-                   "exchange_segment": meta["exchange_segment"], "instrument": meta["instrument"],
-                   "session": {"status": snap["session_status"], "date": snap["session_date"], "timezone": state.settings.timezone,
-                               "feed_status": snap["feed_status"], "stream_health": snap["stream_health"],
-                               "last_tick_utc": snap["last_tick_at"], "last_tick_age_seconds": snap["last_tick_age_seconds"],
-                               "max_live_age_seconds": snap["max_live_age_seconds"], "last_feed_error": snap["last_feed_error"] or None},
-                   "dhan": {"data_plan": snap["data_plan_status"], "data_validity": snap["data_validity"], "token_validity": snap["token_validity"]},
-                   "rules": _rules(state),
-                   "timeframes": {}}
-        if snap["session_status"] != "LIVE": return payload
-        full = _stock_payload(state, security_id, meta); payload["freshness"] = full["freshness"]
-        if timeframe is None: payload["current"] = full["current"]; payload["timeframes"] = full["timeframes"]; return payload
-        if timeframe == "1m": payload["current"] = full["current"]; payload["timeframes"]["1m"] = [normalize_candle(row) for row in state.live_enriched(security_id)]
-        else: payload["timeframes"][timeframe] = _historical_payload(state, security_id, timeframe)
+        payload = {
+            "service": "PSYGRID",
+            "schema_version": "2.2",
+            "symbol": symbol,
+            "security_id": security_id,
+            "exchange_segment": meta["exchange_segment"],
+            "instrument": meta["instrument"],
+            "session": {
+                "status": snap["session_status"],
+                "date": snap["session_date"],
+                "timezone": PUBLIC_TIMEZONE_NAME,
+                "current_time_ist": datetime.now(PUBLIC_TIMEZONE).strftime("%Y-%m-%d %H:%M:%S IST"),
+                "feed_status": snap["feed_status"],
+                "stream_health": snap["stream_health"],
+                "last_tick_ist": _ist_timestamp(snap["last_tick_at"]),
+                "last_tick_age_seconds": snap["last_tick_age_seconds"],
+                "last_tick_age_display": _age_display(snap["last_tick_age_seconds"]),
+                "max_live_age_seconds": snap["max_live_age_seconds"],
+                "last_feed_error": snap["last_feed_error"] or None,
+            },
+            "dhan": {
+                "data_plan": snap["data_plan_status"],
+                "data_validity": snap["data_validity"],
+                "token_validity": snap["token_validity"],
+            },
+            "rules": _rules(state),
+            "timeframes": {},
+        }
+        if snap["session_status"] != "LIVE":
+            return payload
+        full = _stock_payload(state, security_id, meta)
+        payload["freshness"] = full["freshness"]
+        if timeframe is None:
+            payload["current"] = full["current"]
+            payload["timeframes"] = full["timeframes"]
+            return payload
+        if timeframe == "1m":
+            payload["current"] = full["current"]
+            payload["timeframes"]["1m"] = [normalize_candle(row) for row in state.live_enriched(security_id)]
+        else:
+            payload["timeframes"][timeframe] = _historical_payload(state, security_id, timeframe)
         return payload
 
 
