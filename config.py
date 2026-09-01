@@ -27,7 +27,7 @@ class Settings:
     timezone: str = "Asia/Kolkata"
     market_start: str = "09:15"
     market_end: str = "15:15"
-    intraday_history_days: int = 5
+    intraday_history_days: int = 7
     daily_lookback: int = 7
     daily_indicator_warmup: int = 30
     weekly_lookback: int = 7
@@ -107,7 +107,7 @@ def load_settings() -> Settings:
         timezone=os.getenv("TIMEZONE", "Asia/Kolkata").strip(),
         market_start=market_start,
         market_end=market_end,
-        intraday_history_days=_positive_int_env("INTRADAY_HISTORY_DAYS", 5),
+        intraday_history_days=_positive_int_env("INTRADAY_HISTORY_DAYS", 7),
         daily_lookback=_positive_int_env("DAILY_LOOKBACK", 7),
         daily_indicator_warmup=_positive_int_env("DAILY_INDICATOR_WARMUP", 30),
         weekly_lookback=_positive_int_env("WEEKLY_LOOKBACK", 7),
