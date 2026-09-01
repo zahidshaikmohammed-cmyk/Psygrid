@@ -8,6 +8,16 @@ from zoneinfo import ZoneInfo
 from indicators import ema, rsi, sma, vwap
 
 TIMEFRAMES = ("1m", "5m", "15m", "1h", "1d", "1w")
+PUBLIC_PRICE_DECIMALS = 4
+
+
+def _price(value):
+    if value is None:
+        return None
+    try:
+        return round(float(value), PUBLIC_PRICE_DECIMALS)
+    except (TypeError, ValueError):
+        return value
 
 
 def enrich_history(candles: list, settings) -> list:
@@ -35,20 +45,33 @@ def enrich_history(candles: list, settings) -> list:
 
 
 def normalize_candle(row: dict) -> dict:
+    # Public representation is intentionally compact. Validation/provenance
+    # remain in the backend and at timeframe/rules level rather than repeating
+    # the same strings on every candle.
     return {
-        "timestamp": row.get("timestamp"), "open": row.get("open"), "high": row.get("high"),
-        "low": row.get("low"), "close": row.get("close"), "volume": row.get("volume"),
-        "vwap": row.get("vwap"), "dhan_day_vwap": row.get("dhan_day_vwap"),
-        "ma9": row.get("ma9"), "ema20": row.get("ema20"), "rsi14": row.get("rsi14"),
-        "complete": bool(row.get("complete", True)), "source": row.get("source"),
+        "timestamp": row.get("timestamp"),
+        "open": _price(row.get("open")),
+        "high": _price(row.get("high")),
+        "low": _price(row.get("low")),
+        "close": _price(row.get("close")),
+        "volume": row.get("volume"),
+        "vwap": _price(row.get("vwap")),
+        "dhan_day_vwap": _price(row.get("dhan_day_vwap")),
+        "ma9": _price(row.get("ma9")),
+        "ema20": _price(row.get("ema20")),
+        "rsi14": _price(row.get("rsi14")),
     }
 
 
 def _historical_payload(state, security_id: str, key: str):
     if key == "1w":
-        return {"status": "UNAVAILABLE_NATIVE_DHAN_WEEKLY_CANDLE", "synthetic_candles": False,
-                "requested_count": state.settings.weekly_lookback, "source": "DHAN",
-                "note": "Native Dhan weekly equity candles are not available through the configured historical API; Psygrid never synthesizes weekly candles."}
+        return {
+            "status": "UNAVAILABLE_NATIVE_DHAN_WEEKLY_CANDLE",
+            "synthetic_candles": False,
+            "requested_count": state.settings.weekly_lookback,
+            "source": "DHAN",
+            "note": "Native Dhan weekly equity candles are not available through the configured historical API; Psygrid never synthesizes weekly candles.",
+        }
     rows = enrich_history(state.historical.get(security_id, {}).get(key, []), state.settings)
     if key == "1d":
         rows = rows[-state.settings.daily_lookback:]
@@ -64,17 +87,25 @@ def _stock_payload(state, security_id: str, meta: dict) -> dict:
     live_ltt_utc = datetime.fromtimestamp(live_ltt_epoch, timezone.utc).isoformat() if live_ltt_epoch else None
     current_candle = state.current_1m.get(security_id)
     return {
-        "security_id": security_id, "exchange_segment": meta["exchange_segment"], "instrument": meta["instrument"],
+        "security_id": security_id,
+        "exchange_segment": meta["exchange_segment"],
+        "instrument": meta["instrument"],
         "freshness": freshness,
-        "current": {"ltp": live_ltp, "timestamp": current_candle.get("timestamp") if current_candle else None,
-                     "last_trade_time_utc": live_ltt_utc, "candle_complete": bool(current_candle.get("complete")) if current_candle else False,
-                     "dhan_day_vwap": state.dhan_day_average_price.get(security_id)},
-        "timeframes": {"1m": [normalize_candle(row) for row in live_rows],
-                       "5m": _historical_payload(state, security_id, "5m"),
-                       "15m": _historical_payload(state, security_id, "15m"),
-                       "1h": _historical_payload(state, security_id, "1h"),
-                       "1d": _historical_payload(state, security_id, "1d"),
-                       "1w": _historical_payload(state, security_id, "1w")},
+        "current": {
+            "ltp": _price(live_ltp),
+            "timestamp": current_candle.get("timestamp") if current_candle else None,
+            "last_trade_time_utc": live_ltt_utc,
+            "candle_complete": bool(current_candle.get("complete")) if current_candle else False,
+            "dhan_day_vwap": _price(state.dhan_day_average_price.get(security_id)),
+        },
+        "timeframes": {
+            "1m": [normalize_candle(row) for row in live_rows],
+            "5m": _historical_payload(state, security_id, "5m"),
+            "15m": _historical_payload(state, security_id, "15m"),
+            "1h": _historical_payload(state, security_id, "1h"),
+            "1d": _historical_payload(state, security_id, "1d"),
+            "1w": _historical_payload(state, security_id, "1w"),
+        },
     }
 
 
@@ -96,6 +127,9 @@ def _rules(state) -> dict:
             "1d": f"PREVIOUS_{state.settings.daily_lookback}_TRADING_DAYS",
             "1w": f"PREVIOUS_{state.settings.weekly_lookback}_NATIVE_DHAN_CANDLES_ONLY",
         },
+        "public_candle_fields": "timestamp,open,high,low,close,volume,vwap,dhan_day_vwap,ma9,ema20,rsi14",
+        "public_candle_repeated_metadata": "OMITTED_FROM_EACH_CANDLE; PRESERVED_AT_RULES/SOURCE LEVEL",
+        "public_numeric_precision": f"PRICES_AND_INDICATORS_ROUNDED_TO_{PUBLIC_PRICE_DECIMALS}_DECIMALS_FOR_TRANSPORT_ONLY",
         "indicator_seed_policy": {
             "1m": f"UP_TO_{state.settings.intraday_history_days}_PRIOR_DAYS_INTERNAL_ONLY",
             "public_seed_exposure": False,
@@ -109,7 +143,7 @@ def _rules(state) -> dict:
 def market_live_json(state, stock_range: Optional[tuple[int, int]] = None) -> dict:
     snap = state.snapshot()
     payload = {
-        "service": "PSYGRID", "schema_version": "2.0",
+        "service": "PSYGRID", "schema_version": "2.1",
         "session": {"status": snap["session_status"], "date": snap["session_date"], "timezone": state.settings.timezone,
                     "market_start": state.settings.market_start, "market_end": state.settings.market_end,
                     "feed_status": snap["feed_status"], "stream_health": snap["stream_health"],
@@ -143,7 +177,7 @@ def stock_json(state, symbol: str, timeframe: Optional[str] = None) -> dict:
         if found is None:
             return {"service": "PSYGRID", "symbol": symbol, "status": "NOT_FOUND"}
         security_id, meta = found
-        payload = {"service": "PSYGRID", "schema_version": "2.0", "symbol": symbol, "security_id": security_id,
+        payload = {"service": "PSYGRID", "schema_version": "2.1", "symbol": symbol, "security_id": security_id,
                    "exchange_segment": meta["exchange_segment"], "instrument": meta["instrument"],
                    "session": {"status": snap["session_status"], "date": snap["session_date"], "timezone": state.settings.timezone,
                                "feed_status": snap["feed_status"], "stream_health": snap["stream_health"],
