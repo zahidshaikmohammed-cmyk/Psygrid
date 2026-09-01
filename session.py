@@ -80,13 +80,10 @@ class SessionManager:
 
             self.history_stop.clear()
             self.state.begin(session_date, self.instruments)
+            self.state.session_status = "AUTHENTICATING"
             self.state.set_feed_status("AUTHENTICATING")
 
             try:
-                # TOTP authentication is intentionally lazy. Render can restart
-                # without blocking HTTP startup or repeatedly hammering Dhan.
-                # An environment token is reused; PIN+TOTP is generated only
-                # when the market session actually needs authentication.
                 refresh_access_token(self.settings)
                 self.dhan_api.settings = self.settings
                 self.feed.settings = self.settings
@@ -94,6 +91,7 @@ class SessionManager:
                 self.state.set_profile(profile)
             except DhanTokenRateLimited as exc:
                 self._auth_retry_at = now.timestamp() + exc.retry_after
+                self.state.session_status = "AUTH_WAITING"
                 self.state.set_feed_status(
                     "AUTH_WAITING",
                     f"Dhan token generation rate-limited; retrying in {exc.retry_after}s",
@@ -101,9 +99,11 @@ class SessionManager:
                 return
             except Exception as exc:
                 self._auth_retry_at = now.timestamp() + 30
+                self.state.session_status = "AUTH_ERROR"
                 self.state.set_feed_status("AUTH_ERROR", f"authentication:{exc}")
                 return
 
+            self.state.session_status = "LIVE"
             self._started_for_date = session_date
             self._auth_retry_at = 0.0
 
@@ -129,9 +129,7 @@ class SessionManager:
             if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
                 return
             try:
-                seed_1m = self.dhan_api.load_previous_intraday(
-                    item, 1, self.settings.intraday_history_days
-                )
+                seed_1m = self.dhan_api.load_previous_intraday(item, 1, self.settings.intraday_history_days)
                 if self.history_stop.is_set() or not self.in_market():
                     return
                 self.state.set_indicator_seed_1m(item.security_id, seed_1m)
