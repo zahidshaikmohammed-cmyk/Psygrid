@@ -120,11 +120,17 @@ def load_settings() -> Settings:
 
 
 def refresh_access_token(settings: Settings) -> None:
-    """Refresh the token at each new market session when TOTP credentials exist."""
+    """Generate a new token only for TOTP-managed sessions, never for an env token."""
+    if settings.token_source == "ENVIRONMENT_TOKEN" and settings.access_token:
+        return
+
     pin = os.getenv("DHAN_PIN", "").strip()
     totp_secret = os.getenv("DHAN_TOTP_SECRET", "").strip()
     if not pin or not totp_secret:
-        return
+        if settings.access_token:
+            return
+        raise RuntimeError("No usable Dhan access token or TOTP credentials configured")
+
     token, expiry = generate_access_token(settings.client_id, pin, totp_secret)
     settings.access_token = token
     settings.token_expiry = expiry
