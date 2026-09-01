@@ -54,13 +54,12 @@ def _request_token(client_id: str, pin: str, totp: str) -> tuple[str | None, str
     if token:
         return token, expiry, ""
 
-    message = str(
-        payload.get("errorMessage")
-        or payload.get("message")
-        or payload.get("remarks", {}).get("error_message") if isinstance(payload.get("remarks"), dict) else ""
-        or payload
-    ).strip()
-    return None, None, message
+    message = payload.get("errorMessage") or payload.get("message")
+    if not message and isinstance(payload.get("remarks"), dict):
+        message = payload["remarks"].get("error_message") or payload["remarks"].get("errorMessage")
+    if not message:
+        message = payload
+    return None, None, str(message).strip()
 
 
 def _rate_limit_seconds(message: str) -> int | None:
@@ -74,12 +73,7 @@ def _rate_limit_seconds(message: str) -> int | None:
 
 
 def generate_access_token(client_id: str, pin: str, totp_secret: str) -> tuple[str, str | None]:
-    """Generate a fresh Dhan 24-hour token using PIN + TOTP.
-
-    The Dhan endpoint is rate-limited. A rate-limit response is surfaced as a
-    structured exception so the application can wait without repeatedly
-    hammering authentication or killing the HTTP server.
-    """
+    """Generate a fresh Dhan 24-hour token using PIN + TOTP."""
     if not client_id or not pin or not totp_secret:
         raise RuntimeError(
             "Dhan automatic token generation requires DHAN_CLIENT_ID, DHAN_PIN and DHAN_TOTP_SECRET"
@@ -107,7 +101,7 @@ def generate_access_token(client_id: str, pin: str, totp_secret: str) -> tuple[s
         retry_after = _rate_limit_seconds(message)
         if retry_after is not None:
             raise DhanTokenRateLimited(
-                "Dhan token generation is temporarily rate-limited; no credentials were exposed.",
+                "Dhan token generation is temporarily rate-limited; retry will be deferred.",
                 retry_after,
             )
 
@@ -122,7 +116,7 @@ def generate_access_token(client_id: str, pin: str, totp_secret: str) -> tuple[s
 
 
 def token_from_environment(client_id: str) -> tuple[str, str | None, str]:
-    """Use an explicitly supplied token first; otherwise prepare TOTP auth for session start."""
+    """Use an explicit token first; otherwise prepare TOTP auth for session start."""
     token_var = _env("DHAN_TOKEN_VAR") or "DHAN_ACCESS_TOKEN"
     existing = _env(token_var)
     if existing:
@@ -131,8 +125,6 @@ def token_from_environment(client_id: str) -> tuple[str, str | None, str]:
     pin = _env("DHAN_PIN")
     totp_secret = _env("DHAN_TOTP_SECRET")
     if pin and totp_secret:
-        # Do not generate during FastAPI startup. SessionManager owns the
-        # market-session authentication attempt and can safely back off.
         return "", None, "TOTP_PENDING"
 
     raise RuntimeError(
