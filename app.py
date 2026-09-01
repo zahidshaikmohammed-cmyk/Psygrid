@@ -93,6 +93,8 @@ def root() -> Response:
         "live_endpoints": [
             "/public/live-a.json",
             "/public/live-b.json",
+            "/public/live-c.json",
+            "/public/live-d.json",
             "/public/live-01.json",
             "/public/live-02.json",
             "/public/live-03.json",
@@ -136,8 +138,24 @@ def public_live_b() -> Response:
     return json_response(market_live_json(state, (45, 90)))
 
 
+@app.get("/public/live-c.json", response_class=Response)
+def public_live_c() -> Response:
+    error = _error_response()
+    if error:
+        return error
+    return json_response(market_live_json(state, (90, 135)))
+
+
+@app.get("/public/live-d.json", response_class=Response)
+def public_live_d() -> Response:
+    error = _error_response()
+    if error:
+        return error
+    return json_response(market_live_json(state, (135, 180)))
+
+
 # Six smaller, identical-schema views. They do not create extra Dhan feeds;
-# they only expose slices of the same 90-stock RAM snapshot for faster machine
+# they only expose slices of the same 180-stock RAM snapshot for faster machine
 # and browser consumption.
 def _public_live_slice(start: int, end: int) -> Response:
     error = _error_response()
