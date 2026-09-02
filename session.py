@@ -169,55 +169,50 @@ class SessionManager:
             self.history_thread.start()
 
     def _load_history(self, now: datetime) -> None:
-        """Load only genuine Dhan candles; higher timeframes are never synthesized."""
+        """Load genuine Dhan history efficiently; never synthesize candles."""
         def load_one(item):
             if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
                 return
-            try:
-                # 1m seed is used for the live 1m indicator warm-up.
-                seed_1m = self.dhan_api.load_previous_intraday(
-                    item, 1, self.settings.intraday_history_days
-                )
-                if self.history_stop.is_set() or not self.in_market():
-                    return
-                self.state.set_indicator_seed_1m(item.security_id, seed_1m)
 
-                # Native Dhan 5m/15m/60m seeds are retained only for indicator
-                # warm-up. They are never aggregated into another timeframe.
-                for interval, key in ((5, "5m"), (15, "15m"), (60, "1h")):
-                    if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
-                        return
-                    seed = self.dhan_api.load_previous_intraday(
+            def set_window(interval: int, key: str) -> None:
+                if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
+                    return
+                try:
+                    seed, today = self.dhan_api.load_intraday_window(
                         item, interval, self.settings.intraday_history_days
                     )
                     self.state.set_historical(item.security_id, f"{key}_seed", seed)
+                    self.state.set_historical(item.security_id, key, today)
+                except Exception as exc:
+                    # One failed timeframe must not discard the other native
+                    # timeframes for this stock. The next session/retry can
+                    # refill only the missing timeframe.
+                    self.state.last_feed_error = f"history:{item.symbol}:{key}:{exc}"
 
-                    rows = self.dhan_api.load_today_intraday(item, interval)
-                    if not self.history_stop.is_set():
-                        self.state.set_historical(item.security_id, key, rows)
-
-                if self.history_stop.is_set() or not self.in_market():
+            # Four native intraday requests per stock: 1m, 5m, 15m, 60m.
+            # Each request returns both previous-session warm-up and today's
+            # native candles, cutting the old 9-request-per-stock bootstrap.
+            for interval, key in ((1, "1m"), (5, "5m"), (15, "15m"), (60, "1h")):
+                if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
                     return
+                set_window(interval, key)
+
+            if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
+                return
+            try:
                 daily = self.dhan_api.load_previous_daily(item, self.settings.daily_lookback)
-                if not self.history_stop.is_set():
-                    self.state.set_historical(item.security_id, "1d", daily)
-
-                if self.history_stop.is_set() or not self.in_market():
-                    return
-                today_1m = self.dhan_api.load_today_1m(item)
-                current_epoch = int(self.now().timestamp())
-                current_minute = current_epoch - (current_epoch % 60)
-                prior = [r for r in today_1m if r["timestamp"] < current_minute]
-                if not self.history_stop.is_set():
-                    self.state.merge_today_1m_history(item.security_id, prior)
+                self.state.set_historical(item.security_id, "1d", daily)
             except Exception as exc:
-                if not self.history_stop.is_set():
-                    self.state.last_feed_error = f"history:{item.symbol}:{exc}"
+                self.state.last_feed_error = f"history:{item.symbol}:1d:{exc}"
 
-        # Dhan documents minute/hour historical intervals as not subject to
-        # the normal per-second Data API limit. Use enough workers to finish
-        # the 180-stock native-history bootstrap promptly, while DhanAPI still
-        # serializes retries and protects against server-side 429 responses.
+            # Do not poll today's 1m REST data during normal live operation.
+            # The WebSocket is authoritative for the current 1m candle; the
+            # native 1m window above supplies only historical warm-up.
+
+        # Dhan's documented Data API ceiling is 5 requests/sec. The shared
+        # DhanAPI throttle enforces that ceiling while workers overlap network
+        # latency. Eight workers are safe because requests are serialized by
+        # the shared throttle rather than emitted as eight simultaneous bursts.
         with ThreadPoolExecutor(max_workers=8, thread_name_prefix="psygrid-hist") as pool:
             futures = [pool.submit(load_one, item) for item in self.instruments]
             for future in futures:
