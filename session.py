@@ -18,6 +18,10 @@ class SessionManager:
         self.state = state
         self.dhan_api = dhan_api
         self.feed = feed
+        # The feed runtime needs the same Dhan REST client for its 45-second
+        # emergency quote fallback. Keeping the reference here avoids changing
+        # the existing app construction path.
+        self.feed.dhan_api = dhan_api
         self.instruments = instruments
         self.tz = ZoneInfo(settings.timezone)
         self.stop_event = threading.Event()
@@ -77,7 +81,6 @@ class SessionManager:
             self.stop_event.wait(2.0)
 
     def _check_for_feed_interruption(self, now: datetime) -> None:
-        """Launch non-blocking historical recovery whenever the feed reconnects."""
         with self.state.lock:
             reconnects = self.state.websocket_reconnects
         if reconnects <= self._last_reconnect_seen:
@@ -118,6 +121,7 @@ class SessionManager:
                 refresh_access_token(self.settings)
                 self.dhan_api.settings = self.settings
                 self.feed.settings = self.settings
+                self.feed.dhan_api = self.dhan_api
                 try:
                     profile = self.dhan_api.verify_data_access()
                 except Exception as first_exc:
