@@ -154,9 +154,6 @@ class DhanAPI:
             "fromDate": from_dt.strftime("%Y-%m-%d %H:%M:%S"),
             "toDate": to_dt.strftime("%Y-%m-%d %H:%M:%S"),
         }
-        # Dhan permits minute/hour historical requests without a separate
-        # per-minute/hour cap, but the documented Data API ceiling remains
-        # 5 requests/second. Keep the process-wide gate at 0.21s/request.
         return self._candles_from_arrays(
             self._post("/charts/intraday", payload, minimum_interval=0.21)
         )
@@ -176,12 +173,6 @@ class DhanAPI:
         )
 
     def load_intraday_window(self, item, interval: int, days: int) -> tuple[List[dict], List[dict]]:
-        """Fetch one native interval window and split it into seed/today.
-
-        One request supplies both previous-session warm-up candles and today's
-        native candles. This avoids the old double-fetch pattern and materially
-        reduces the 180-stock bootstrap request count.
-        """
         now = datetime.now(self.tz)
         start = now - timedelta(days=max(days, 1))
         rows = self.intraday(item, interval, start, now)
@@ -191,6 +182,29 @@ class DhanAPI:
         previous.sort(key=lambda r: r["timestamp"])
         current.sort(key=lambda r: r["timestamp"])
         return previous, current
+
+    def load_today_completed_intraday(self, item, interval: int) -> List[dict]:
+        """Fetch only today's completed native candles for live HTF refresh."""
+        now = datetime.now(self.tz)
+        start = now.replace(hour=9, minute=15, second=0, microsecond=0)
+        if now <= start:
+            return []
+        rows = self.intraday(item, interval, start, now)
+        now_epoch = int(now.timestamp())
+        today = now.date()
+        completed = []
+        candle_seconds = int(interval) * 60
+        for row in rows:
+            local_date = datetime.fromtimestamp(row["timestamp"], self.tz).date()
+            if local_date != today:
+                continue
+            # Historical timestamps are candle-start timestamps. Never expose
+            # the currently forming native candle as a completed candle.
+            if int(row["timestamp"]) + candle_seconds > now_epoch:
+                continue
+            completed.append(row)
+        completed.sort(key=lambda r: r["timestamp"])
+        return completed
 
     def load_previous_daily(self, item, lookback: int) -> List[dict]:
         now = datetime.now(self.tz)
