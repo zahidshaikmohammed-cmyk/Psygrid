@@ -18,9 +18,6 @@ class SessionManager:
         self.state = state
         self.dhan_api = dhan_api
         self.feed = feed
-        # The feed runtime needs the same Dhan REST client for its 45-second
-        # emergency quote fallback. Keeping the reference here avoids changing
-        # the existing app construction path.
         self.feed.dhan_api = dhan_api
         self.instruments = instruments
         self.tz = ZoneInfo(settings.timezone)
@@ -102,7 +99,15 @@ class SessionManager:
     @staticmethod
     def _looks_like_auth_failure(exc: Exception) -> bool:
         text = str(exc).lower()
-        return ("807" in text or "808" in text or "809" in text or "expired" in text or "invalid token" in text or "authentication failed" in text or "unauthorized" in text)
+        return (
+            "807" in text
+            or "808" in text
+            or "809" in text
+            or "expired" in text
+            or "invalid token" in text
+            or "authentication failed" in text
+            or "unauthorized" in text
+        )
 
     def _start_session(self, now: datetime) -> None:
         with self._lock:
@@ -155,29 +160,48 @@ class SessionManager:
             except Exception as exc:
                 self.state.last_feed_error = f"snapshot:{exc}"
             self.feed.start()
-            self.history_thread = threading.Thread(target=self._load_history, args=(now,), daemon=True, name="psygrid-history")
+            self.history_thread = threading.Thread(
+                target=self._load_history,
+                args=(now,),
+                daemon=True,
+                name="psygrid-history",
+            )
             self.history_thread.start()
 
     def _load_history(self, now: datetime) -> None:
+        """Load only genuine Dhan candles; higher timeframes are never synthesized."""
         def load_one(item):
             if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
                 return
             try:
-                seed_1m = self.dhan_api.load_previous_intraday(item, 1, self.settings.intraday_history_days)
+                # 1m seed is used for the live 1m indicator warm-up.
+                seed_1m = self.dhan_api.load_previous_intraday(
+                    item, 1, self.settings.intraday_history_days
+                )
                 if self.history_stop.is_set() or not self.in_market():
                     return
                 self.state.set_indicator_seed_1m(item.security_id, seed_1m)
+
+                # Native Dhan 5m/15m/60m seeds are retained only for indicator
+                # warm-up. They are never aggregated into another timeframe.
                 for interval, key in ((5, "5m"), (15, "15m"), (60, "1h")):
                     if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
                         return
+                    seed = self.dhan_api.load_previous_intraday(
+                        item, interval, self.settings.intraday_history_days
+                    )
+                    self.state.set_historical(item.security_id, f"{key}_seed", seed)
+
                     rows = self.dhan_api.load_today_intraday(item, interval)
                     if not self.history_stop.is_set():
                         self.state.set_historical(item.security_id, key, rows)
+
                 if self.history_stop.is_set() or not self.in_market():
                     return
                 daily = self.dhan_api.load_previous_daily(item, self.settings.daily_lookback)
                 if not self.history_stop.is_set():
                     self.state.set_historical(item.security_id, "1d", daily)
+
                 if self.history_stop.is_set() or not self.in_market():
                     return
                 today_1m = self.dhan_api.load_today_1m(item)
@@ -189,7 +213,12 @@ class SessionManager:
             except Exception as exc:
                 if not self.history_stop.is_set():
                     self.state.last_feed_error = f"history:{item.symbol}:{exc}"
-        with ThreadPoolExecutor(max_workers=2, thread_name_prefix="psygrid-hist") as pool:
+
+        # Dhan documents minute/hour historical intervals as not subject to
+        # the normal per-second Data API limit. Use enough workers to finish
+        # the 180-stock native-history bootstrap promptly, while DhanAPI still
+        # serializes retries and protects against server-side 429 responses.
+        with ThreadPoolExecutor(max_workers=8, thread_name_prefix="psygrid-hist") as pool:
             futures = [pool.submit(load_one, item) for item in self.instruments]
             for future in futures:
                 if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
