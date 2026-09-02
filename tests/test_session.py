@@ -13,7 +13,8 @@ class SessionBoundaryTests(unittest.TestCase):
             market_start="09:15",
             market_end="15:15",
         )
-        self.manager = SessionManager(settings, None, None, None, [])
+        dummy_feed = SimpleNamespace(dhan_api=None)
+        self.manager = SessionManager(settings, None, None, dummy_feed, [])
         self.tz = ZoneInfo("Asia/Kolkata")
 
     def test_market_opens_at_0915(self):
