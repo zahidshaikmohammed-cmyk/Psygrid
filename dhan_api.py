@@ -31,8 +31,6 @@ class DhanAPI:
 
     @classmethod
     def _throttle_post(cls, minimum_interval: float = 0.25) -> None:
-        # Dhan documents a 5 requests/sec Data API limit. Keep a single process-
-        # wide gate so concurrent historical workers cannot burst past it.
         with cls._rate_lock:
             now = time.monotonic()
             wait = minimum_interval - (now - cls._last_post_at)
@@ -40,7 +38,13 @@ class DhanAPI:
                 time.sleep(wait)
             cls._last_post_at = time.monotonic()
 
-    def _post(self, path: str, payload: dict, include_client_id: bool = False) -> dict:
+    def _post(
+        self,
+        path: str,
+        payload: dict,
+        include_client_id: bool = False,
+        minimum_interval: float = 0.25,
+    ) -> dict:
         headers = self.headers if include_client_id else {
             "Accept": "application/json",
             "Content-Type": "application/json",
@@ -49,8 +53,13 @@ class DhanAPI:
         last_error = None
         for attempt in range(5):
             try:
-                self._throttle_post()
-                response = self.session.post(BASE_URL + path, headers=headers, json=payload, timeout=30)
+                self._throttle_post(minimum_interval)
+                response = self.session.post(
+                    BASE_URL + path,
+                    headers=headers,
+                    json=payload,
+                    timeout=30,
+                )
                 if response.status_code == 429:
                     time.sleep(min(8.0, float(attempt + 1)))
                     continue
@@ -87,7 +96,7 @@ class DhanAPI:
         grouped: Dict[str, List[int]] = {}
         for item in instruments:
             grouped.setdefault(item.exchange_segment, []).append(int(item.security_id))
-        raw = self._post("/marketfeed/quote", grouped, include_client_id=True)
+        raw = self._post("/marketfeed/quote", grouped, include_client_id=True, minimum_interval=1.0)
         result: Dict[str, dict] = {}
         for _segment, rows in raw.get("data", {}).items():
             if not isinstance(rows, dict):
@@ -145,7 +154,12 @@ class DhanAPI:
             "fromDate": from_dt.strftime("%Y-%m-%d %H:%M:%S"),
             "toDate": to_dt.strftime("%Y-%m-%d %H:%M:%S"),
         }
-        return self._candles_from_arrays(self._post("/charts/intraday", payload))
+        # Dhan's current release documents no per-second limit for minute/hour
+        # historical intervals. Keep a small process-wide spacing to avoid a
+        # burst while allowing the 180-stock bootstrap to finish quickly.
+        return self._candles_from_arrays(
+            self._post("/charts/intraday", payload, minimum_interval=0.02)
+        )
 
     def daily(self, item, from_date: datetime, to_date: datetime) -> List[dict]:
         payload = {
@@ -157,7 +171,9 @@ class DhanAPI:
             "fromDate": from_date.strftime("%Y-%m-%d"),
             "toDate": to_date.strftime("%Y-%m-%d"),
         }
-        return self._candles_from_arrays(self._post("/charts/historical", payload))
+        return self._candles_from_arrays(
+            self._post("/charts/historical", payload, minimum_interval=0.25)
+        )
 
     def load_previous_daily(self, item, lookback: int) -> List[dict]:
         now = datetime.now(self.tz)
@@ -176,7 +192,7 @@ class DhanAPI:
         return rows[-(lookback + warmup):]
 
     def load_today_intraday(self, item, interval: int) -> List[dict]:
-        """Load only today's native Dhan intraday candles; never fetch prior days."""
+        """Load only today's native Dhan intraday candles; never synthesize them."""
         now = datetime.now(self.tz)
         start = now.replace(hour=9, minute=15, second=0, microsecond=0)
         if now < start:
