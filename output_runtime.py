@@ -61,12 +61,23 @@ def _stock_fixups(state, payload: dict) -> None:
             datetime.fromtimestamp(received, PUBLIC_TZ).strftime("%Y-%m-%d %H:%M:%S IST")
             if received is not None else None
         )
-        # 5m/15m/1h remain native Dhan candles. No 1m aggregation, filling,
-        # interpolation, or synthetic candle construction is permitted.
         for key in NATIVE_HIGHER_TIMEFRAMES:
             stock.setdefault("timeframes", {})[key] = _native_timeframe_payload(
                 state, security_id, key
             )
+
+
+def _higher_timeframes_ready(stock: dict) -> bool:
+    """Require real native 5m/15m/1h candles and calculated indicators."""
+    timeframes = stock.get("timeframes", {})
+    for key in NATIVE_HIGHER_TIMEFRAMES:
+        rows = timeframes.get(key) or []
+        if not rows:
+            return False
+        latest = rows[-1]
+        if any(latest.get(field) is None for field in ("ma9", "ema20", "rsi14")):
+            return False
+    return True
 
 
 def market_live_json(state, stock_range=None) -> dict:
@@ -91,14 +102,17 @@ def market_live_json(state, stock_range=None) -> dict:
         for stock in stocks.values()
         if bool(stock.get("freshness", {}).get("live_data_valid", False))
     )
+    analysis_ready_count = sum(
+        1
+        for stock in stocks.values()
+        if bool(stock.get("freshness", {}).get("live_data_valid", False))
+        and _higher_timeframes_ready(stock)
+    )
 
-    # Signal eligibility is global only for session/feed state. Quote
-    # freshness remains per stock; stale symbols are individually rejected by
-    # the downstream scanner rather than poisoning the whole universe.
     signal_valid = bool(
         session.get("status") == "LIVE"
         and session.get("feed_status") == "CONNECTED"
-        and fresh_count > 0
+        and analysis_ready_count > 0
     )
     if signal_valid:
         reason = None
@@ -106,17 +120,21 @@ def market_live_json(state, stock_range=None) -> dict:
         reason = "MARKET_SESSION_NOT_LIVE"
     elif session.get("feed_status") != "CONNECTED":
         reason = f"FEED_STATUS_{session.get('feed_status', 'UNKNOWN')}"
-    else:
+    elif fresh_count == 0:
         reason = "NO_FRESH_LIVE_STOCKS"
+    else:
+        reason = "NATIVE_HIGHER_TIMEFRAME_HISTORY_NOT_READY"
 
     payload["signal_input"] = {
         "valid": signal_valid,
         "status": "LIVE" if signal_valid else "BLOCKED",
         "stock_count": int(payload.get("stock_count", len(stocks)) or 0),
         "fresh_stock_count": fresh_count,
+        "analysis_ready_stock_count": analysis_ready_count,
         "max_live_age_seconds": MAX_SIGNAL_LIVE_AGE_SECONDS,
         "block_reason": reason,
         "per_stock_freshness_required": True,
         "native_higher_timeframes_required": True,
+        "synthetic_candles_allowed": False,
     }
     return payload
