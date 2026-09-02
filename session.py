@@ -27,6 +27,8 @@ class SessionManager:
         self.history_thread: Optional[threading.Thread] = None
         self.htf_thread: Optional[threading.Thread] = None
         self._lock = threading.RLock()
+        self._auth_refresh_lock = threading.Lock()
+        self._last_auth_refresh_epoch = 0.0
         self._started_for_date: Optional[str] = None
         self._auth_retry_at = 0.0
         self._last_reconnect_seen = 0
@@ -101,6 +103,18 @@ class SessionManager:
         self.settings.token_expiry = expiry
         self.settings.token_source = "AUTO_GENERATED_TOTP"
 
+    def _refresh_auth_once(self) -> None:
+        """Refresh a bad REST token once, then let all workers reuse it."""
+        now = __import__("time").time()
+        with self._auth_refresh_lock:
+            if now - self._last_auth_refresh_epoch < 60.0:
+                return
+            self._auth_retry_with_totp()
+            self.dhan_api.settings = self.settings
+            self.feed.settings = self.settings
+            self.feed.dhan_api = self.dhan_api
+            self._last_auth_refresh_epoch = __import__("time").time()
+
     @staticmethod
     def _looks_like_auth_failure(exc: Exception) -> bool:
         text = str(exc).lower()
@@ -140,9 +154,7 @@ class SessionManager:
                     if not self._looks_like_auth_failure(first_exc):
                         raise
                     self.state.set_feed_status("TOKEN_REFRESHING", "Dhan token expired/invalid; generating one fresh token")
-                    self._auth_retry_with_totp()
-                    self.dhan_api.settings = self.settings
-                    self.feed.settings = self.settings
+                    self._refresh_auth_once()
                     profile = self.dhan_api.verify_data_access()
                 self.state.set_profile(profile)
             except DhanTokenRateLimited as exc:
@@ -216,10 +228,6 @@ class SessionManager:
                 except Exception:
                     pass
 
-        # Initial bootstrap is complete. From here onward, keep native 5m,
-        # 15m and 1h candles advancing throughout the session. The WebSocket
-        # remains authoritative for the live 1m stream; higher timeframes are
-        # refreshed from Dhan's native historical API only.
         if not self.stop_event.is_set() and not self.history_stop.is_set() and self.in_market():
             with self._lock:
                 if not self.htf_thread or not self.htf_thread.is_alive():
@@ -242,10 +250,7 @@ class SessionManager:
             except Exception as exc:
                 if self._looks_like_auth_failure(exc):
                     try:
-                        with self._lock:
-                            self._auth_retry_with_totp()
-                            self.dhan_api.settings = self.settings
-                            self.feed.settings = self.settings
+                        self._refresh_auth_once()
                         rows = self.dhan_api.load_today_completed_intraday(item, interval)
                         if rows:
                             self.state.set_historical(item.security_id, key, rows)
@@ -281,8 +286,6 @@ class SessionManager:
             for interval, key in schedules:
                 if elapsed_minutes % interval != 0:
                     continue
-                # Wait until the boundary has definitely closed so the native
-                # historical endpoint is queried only for completed candles.
                 slot = elapsed_minutes // interval
                 if self._last_htf_refresh_slot.get(key) == slot:
                     continue
