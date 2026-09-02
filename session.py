@@ -25,10 +25,12 @@ class SessionManager:
         self.history_stop = threading.Event()
         self.thread: Optional[threading.Thread] = None
         self.history_thread: Optional[threading.Thread] = None
+        self.htf_thread: Optional[threading.Thread] = None
         self._lock = threading.RLock()
         self._started_for_date: Optional[str] = None
         self._auth_retry_at = 0.0
         self._last_reconnect_seen = 0
+        self._last_htf_refresh_slot: dict[str, int] = {}
         self.backfill = HistoricalBackfill(settings, state, dhan_api, instruments)
 
     def now(self) -> datetime:
@@ -61,6 +63,9 @@ class SessionManager:
         if self.history_thread:
             self.history_thread.join(timeout=10)
             self.history_thread = None
+        if self.htf_thread:
+            self.htf_thread.join(timeout=10)
+            self.htf_thread = None
         self.state.reset()
         if self.thread and self.thread is not threading.current_thread():
             self.thread.join(timeout=3)
@@ -100,7 +105,8 @@ class SessionManager:
     def _looks_like_auth_failure(exc: Exception) -> bool:
         text = str(exc).lower()
         return (
-            "807" in text
+            "401" in text
+            or "807" in text
             or "808" in text
             or "809" in text
             or "expired" in text
@@ -119,6 +125,7 @@ class SessionManager:
                 self.state.set_feed_status("AUTH_WAITING", f"Dhan authentication retry in {remaining}s")
                 return
             self.history_stop.clear()
+            self._last_htf_refresh_slot.clear()
             self.state.begin(session_date, self.instruments)
             self.state.session_status = "AUTHENTICATING"
             self.state.set_feed_status("AUTHENTICATING")
@@ -184,14 +191,8 @@ class SessionManager:
                     self.state.set_historical(item.security_id, f"{key}_seed", seed)
                     self.state.set_historical(item.security_id, key, today)
                 except Exception as exc:
-                    # One failed timeframe must not discard the other native
-                    # timeframes for this stock. The next session/retry can
-                    # refill only the missing timeframe.
                     self.state.last_feed_error = f"history:{item.symbol}:{key}:{exc}"
 
-            # Four native intraday requests per stock: 1m, 5m, 15m, 60m.
-            # Each request returns both previous-session warm-up and today's
-            # native candles, cutting the old 9-request-per-stock bootstrap.
             for interval, key in ((1, "1m"), (5, "5m"), (15, "15m"), (60, "1h")):
                 if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
                     return
@@ -205,14 +206,6 @@ class SessionManager:
             except Exception as exc:
                 self.state.last_feed_error = f"history:{item.symbol}:1d:{exc}"
 
-            # Do not poll today's 1m REST data during normal live operation.
-            # The WebSocket is authoritative for the current 1m candle; the
-            # native 1m window above supplies only historical warm-up.
-
-        # Dhan's documented Data API ceiling is 5 requests/sec. The shared
-        # DhanAPI throttle enforces that ceiling while workers overlap network
-        # latency. Eight workers are safe because requests are serialized by
-        # the shared throttle rather than emitted as eight simultaneous bursts.
         with ThreadPoolExecutor(max_workers=8, thread_name_prefix="psygrid-hist") as pool:
             futures = [pool.submit(load_one, item) for item in self.instruments]
             for future in futures:
@@ -223,6 +216,83 @@ class SessionManager:
                 except Exception:
                     pass
 
+        # Initial bootstrap is complete. From here onward, keep native 5m,
+        # 15m and 1h candles advancing throughout the session. The WebSocket
+        # remains authoritative for the live 1m stream; higher timeframes are
+        # refreshed from Dhan's native historical API only.
+        if not self.stop_event.is_set() and not self.history_stop.is_set() and self.in_market():
+            with self._lock:
+                if not self.htf_thread or not self.htf_thread.is_alive():
+                    self.htf_thread = threading.Thread(
+                        target=self._refresh_native_higher_timeframes,
+                        daemon=True,
+                        name="psygrid-htf-refresh",
+                    )
+                    self.htf_thread.start()
+
+    def _refresh_native_interval(self, interval: int, key: str) -> None:
+        """Refresh one native timeframe without aggregating 1m candles."""
+        def refresh_one(item):
+            if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
+                return
+            try:
+                rows = self.dhan_api.load_today_completed_intraday(item, interval)
+                if rows:
+                    self.state.set_historical(item.security_id, key, rows)
+            except Exception as exc:
+                if self._looks_like_auth_failure(exc):
+                    try:
+                        with self._lock:
+                            self._auth_retry_with_totp()
+                            self.dhan_api.settings = self.settings
+                            self.feed.settings = self.settings
+                        rows = self.dhan_api.load_today_completed_intraday(item, interval)
+                        if rows:
+                            self.state.set_historical(item.security_id, key, rows)
+                        return
+                    except Exception as retry_exc:
+                        exc = retry_exc
+                self.state.last_feed_error = f"history_refresh:{item.symbol}:{key}:{exc}"
+
+        with ThreadPoolExecutor(max_workers=8, thread_name_prefix=f"psygrid-{key}") as pool:
+            futures = [pool.submit(refresh_one, item) for item in self.instruments]
+            for future in futures:
+                if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
+                    break
+                try:
+                    future.result()
+                except Exception:
+                    pass
+
+    def _refresh_native_higher_timeframes(self) -> None:
+        """Maintain live native 5m/15m/1h data at completed candle boundaries."""
+        schedules = ((5, "5m"), (15, "15m"), (60, "1h"))
+        while not self.stop_event.is_set() and not self.history_stop.is_set():
+            now = self.now()
+            if not self.in_market(now):
+                break
+            start_h, start_m = map(int, self.settings.market_start.split(":"))
+            market_start = now.replace(hour=start_h, minute=start_m, second=0, microsecond=0)
+            elapsed_minutes = int((now - market_start).total_seconds() // 60)
+            if elapsed_minutes < 5:
+                self.history_stop.wait(2.0)
+                continue
+
+            for interval, key in schedules:
+                if elapsed_minutes % interval != 0:
+                    continue
+                # Wait until the boundary has definitely closed so the native
+                # historical endpoint is queried only for completed candles.
+                slot = elapsed_minutes // interval
+                if self._last_htf_refresh_slot.get(key) == slot:
+                    continue
+                if now.second < 2:
+                    continue
+                self._last_htf_refresh_slot[key] = slot
+                self._refresh_native_interval(interval, key)
+
+            self.history_stop.wait(2.0)
+
     def _end_session(self) -> None:
         with self._lock:
             self.history_stop.set()
@@ -232,9 +302,13 @@ class SessionManager:
                 pass
             if self.history_thread:
                 self.history_thread.join(timeout=10)
+            if self.htf_thread:
+                self.htf_thread.join(timeout=10)
             self.history_thread = None
+            self.htf_thread = None
             self.state.finalize_current()
             self.state.reset()
             self._started_for_date = None
             self._auth_retry_at = 0.0
             self._last_reconnect_seen = 0
+            self._last_htf_refresh_slot.clear()
