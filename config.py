@@ -37,7 +37,7 @@ class Settings:
     ema_period: int = 20
     rsi_period: int = 14
     max_instruments: int = 500
-    max_live_age_seconds: int = 60
+    max_live_age_seconds: int = 30
 
 
 def _required(name: str) -> str:
@@ -66,14 +66,12 @@ def _load_symbol_universe() -> list[str]:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise RuntimeError(f"Unable to read stock universe: {path}") from exc
-
     if not isinstance(payload, dict):
         raise RuntimeError("stocks.json must be a JSON object")
     if str(payload.get("exchange", "")).upper() != "NSE":
         raise RuntimeError("stocks.json exchange must be NSE")
     if str(payload.get("instrument", "")).upper() != "EQUITY":
         raise RuntimeError("stocks.json instrument must be EQUITY")
-
     symbols = payload.get("symbols")
     if not isinstance(symbols, list) or not symbols:
         raise RuntimeError("stocks.json must contain a non-empty 'symbols' array")
@@ -95,12 +93,10 @@ def load_instruments() -> List[Instrument]:
 def load_settings() -> Settings:
     client_id = _required("DHAN_CLIENT_ID")
     access_token, token_expiry, token_source = token_from_environment(client_id)
-
     market_start = os.getenv("MARKET_START", "09:15").strip()
     market_end = os.getenv("MARKET_END", "15:15").strip()
     if len(market_start) != 5 or len(market_end) != 5:
         raise RuntimeError("MARKET_START and MARKET_END must use HH:MM")
-
     return Settings(
         client_id=client_id,
         access_token=access_token,
@@ -117,12 +113,11 @@ def load_settings() -> Settings:
         ema_period=_positive_int_env("EMA_PERIOD", 20),
         rsi_period=_positive_int_env("RSI_PERIOD", 14),
         max_instruments=_positive_int_env("MAX_INSTRUMENTS", 500),
-        max_live_age_seconds=_positive_int_env("MAX_LIVE_AGE_SECONDS", 60),
+        max_live_age_seconds=_positive_int_env("MAX_LIVE_AGE_SECONDS", 30),
     )
 
 
 def _token_expiry_epoch(token: str) -> int | None:
-    """Read JWT exp without verifying it; used only to decide whether to refresh."""
     try:
         parts = token.split(".")
         if len(parts) != 3:
@@ -136,26 +131,16 @@ def _token_expiry_epoch(token: str) -> int | None:
 
 
 def refresh_access_token(settings: Settings) -> None:
-    """Refresh once per market session when the current token is absent/near expiry.
-
-    If a valid environment token is supplied, it is reused. If the token is
-    expired or within the safety window and TOTP credentials exist, generate one
-    fresh 24-hour token. This prevents the next trading day from inheriting a
-    yesterday's Render-process token while avoiding token-generation loops.
-    """
     pin = os.getenv("DHAN_PIN", "").strip()
     totp_secret = os.getenv("DHAN_TOTP_SECRET", "").strip()
-
     if settings.access_token:
         expiry_epoch = _token_expiry_epoch(settings.access_token)
         if expiry_epoch is None or expiry_epoch > int(time.time()) + 1800:
             return
-
     if not pin or not totp_secret:
         if settings.access_token:
             return
         raise RuntimeError("No usable Dhan access token or TOTP credentials configured")
-
     token, expiry = generate_access_token(settings.client_id, pin, totp_secret)
     settings.access_token = token
     settings.token_expiry = expiry
