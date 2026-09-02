@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from feed import LiveFeed
@@ -8,9 +8,11 @@ from state import PsygridState
 
 
 def test_dhan_ltt_accepts_sdk_utc_time_string():
-    epoch = LiveFeed._parse_ltt("09:30:15")
+    expected_dt = datetime.now(timezone.utc).replace(microsecond=0) - timedelta(seconds=60)
+    text = expected_dt.strftime("%H:%M:%S")
+    epoch = LiveFeed._parse_ltt(text)
     assert epoch is not None
-    assert datetime.fromtimestamp(epoch, timezone.utc).strftime("%H:%M:%S") == "09:30:15"
+    assert datetime.fromtimestamp(epoch, timezone.utc).strftime("%H:%M:%S") == text
 
 
 def test_dhan_ltt_accepts_epoch():
@@ -19,7 +21,7 @@ def test_dhan_ltt_accepts_epoch():
 
 def test_indicators_are_standard():
     closes = [float(x) for x in range(1, 31)]
-    assert sma(closes, 9) == 27.0
+    assert sma(closes, 9) == 26.0
     assert ema(closes, 20) is not None
     assert rsi(closes, 14) == 100.0
 
