@@ -154,11 +154,11 @@ class DhanAPI:
             "fromDate": from_dt.strftime("%Y-%m-%d %H:%M:%S"),
             "toDate": to_dt.strftime("%Y-%m-%d %H:%M:%S"),
         }
-        # Dhan's current release documents no per-second limit for minute/hour
-        # historical intervals. Keep a small process-wide spacing to avoid a
-        # burst while allowing the 180-stock bootstrap to finish quickly.
+        # Dhan permits minute/hour historical requests without a separate
+        # per-minute/hour cap, but the documented Data API ceiling remains
+        # 5 requests/second. Keep the process-wide gate at 0.21s/request.
         return self._candles_from_arrays(
-            self._post("/charts/intraday", payload, minimum_interval=0.02)
+            self._post("/charts/intraday", payload, minimum_interval=0.21)
         )
 
     def daily(self, item, from_date: datetime, to_date: datetime) -> List[dict]:
@@ -172,8 +172,25 @@ class DhanAPI:
             "toDate": to_date.strftime("%Y-%m-%d"),
         }
         return self._candles_from_arrays(
-            self._post("/charts/historical", payload, minimum_interval=0.25)
+            self._post("/charts/historical", payload, minimum_interval=0.21)
         )
+
+    def load_intraday_window(self, item, interval: int, days: int) -> tuple[List[dict], List[dict]]:
+        """Fetch one native interval window and split it into seed/today.
+
+        One request supplies both previous-session warm-up candles and today's
+        native candles. This avoids the old double-fetch pattern and materially
+        reduces the 180-stock bootstrap request count.
+        """
+        now = datetime.now(self.tz)
+        start = now - timedelta(days=max(days, 1))
+        rows = self.intraday(item, interval, start, now)
+        today = now.date()
+        previous = [r for r in rows if datetime.fromtimestamp(r["timestamp"], self.tz).date() < today]
+        current = [r for r in rows if datetime.fromtimestamp(r["timestamp"], self.tz).date() == today]
+        previous.sort(key=lambda r: r["timestamp"])
+        current.sort(key=lambda r: r["timestamp"])
+        return previous, current
 
     def load_previous_daily(self, item, lookback: int) -> List[dict]:
         now = datetime.now(self.tz)
@@ -192,7 +209,6 @@ class DhanAPI:
         return rows[-(lookback + warmup):]
 
     def load_today_intraday(self, item, interval: int) -> List[dict]:
-        """Load only today's native Dhan intraday candles; never synthesize them."""
         now = datetime.now(self.tz)
         start = now.replace(hour=9, minute=15, second=0, microsecond=0)
         if now < start:
