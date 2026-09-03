@@ -61,7 +61,7 @@ class RuntimeFreshnessState(PsygridState):
             ws_received = self.last_tick_received_by_security.get(security_id)
             rest = self.rest_fallback_by_security.get(security_id)
             rest_received = rest.get("timestamp_epoch") if rest else None
-            candidates = [(ws_received, "DHAN_WEBSOCKET_QUOTE"), (rest_received, "DHAN_REST_QUOTE_RECOVERY")]
+            candidates = [(ws_received, "DHAN_WEBSOCKET_FULL"), (rest_received, "DHAN_REST_QUOTE_RECOVERY")]
             received, source = max(
                 ((value, src) for value, src in candidates if value is not None),
                 key=lambda pair: pair[0],
