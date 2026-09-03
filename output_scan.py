@@ -8,8 +8,7 @@ from output_runtime import _higher_timeframes_ready, market_live_json
 from output import normalize_candle
 
 PUBLIC_TZ = ZoneInfo("Asia/Kolkata")
-SCAN_START = 0
-SCAN_END = 90
+UNIVERSE_SIZE = 270
 
 
 def _latest_completed_1m(state, security_id: str) -> Optional[dict]:
@@ -21,14 +20,16 @@ def _latest_completed_1m(state, security_id: str) -> Optional[dict]:
     return normalize_candle(rows[-1])
 
 
-def build_scan_90(state) -> dict:
-    """Return one compact, complete machine-readable A45+B45 scan.
+def build_scan(state, stock_range: tuple[int, int] = (0, UNIVERSE_SIZE), name: str = "WHOLE_UNIVERSE") -> dict:
+    """Return a compact, complete machine-readable scan for the requested universe slice.
 
     Full candle histories stay on the normal live endpoints. This scan exposes
     exactly the records needed for qualification without truncation: freshness,
     current quote, latest completed 1m, and latest native 5m/15m/1h candles.
     """
-    payload = market_live_json(state, (SCAN_START, SCAN_END))
+    start, end = stock_range
+    requested = max(0, end - start)
+    payload = market_live_json(state, (start, end))
     stocks = payload.get("stocks", {})
 
     compact = {}
@@ -48,18 +49,24 @@ def build_scan_90(state) -> dict:
 
     symbols = list(compact.keys())
     fresh = sum(1 for row in compact.values() if row["freshness"].get("live_data_valid"))
-    ready = sum(1 for row in compact.values() if row["freshness"].get("live_data_valid") and row["higher_timeframes_ready"])
+    ready = sum(
+        1
+        for row in compact.values()
+        if row["freshness"].get("live_data_valid") and row["higher_timeframes_ready"]
+    )
+    unique_count = len(set(symbols))
+
     return {
         "service": "PSYGRID",
-        "schema_version": "scan-1.0",
+        "schema_version": "scan-1.1",
         "scan": {
-            "name": "A45+B45",
-            "requested_stock_count": 90,
+            "name": name,
+            "requested_stock_count": requested,
             "returned_stock_count": len(symbols),
-            "unique_stock_count": len(set(symbols)),
-            "all_requested_stocks_accounted_for": len(symbols) == 90 and len(set(symbols)) == 90,
-            "ordering": "SAME_AS_LIVE_A_THEN_LIVE_B",
-            "source_endpoints": ["/public/live-a.json", "/public/live-b.json"],
+            "unique_stock_count": unique_count,
+            "all_requested_stocks_accounted_for": len(symbols) == requested and unique_count == requested,
+            "ordering": "SAME_AS_UNIVERSE_CONFIG",
+            "source": "SAME_RAM_STATE_AS_LIVE_ENDPOINTS",
             "generated_at_ist": datetime.now(PUBLIC_TZ).strftime("%Y-%m-%d %H:%M:%S IST"),
         },
         "session": payload.get("session", {}),
@@ -72,10 +79,20 @@ def build_scan_90(state) -> dict:
             "incomplete_1m_not_used_as_latest_completed_1m": True,
         },
         "coverage": {
+            "requested_stock_count": requested,
             "fresh_stock_count": fresh,
-            "stale_or_missing_stock_count": 90 - fresh,
+            "stale_or_missing_stock_count": requested - fresh,
             "analysis_ready_stock_count": ready,
-            "unprocessed_stock_count": 90 - len(symbols),
+            "unprocessed_stock_count": requested - len(symbols),
         },
         "stocks": compact,
     }
+
+
+def build_scan_270(state) -> dict:
+    return build_scan(state, (0, UNIVERSE_SIZE), "WHOLE_UNIVERSE_270")
+
+
+def build_scan_90(state) -> dict:
+    """Backward-compatible compact A45+B45 scan."""
+    return build_scan(state, (0, 90), "A45+B45")
