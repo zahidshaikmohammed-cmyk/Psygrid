@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -43,6 +44,13 @@ def _native_timeframe_payload(state, security_id: str, key: str) -> list[dict]:
     return [normalize_candle(row) for row in enriched]
 
 
+def _parse_public_epoch(value) -> int | None:
+    try:
+        return int(datetime.strptime(value, "%Y-%m-%d %H:%M:%S IST").replace(tzinfo=PUBLIC_TZ).timestamp())
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
 def _mark_continuity(rows: list[dict], minutes: int) -> tuple[list[dict], bool]:
     """Mark missing native bars; never fill or synthesize the missing interval."""
     expected = minutes * 60
@@ -51,11 +59,7 @@ def _mark_continuity(rows: list[dict], minutes: int) -> tuple[list[dict], bool]:
     out = []
     for row in rows:
         item = dict(row)
-        text = item.get("timestamp")
-        try:
-            epoch = int(datetime.strptime(text, "%Y-%m-%d %H:%M:%S IST").replace(tzinfo=PUBLIC_TZ).timestamp())
-        except (TypeError, ValueError, OverflowError):
-            epoch = None
+        epoch = _parse_public_epoch(item.get("timestamp"))
         gap = False if previous_epoch is None or epoch is None else epoch - previous_epoch != expected
         item["is_gap"] = gap
         if gap:
@@ -95,11 +99,22 @@ def _execution_context(state, security_id: str) -> dict:
         "day_high": price("day_high"),
         "day_low": price("day_low"),
         "prev_close": price("prev_close"),
-        "dhan_day_vwap": price("dhan_day_vwap") if context.get("dhan_day_vwap") is not None else price("avg_price"),
+        "dhan_day_vwap": price("dhan_day_vwap"),
         "depth_valid": depth_valid,
         "depth_levels": depth,
         "market_context_source": context.get("source"),
     }
+
+
+def _completed_rows(rows: list[dict], minutes: int) -> list[dict]:
+    """Return only bars whose full native interval has elapsed."""
+    now_epoch = int(time.time())
+    duration = minutes * 60
+    return [
+        row for row in rows
+        if (epoch := _parse_public_epoch(row.get("timestamp"))) is not None
+        and epoch + duration <= now_epoch
+    ]
 
 
 def _stock_fixups(state, payload: dict) -> None:
@@ -116,7 +131,6 @@ def _stock_fixups(state, payload: dict) -> None:
                 state, security_id, key
             )
 
-        # 1m/5m/15m/1h payloads expose continuity status but never fill a gap.
         for key, minutes in TIMEFRAME_MINUTES.items():
             rows = stock.get("timeframes", {}).get(key)
             if isinstance(rows, list):
@@ -124,6 +138,8 @@ def _stock_fixups(state, payload: dict) -> None:
 
         current = stock.setdefault("current", {})
         context = _execution_context(state, security_id)
+        if context.get("ltp") is not None:
+            current["ltp"] = context["ltp"]
         for key in (
             "bid", "ask", "bid_qty", "ask_qty", "bid_orders", "ask_orders",
             "spread", "spread_bps", "day_open", "day_high", "day_low", "prev_close",
@@ -132,22 +148,19 @@ def _stock_fixups(state, payload: dict) -> None:
         current["depth_valid"] = context["depth_valid"]
         current["depth_levels"] = context["depth_levels"]
         current["market_context_source"] = context["market_context_source"]
-        if context.get("dhan_day_vwap") is not None:
-            current["dhan_day_vwap"] = context["dhan_day_vwap"]
 
-        # Repeated session-level Dhan VWAP is deliberately removed from every candle.
         for rows in stock.get("timeframes", {}).values():
             if isinstance(rows, list):
                 for candle in rows:
                     if isinstance(candle, dict):
                         candle.pop("dhan_day_vwap", None)
 
-        completed_1m = [r for r in stock.get("timeframes", {}).get("1m", []) if isinstance(r, dict)]
+        completed_1m = _completed_rows(stock.get("timeframes", {}).get("1m", []), 1)
         latest_1m = completed_1m[-1] if completed_1m else None
         one_min_ready = bool(latest_1m) and all(latest_1m.get(k) is not None for k in ("ma9", "ema20", "rsi14"))
         continuity_valid = all(
-            not any(bool(c.get("is_gap")) for c in stock.get("timeframes", {}).get(key, []) if isinstance(c, dict))
-            for key in ("1m", "5m", "15m", "1h")
+            not any(bool(c.get("is_gap")) for c in _completed_rows(stock.get("timeframes", {}).get(key, []), minutes))
+            for key, minutes in TIMEFRAME_MINUTES.items()
         )
         fresh = bool(stock.get("freshness", {}).get("live_data_valid", False))
         native_ready = _higher_timeframes_ready(stock)
@@ -225,7 +238,7 @@ def market_live_json(state, stock_range=None) -> dict:
     )
     execution_ready_count = sum(
         1 for stock in stocks.values()
-        if bool(stock.get("signal_engine", {}).get("status") == "READY")
+        if stock.get("signal_engine", {}).get("status") == "READY"
     )
     stock_count = int(payload.get("stock_count", len(stocks)) or 0)
 
@@ -234,6 +247,7 @@ def market_live_json(state, stock_range=None) -> dict:
         and session.get("feed_status") == "CONNECTED"
         and stock_count > 0
         and analysis_ready_count == stock_count
+        and execution_ready_count == stock_count
     )
     if signal_valid:
         reason = None
@@ -243,8 +257,10 @@ def market_live_json(state, stock_range=None) -> dict:
         reason = f"FEED_STATUS_{session.get('feed_status', 'UNKNOWN')}"
     elif fresh_count < stock_count:
         reason = "INCOMPLETE_FRESH_LIVE_COVERAGE"
-    else:
+    elif analysis_ready_count < stock_count:
         reason = "NATIVE_HIGHER_TIMEFRAME_HISTORY_NOT_READY"
+    else:
+        reason = "EXECUTION_DATA_QUALITY_NOT_READY"
 
     payload["signal_input"] = {
         "valid": signal_valid,
