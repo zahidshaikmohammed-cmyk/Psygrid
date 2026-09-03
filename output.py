@@ -23,12 +23,7 @@ def _price(value):
 
 
 def _ist_timestamp(value) -> Optional[str]:
-    """Return every public timestamp in explicit Indian Standard Time.
-
-    Internal state may use UTC ISO strings, epoch seconds, or the already-local
-    candle timestamp. The public API deliberately exposes only IST so a human
-    can judge freshness at a glance without doing timezone conversion.
-    """
+    """Return every public timestamp in explicit Indian Standard Time."""
     if value in (None, ""):
         return None
     try:
@@ -53,7 +48,7 @@ def _ist_timestamp(value) -> Optional[str]:
 
 def _age_display(age_seconds) -> str:
     if age_seconds is None:
-        return "NO LIVE TICK"
+        return "NO LIVE QUOTE"
     seconds = max(0, int(round(float(age_seconds))))
     if seconds < 60:
         return f"{seconds}s OLD"
@@ -66,13 +61,14 @@ def _age_display(age_seconds) -> str:
 
 def _public_freshness(freshness: dict, last_trade_epoch=None) -> dict:
     age = freshness.get("data_age_seconds")
-    status = freshness.get("status", "NO_TICK_YET")
+    status = freshness.get("status", "NO_LIVE_QUOTE")
     return {
         "status": status,
         "data_age_seconds": age,
         "age_display": _age_display(age),
         "last_trade_time_ist": _ist_timestamp(last_trade_epoch),
         "live_data_valid": bool(freshness.get("live_data_valid", False)),
+        "source": freshness.get("source"),
     }
 
 
@@ -101,9 +97,6 @@ def enrich_history(candles: list, settings) -> list:
 
 
 def normalize_candle(row: dict) -> dict:
-    # Public representation is intentionally compact. Validation/provenance
-    # remain in the backend and at timeframe/rules level rather than repeating
-    # the same strings on every candle. Timestamp is deliberately IST-only.
     return {
         "timestamp": _ist_timestamp(row.get("timestamp") or row.get("epoch")),
         "open": _price(row.get("open")),
@@ -139,7 +132,11 @@ def _stock_payload(state, security_id: str, meta: dict) -> dict:
     raw_freshness = state.freshness(security_id)
     freshness = _public_freshness(raw_freshness, state.last_ltt_by_security.get(security_id))
     live_valid = freshness["live_data_valid"]
-    live_ltp = state.last_ltp_by_security.get(security_id) if live_valid else None
+    ws_ltp = state.last_ltp_by_security.get(security_id) if live_valid and freshness.get("source") == "DHAN_WEBSOCKET_QUOTE" else None
+    with state.lock:
+        recovery = state.rest_fallback_by_security.get(security_id, {})
+    recovery_ltp = recovery.get("ltp") if live_valid else None
+    live_ltp = ws_ltp if ws_ltp is not None else recovery_ltp
     current_candle = state.current_1m.get(security_id)
     return {
         "security_id": security_id,
@@ -152,6 +149,7 @@ def _stock_payload(state, security_id: str, meta: dict) -> dict:
             "last_trade_time_ist": freshness["last_trade_time_ist"],
             "candle_complete": bool(current_candle.get("complete")) if current_candle else False,
             "dhan_day_vwap": _price(state.dhan_day_average_price.get(security_id)),
+            "quote_source": freshness.get("source"),
         },
         "timeframes": {
             "1m": [normalize_candle(row) for row in live_rows],
@@ -185,7 +183,7 @@ def _rules(state) -> dict:
         "public_candle_fields": "timestamp,open,high,low,close,volume,vwap,dhan_day_vwap,ma9,ema20,rsi14",
         "public_timestamp_timezone": PUBLIC_TIMEZONE_NAME,
         "public_timestamp_format": "YYYY-MM-DD HH:MM:SS IST",
-        "public_freshness_display": "data_age_seconds + age_display + last_trade_time_ist",
+        "public_freshness_display": "data_age_seconds + age_display + last_trade_time_ist + source",
         "public_candle_repeated_metadata": "OMITTED_FROM_EACH_CANDLE; PRESERVED_AT_RULES/SOURCE LEVEL",
         "public_numeric_precision": f"PRICES_AND_INDICATORS_ROUNDED_TO_{PUBLIC_PRICE_DECIMALS}_DECIMALS_FOR_TRANSPORT_ONLY",
         "indicator_seed_policy": {
@@ -194,7 +192,7 @@ def _rules(state) -> dict:
         },
         "weekly_synthetic_policy": "FORBIDDEN",
         "live_freshness_policy": f"MAX_{state.settings.max_live_age_seconds}_SECONDS",
-        "live_acquisition": "PERSISTENT_WEBSOCKET_NO_POLLING",
+        "live_acquisition": "WEBSOCKET_PRIMARY_DHAN_QUOTE_RECOVERY",
     }
 
 
@@ -271,6 +269,8 @@ def stock_json(state, symbol: str, timeframe: Optional[str] = None) -> dict:
                 "date": snap["session_date"],
                 "timezone": PUBLIC_TIMEZONE_NAME,
                 "current_time_ist": datetime.now(PUBLIC_TIMEZONE).strftime("%Y-%m-%d %H:%M:%S IST"),
+                "market_start": state.settings.market_start,
+                "market_end": state.settings.market_end,
                 "feed_status": snap["feed_status"],
                 "stream_health": snap["stream_health"],
                 "last_tick_ist": _ist_timestamp(snap["last_tick_at"]),
