@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from contextlib import asynccontextmanager
 
 import orjson
 import uvicorn
@@ -17,49 +18,50 @@ from session import SessionManager
 from state_runtime import RuntimeFreshnessState
 
 
-app = FastAPI(title="Psygrid", docs_url=None, redoc_url=None)
-# Compress large JSON responses on the wire. The underlying JSON/state is unchanged.
-# A lower compression level keeps the free instance responsive while still
-# shrinking repetitive market JSON substantially.
-app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
-
 settings = None
 state = None
 manager = None
 config_error = ""
 
 
-@app.on_event("startup")
 def startup() -> None:
     global settings, state, manager, config_error
+    config_error = ""
     try:
         settings = load_settings()
         instruments = load_instruments()
-        if len(instruments) > settings.max_instruments:
+        if len(instruments) != settings.max_instruments:
             raise RuntimeError(
-                f"Configured {len(instruments)} instruments; MAX_INSTRUMENTS={settings.max_instruments}"
+                f"Universe integrity failure: expected {settings.max_instruments}, got {len(instruments)}"
             )
         state = RuntimeFreshnessState(settings)
         dhan_api = DhanAPI(settings)
         feed = LiveFeed(settings, state, instruments)
         manager = SessionManager(settings, state, dhan_api, feed, instruments)
-        if instruments:
-            manager.start()
-        else:
-            config_error = "NO_INSTRUMENTS_CONFIGURED"
+        manager.start()
     except Exception as exc:
         config_error = str(exc)
 
 
-@app.on_event("shutdown")
 def shutdown() -> None:
+    global manager
     if manager is not None:
         manager.stop()
+        manager = None
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    startup()
+    yield
+    shutdown()
+
+
+app = FastAPI(title="Psygrid", docs_url=None, redoc_url=None, lifespan=lifespan)
+app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
 
 
 def json_response(payload: dict, status_code: int = 200) -> Response:
-    # orjson is used only for public serialization; all backend state and
-    # calculations remain unchanged. This reduces CPU time for large payloads.
     body = orjson.dumps(payload, option=orjson.OPT_APPEND_NEWLINE)
     return Response(
         content=body,
@@ -76,9 +78,9 @@ def json_response(payload: dict, status_code: int = 200) -> Response:
 
 def _error_response() -> Response | None:
     if config_error:
-        return json_response(
-            {"service": "PSYGRID", "status": "CONFIG_ERROR", "error": config_error}
-        )
+        return json_response({"service": "PSYGRID", "status": "CONFIG_ERROR", "error": config_error})
+    if state is None:
+        return json_response({"service": "PSYGRID", "status": "STARTING"}, 503)
     return None
 
 
@@ -90,6 +92,7 @@ def root() -> Response:
         "data_source": "DHAN",
         "synthetic_candles": False,
         "storage": "RAM_ONLY",
+        "universe_size": 270,
         "live_endpoint": "/public/live.json",
         "live_endpoints": [
             "/public/live-a.json",
@@ -112,11 +115,22 @@ def root() -> Response:
 
 @app.get("/health", response_class=Response)
 def health() -> Response:
+    # Keep Render's process health probe cheap and independent of Dhan.
+    return json_response({"service": "PSYGRID", "status": "OK"})
+
+
+@app.get("/ready", response_class=Response)
+def ready() -> Response:
     error = _error_response()
     if error:
         return error
-    snap = state.snapshot() if state else {}
-    return json_response({"service": "PSYGRID", **snap})
+    snap = state.snapshot()
+    ready_now = (
+        snap.get("session_status") == "LIVE"
+        and snap.get("feed_status") == "CONNECTED"
+        and snap.get("stock_count") == 270
+    )
+    return json_response({"service": "PSYGRID", "ready": ready_now, **snap}, 200 if ready_now else 503)
 
 
 @app.get("/public/live.json", response_class=Response)
@@ -143,62 +157,46 @@ def public_scan_270() -> Response:
     return json_response(build_scan_270(state))
 
 
-@app.get("/public/live-a.json", response_class=Response)
-def public_live_a() -> Response:
-    error = _error_response()
-    if error:
-        return error
-    return json_response(market_live_json(state, (0, 45)))
-
-
-@app.get("/public/live-b.json", response_class=Response)
-def public_live_b() -> Response:
-    error = _error_response()
-    if error:
-        return error
-    return json_response(market_live_json(state, (45, 90)))
-
-
-@app.get("/public/live-c.json", response_class=Response)
-def public_live_c() -> Response:
-    error = _error_response()
-    if error:
-        return error
-    return json_response(market_live_json(state, (90, 135)))
-
-
-@app.get("/public/live-d.json", response_class=Response)
-def public_live_d() -> Response:
-    error = _error_response()
-    if error:
-        return error
-    return json_response(market_live_json(state, (135, 180)))
-
-
-@app.get("/public/live-e.json", response_class=Response)
-def public_live_e() -> Response:
-    error = _error_response()
-    if error:
-        return error
-    return json_response(market_live_json(state, (180, 225)))
-
-
-@app.get("/public/live-f.json", response_class=Response)
-def public_live_f() -> Response:
-    error = _error_response()
-    if error:
-        return error
-    return json_response(market_live_json(state, (225, 270)))
-
-
-# Six smaller, identical-schema views. They do not create extra Dhan feeds;
-# they only expose slices of the same 270-stock RAM snapshot for faster machine
-# and browser consumption.
-def _public_live_slice(start: int, end: int) -> Response:
+def _public_live_range(start: int, end: int) -> Response:
     error = _error_response()
     if error:
         return error
     return json_response(market_live_json(state, (start, end)))
+
+
+@app.get("/public/live-a.json", response_class=Response)
+def public_live_a() -> Response:
+    return _public_live_range(0, 45)
+
+
+@app.get("/public/live-b.json", response_class=Response)
+def public_live_b() -> Response:
+    return _public_live_range(45, 90)
+
+
+@app.get("/public/live-c.json", response_class=Response)
+def public_live_c() -> Response:
+    return _public_live_range(90, 135)
+
+
+@app.get("/public/live-d.json", response_class=Response)
+def public_live_d() -> Response:
+    return _public_live_range(135, 180)
+
+
+@app.get("/public/live-e.json", response_class=Response)
+def public_live_e() -> Response:
+    return _public_live_range(180, 225)
+
+
+@app.get("/public/live-f.json", response_class=Response)
+def public_live_f() -> Response:
+    return _public_live_range(225, 270)
+
+
+# Smaller identical-schema views for clients that prefer 15-stock payloads.
+def _public_live_slice(start: int, end: int) -> Response:
+    return _public_live_range(start, end)
 
 
 @app.get("/public/live-01.json", response_class=Response)

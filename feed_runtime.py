@@ -12,12 +12,12 @@ from self_keepalive import SelfKeepAlive
 
 
 class LiveFeed(BaseLiveFeed):
-    """Runtime WebSocket feed with continuous Dhan quote recovery."""
+    """Runtime WebSocket feed with bounded quote recovery."""
 
     SOCKET_READ_CHECK_SECONDS = 5.0
     PING_INTERVAL_SECONDS = 15.0
     PONG_TIMEOUT_SECONDS = 30.0
-    REST_FALLBACK_AFTER_SECONDS = 1.0
+    REST_FALLBACK_AFTER_SECONDS = 5.0
     RESUBSCRIBE_COOLDOWN_SECONDS = 30.0
     BACKOFF_INITIAL_SECONDS = 1.0
     BACKOFF_MAX_SECONDS = 15.0
@@ -29,14 +29,13 @@ class LiveFeed(BaseLiveFeed):
         self.dhan_api = dhan_api or DhanAPI(settings)
         self._last_resubscribe: dict[str, float] = {}
         self._last_rest_fallback = 0.0
-        keepalive_url = "https://psygrid.onrender.com/public/live-a.json"
-        self.self_keepalive = SelfKeepAlive(keepalive_url)
+        self.self_keepalive = SelfKeepAlive("https://psygrid.onrender.com/public/live-a.json")
 
     def _market_hours(self) -> bool:
         return self.state.session_status == "LIVE"
 
     async def _heartbeat_and_health(self, feed) -> None:
-        """Ping every 15s and keep every configured quote current within 30s."""
+        """Keep the socket alive and recover only symbols that actually go stale."""
         last_ping = 0.0
         while not self._stop_requested.is_set():
             now_mono = time.monotonic()
@@ -64,8 +63,6 @@ class LiveFeed(BaseLiveFeed):
             if age is None or age > self.state.settings.max_live_age_seconds:
                 stale.append(item)
 
-        # Dhan v2 Quote subscription is RequestCode 17. Re-subscribe only the
-        # affected stock and never more often than once per 30 seconds.
         for item in stale:
             key = str(item.security_id)
             if now - self._last_resubscribe.get(key, 0.0) < self.RESUBSCRIBE_COOLDOWN_SECONDS:
@@ -83,10 +80,10 @@ class LiveFeed(BaseLiveFeed):
             except Exception as exc:
                 raise RuntimeError(f"LIVE_HEALTH: failed to re-subscribe {item.symbol}") from exc
 
-        # Dhan Quote API supports the full configured universe in one request
-        # and is limited to 1 request/sec. Use it continuously only while any
-        # symbol lacks a fresh WebSocket quote, making the REST path recovery,
-        # not the primary acquisition source.
+        # Dhan Quote API is a real-time snapshot, capped at one request/sec and
+        # supporting up to 1000 instruments. Polling only every 5 seconds avoids
+        # hammering the quote endpoint while still recovering well inside the
+        # 30-second freshness contract.
         if stale and now - self._last_rest_fallback >= self.REST_FALLBACK_AFTER_SECONDS:
             try:
                 snapshot = self.dhan_api.quote_snapshot(self.instruments)
@@ -121,7 +118,7 @@ class LiveFeed(BaseLiveFeed):
                     pass
 
     def _run(self) -> None:
-        """Reconnect with 1/2/4/8/15s exponential backoff plus jitter."""
+        """Reconnect with bounded exponential backoff plus jitter."""
         backoff = self.BACKOFF_INITIAL_SECONDS
         while not self._stop_requested.is_set():
             feed = None
@@ -157,7 +154,9 @@ class LiveFeed(BaseLiveFeed):
                 delay = self.RATE_LIMIT_COOLDOWN
                 backoff = self.BACKOFF_INITIAL_SECONDS
             else:
-                delay = min(backoff, self.BACKOFF_MAX_SECONDS) + random.uniform(0.0, self.NORMAL_RETRY_JITTER_SECONDS)
+                delay = min(backoff, self.BACKOFF_MAX_SECONDS) + random.uniform(
+                    0.0, self.NORMAL_RETRY_JITTER_SECONDS
+                )
                 backoff = min(backoff * 2.0, self.BACKOFF_MAX_SECONDS)
             self._stop_requested.wait(delay)
 

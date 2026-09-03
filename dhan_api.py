@@ -30,7 +30,7 @@ class DhanAPI:
         }
 
     @classmethod
-    def _throttle_post(cls, minimum_interval: float = 0.25) -> None:
+    def _throttle_post(cls, minimum_interval: float = 0.21) -> None:
         with cls._rate_lock:
             now = time.monotonic()
             wait = minimum_interval - (now - cls._last_post_at)
@@ -43,7 +43,7 @@ class DhanAPI:
         path: str,
         payload: dict,
         include_client_id: bool = False,
-        minimum_interval: float = 0.25,
+        minimum_interval: float = 0.21,
     ) -> dict:
         headers = self.headers if include_client_id else {
             "Accept": "application/json",
@@ -61,17 +61,36 @@ class DhanAPI:
                     timeout=30,
                 )
                 if response.status_code == 429:
-                    time.sleep(min(8.0, float(attempt + 1)))
-                    continue
+                    last_error = RuntimeError("Dhan API HTTP 429 rate limit")
+                    if attempt < 4:
+                        time.sleep(min(8.0, 1.0 * (2 ** attempt)))
+                        continue
+                    raise last_error
+                if response.status_code >= 500:
+                    last_error = RuntimeError(f"Dhan API HTTP {response.status_code}")
+                    if attempt < 4:
+                        time.sleep(min(8.0, 1.0 * (2 ** attempt)))
+                        continue
+                    raise last_error
                 response.raise_for_status()
                 data = response.json()
                 if isinstance(data, dict) and str(data.get("status", "")).lower() == "failure":
+                    # Input/auth/data errors are deterministic. Retrying them
+                    # only multiplies Dhan errors and wastes the rate budget.
                     raise RuntimeError(str(data))
+                if not isinstance(data, dict):
+                    raise RuntimeError("Dhan API returned a non-object response")
                 return data
-            except Exception as exc:
+            except (requests.Timeout, requests.ConnectionError) as exc:
                 last_error = exc
                 if attempt < 4:
-                    time.sleep(min(8.0, float(attempt + 1)))
+                    time.sleep(min(8.0, 1.0 * (2 ** attempt)))
+                    continue
+                raise RuntimeError(f"Dhan API network failure: {exc}") from exc
+            except requests.HTTPError as exc:
+                # 4xx responses other than 429 are deterministic and must not
+                # be retried. This makes invalid input/auth errors fail fast.
+                raise RuntimeError(f"Dhan API HTTP error: {exc}") from exc
         raise RuntimeError(f"Dhan API failed: {last_error}")
 
     def profile(self) -> dict:
@@ -154,9 +173,7 @@ class DhanAPI:
             "fromDate": from_dt.strftime("%Y-%m-%d %H:%M:%S"),
             "toDate": to_dt.strftime("%Y-%m-%d %H:%M:%S"),
         }
-        return self._candles_from_arrays(
-            self._post("/charts/intraday", payload, minimum_interval=0.21)
-        )
+        return self._candles_from_arrays(self._post("/charts/intraday", payload, minimum_interval=0.21))
 
     def daily(self, item, from_date: datetime, to_date: datetime) -> List[dict]:
         payload = {
@@ -168,9 +185,7 @@ class DhanAPI:
             "fromDate": from_date.strftime("%Y-%m-%d"),
             "toDate": to_date.strftime("%Y-%m-%d"),
         }
-        return self._candles_from_arrays(
-            self._post("/charts/historical", payload, minimum_interval=0.21)
-        )
+        return self._candles_from_arrays(self._post("/charts/historical", payload, minimum_interval=0.21))
 
     def load_intraday_window(self, item, interval: int, days: int) -> tuple[List[dict], List[dict]]:
         now = datetime.now(self.tz)
@@ -184,7 +199,6 @@ class DhanAPI:
         return previous, current
 
     def load_today_completed_intraday(self, item, interval: int) -> List[dict]:
-        """Fetch only today's completed native candles for live HTF refresh."""
         now = datetime.now(self.tz)
         start = now.replace(hour=9, minute=15, second=0, microsecond=0)
         if now <= start:
@@ -195,11 +209,8 @@ class DhanAPI:
         completed = []
         candle_seconds = int(interval) * 60
         for row in rows:
-            local_date = datetime.fromtimestamp(row["timestamp"], self.tz).date()
-            if local_date != today:
+            if datetime.fromtimestamp(row["timestamp"], self.tz).date() != today:
                 continue
-            # Historical timestamps are candle-start timestamps. Never expose
-            # the currently forming native candle as a completed candle.
             if int(row["timestamp"]) + candle_seconds > now_epoch:
                 continue
             completed.append(row)

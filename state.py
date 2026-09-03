@@ -6,15 +6,15 @@ from datetime import datetime, timezone
 from typing import Deque, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
-from indicators import ema, rsi, sma, vwap
+from indicators import enrich
 
 
 class PsygridState:
-    """RAM-only market state. Nothing is persisted to disk or a database.
+    """RAM-only market state.
 
-    Tick memory is deliberately bounded to the currently forming 1-minute
-    candle. The raw tick ring is flushed when that candle closes; the session
-    retains only finalized OHLCV candles plus the current candle aggregate.
+    Dhan WebSocket Quote packets are the only source used to build live 1m
+    OHLCV. No missing candle is fabricated and raw ticks are bounded to the
+    currently forming minute.
     """
 
     RAW_TICK_RING_SIZE = 4096
@@ -91,6 +91,14 @@ class PsygridState:
 
     def begin(self, session_date: str, instruments: list) -> None:
         with self.lock:
+            # begin() is also safe after an interrupted same-day startup.
+            self.live_candles.clear()
+            self.current_1m.clear()
+            self.raw_tick_ring.clear()
+            self.indicator_seed_1m.clear()
+            self.historical.clear()
+            self.prev_cumulative_volume.clear()
+            self.last_trade_key.clear()
             self.session_date = session_date
             self.session_status = "LIVE"
             self.feed_status = "STARTING"
@@ -211,7 +219,6 @@ class PsygridState:
             self.prev_cumulative_volume[security_id] = max(0, int(cumulative_volume))
 
     def _flush_raw_ticks(self, security_id: str) -> None:
-        """Discard raw ticks once their 1-minute candle has been finalized."""
         self.raw_tick_ring[security_id].clear()
 
     def update_quote(self, security_id: str, quote: dict) -> None:
@@ -232,20 +239,20 @@ class PsygridState:
                 return
 
             minute_key = ltt_epoch - (ltt_epoch % 60)
-            raw_ticks = self.raw_tick_ring[security_id]
             current = self.current_1m.get(security_id)
-            if current is not None and current["epoch"] != minute_key:
-                # The finalized OHLCV is already complete in current_1m and is
-                # copied to session history before the raw tick ring is flushed.
-                current["complete"] = True
-                self.live_candles[security_id].append(dict(current))
-                self.current_1m[security_id] = None
-                self._flush_raw_ticks(security_id)
-                raw_ticks = self.raw_tick_ring[security_id]
+            if current is not None:
+                current_minute = int(current["epoch"])
+                if minute_key < current_minute:
+                    # Late/out-of-order market packets must never rewrite the
+                    # active candle or manufacture a backward candle.
+                    return
+                if minute_key > current_minute:
+                    current["complete"] = True
+                    self.live_candles[security_id].append(dict(current))
+                    self.current_1m[security_id] = None
+                    self._flush_raw_ticks(security_id)
 
-            # Keep only a bounded in-memory raw-tick working set for the
-            # currently forming minute. OHLCV is maintained independently so a
-            # busy symbol cannot lose candle accuracy if the ring wraps.
+            raw_ticks = self.raw_tick_ring[security_id]
             raw_ticks.append({
                 "epoch": ltt_epoch,
                 "ltp": ltp,
@@ -259,8 +266,8 @@ class PsygridState:
 
             previous_volume = self.prev_cumulative_volume.get(security_id)
             if previous_volume is None:
-                self.prev_cumulative_volume[security_id] = cumulative_volume
                 previous_volume = cumulative_volume
+                self.prev_cumulative_volume[security_id] = cumulative_volume
 
             delta_volume = cumulative_volume - previous_volume
             if delta_volume < 0:
@@ -275,9 +282,7 @@ class PsygridState:
             candle = self.current_1m.get(security_id)
             if candle is None:
                 candle = {
-                    "timestamp": datetime.fromtimestamp(minute_key, timezone.utc)
-                    .astimezone(self.tz)
-                    .strftime("%Y-%m-%d %H:%M:00"),
+                    "timestamp": minute_key,
                     "epoch": minute_key,
                     "open": ltp,
                     "high": ltp,
@@ -318,25 +323,16 @@ class PsygridState:
             normalized_today.append(item)
         ordered_today = sorted(normalized_today, key=lambda c: int(c["epoch"]))
         combined = ordered_seed + ordered_today
-        closes = [float(c["close"]) for c in combined]
-        out: List[dict] = []
-        day_candles: List[dict] = []
-        current_day: Optional[str] = None
         seed_count = len(ordered_seed)
-        for idx, candle in enumerate(combined):
-            day = self._day_key(candle)
-            if day != current_day:
-                day_candles = []
-                current_day = day
-            day_candles.append(candle)
-            prefix_closes = closes[: idx + 1]
-            if idx < seed_count:
-                continue
-            item = dict(candle)
-            item["vwap"] = vwap(day_candles)
-            item["ma9"] = sma(prefix_closes, self.settings.ma_period)
-            item["ema20"] = ema(prefix_closes, self.settings.ema_period)
-            item["rsi14"] = rsi(prefix_closes, self.settings.rsi_period)
+        enriched = enrich(
+            combined,
+            self.settings.ma_period,
+            self.settings.ema_period,
+            self.settings.rsi_period,
+            day_key=self._day_key,
+        )
+        out = []
+        for item in enriched[seed_count:]:
             item["dhan_day_vwap"] = dhan_avg_price
             out.append(item)
         return out

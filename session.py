@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import os
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, time
+from datetime import datetime, time as dt_time
 from typing import Optional
 from zoneinfo import ZoneInfo
 
@@ -42,7 +43,7 @@ class SessionManager:
         now = now or self.now()
         start_h, start_m = map(int, self.settings.market_start.split(":"))
         end_h, end_m = map(int, self.settings.market_end.split(":"))
-        return time(start_h, start_m) <= now.time() < time(end_h, end_m)
+        return dt_time(start_h, start_m) <= now.time() < dt_time(end_h, end_m)
 
     def start(self) -> None:
         if self.thread and self.thread.is_alive():
@@ -104,8 +105,7 @@ class SessionManager:
         self.settings.token_source = "AUTO_GENERATED_TOTP"
 
     def _refresh_auth_once(self) -> None:
-        """Refresh a bad REST token once, then let all workers reuse it."""
-        now = __import__("time").time()
+        now = time.time()
         with self._auth_refresh_lock:
             if now - self._last_auth_refresh_epoch < 60.0:
                 return
@@ -113,20 +113,15 @@ class SessionManager:
             self.dhan_api.settings = self.settings
             self.feed.settings = self.settings
             self.feed.dhan_api = self.dhan_api
-            self._last_auth_refresh_epoch = __import__("time").time()
+            self._last_auth_refresh_epoch = time.time()
 
     @staticmethod
     def _looks_like_auth_failure(exc: Exception) -> bool:
         text = str(exc).lower()
         return (
-            "401" in text
-            or "807" in text
-            or "808" in text
-            or "809" in text
-            or "expired" in text
-            or "invalid token" in text
-            or "authentication failed" in text
-            or "unauthorized" in text
+            "401" in text or "807" in text or "808" in text or "809" in text
+            or "expired" in text or "invalid token" in text
+            or "authentication failed" in text or "unauthorized" in text
         )
 
     def _start_session(self, now: datetime) -> None:
@@ -136,7 +131,7 @@ class SessionManager:
                 return
             if now.timestamp() < self._auth_retry_at:
                 remaining = int(self._auth_retry_at - now.timestamp())
-                self.state.set_feed_status("AUTH_WAITING", f"Dhan authentication retry in {remaining}s")
+                self.state.set_feed_status("AUTH_WAITING", f"Dhan token generation retry in {remaining}s")
                 return
             self.history_stop.clear()
             self._last_htf_refresh_slot.clear()
@@ -153,20 +148,27 @@ class SessionManager:
                 except Exception as first_exc:
                     if not self._looks_like_auth_failure(first_exc):
                         raise
-                    self.state.set_feed_status("TOKEN_REFRESHING", "Dhan token expired/invalid; generating one fresh token")
+                    self.state.set_feed_status(
+                        "TOKEN_REFRESHING",
+                        "Dhan token expired/invalid; generating one fresh token",
+                    )
                     self._refresh_auth_once()
                     profile = self.dhan_api.verify_data_access()
                 self.state.set_profile(profile)
             except DhanTokenRateLimited as exc:
                 self._auth_retry_at = now.timestamp() + exc.retry_after
                 self.state.session_status = "AUTH_WAITING"
-                self.state.set_feed_status("AUTH_WAITING", f"Dhan token generation rate-limited; retrying in {exc.retry_after}s")
+                self.state.set_feed_status(
+                    "AUTH_WAITING",
+                    f"Dhan token generation rate-limited; retrying in {exc.retry_after}s",
+                )
                 return
             except Exception as exc:
                 self._auth_retry_at = now.timestamp() + 30
                 self.state.session_status = "AUTH_ERROR"
                 self.state.set_feed_status("AUTH_ERROR", f"authentication:{exc}")
                 return
+
             self.state.session_status = "LIVE"
             self._started_for_date = session_date
             self._auth_retry_at = 0.0
@@ -188,7 +190,11 @@ class SessionManager:
             self.history_thread.start()
 
     def _load_history(self, now: datetime) -> None:
-        """Load genuine Dhan history efficiently; never synthesize candles."""
+        """Load native history without blocking the live feed.
+
+        Native higher timeframes are loaded first because they gate analysis.
+        1m seed and daily history follow. Nothing is aggregated or fabricated.
+        """
         def load_one(item):
             if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
                 return
@@ -205,7 +211,10 @@ class SessionManager:
                 except Exception as exc:
                     self.state.last_feed_error = f"history:{item.symbol}:{key}:{exc}"
 
-            for interval, key in ((1, "1m"), (5, "5m"), (15, "15m"), (60, "1h")):
+            # Priority order: 5m/15m/1h first so signal readiness arrives as
+            # soon as possible. 1m is only an indicator seed; live 1m comes from
+            # the WebSocket. Daily history is independent of intraday signals.
+            for interval, key in ((5, "5m"), (15, "15m"), (60, "1h"), (1, "1m")):
                 if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
                     return
                 set_window(interval, key)

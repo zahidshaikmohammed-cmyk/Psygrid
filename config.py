@@ -12,6 +12,24 @@ from dhan_auth import generate_access_token, token_from_environment
 from instrument_master import fetch_nse_equity_security_ids
 
 
+# Psygrid is intentionally a fixed production configuration. Market-data
+# behavior must not change because a stale/leftover Render environment variable
+# is present from an earlier experiment.
+UNIVERSE_SIZE = 270
+TIMEZONE = "Asia/Kolkata"
+MARKET_START = "09:15"
+MARKET_END = "15:15"
+INTRADAY_HISTORY_DAYS = 7
+DAILY_LOOKBACK = 7
+DAILY_INDICATOR_WARMUP = 30
+WEEKLY_LOOKBACK = 7
+MA_PERIOD = 9
+EMA_PERIOD = 20
+RSI_PERIOD = 14
+MAX_INSTRUMENTS = 270
+MAX_LIVE_AGE_SECONDS = 30
+
+
 @dataclass
 class Instrument:
     symbol: str
@@ -26,35 +44,24 @@ class Settings:
     access_token: str
     token_source: str = "UNKNOWN"
     token_expiry: str | None = None
-    timezone: str = "Asia/Kolkata"
-    market_start: str = "09:15"
-    market_end: str = "15:15"
-    intraday_history_days: int = 7
-    daily_lookback: int = 7
-    daily_indicator_warmup: int = 30
-    weekly_lookback: int = 7
-    ma_period: int = 9
-    ema_period: int = 20
-    rsi_period: int = 14
-    max_instruments: int = 500
-    max_live_age_seconds: int = 30
+    timezone: str = TIMEZONE
+    market_start: str = MARKET_START
+    market_end: str = MARKET_END
+    intraday_history_days: int = INTRADAY_HISTORY_DAYS
+    daily_lookback: int = DAILY_LOOKBACK
+    daily_indicator_warmup: int = DAILY_INDICATOR_WARMUP
+    weekly_lookback: int = WEEKLY_LOOKBACK
+    ma_period: int = MA_PERIOD
+    ema_period: int = EMA_PERIOD
+    rsi_period: int = RSI_PERIOD
+    max_instruments: int = MAX_INSTRUMENTS
+    max_live_age_seconds: int = MAX_LIVE_AGE_SECONDS
 
 
 def _required(name: str) -> str:
     value = os.getenv(name, "").strip()
     if not value:
         raise RuntimeError(f"Missing required environment variable: {name}")
-    return value
-
-
-def _positive_int_env(name: str, default: int) -> int:
-    raw = os.getenv(name, str(default)).strip()
-    try:
-        value = int(raw)
-    except ValueError as exc:
-        raise RuntimeError(f"{name} must be an integer") from exc
-    if value <= 0:
-        raise RuntimeError(f"{name} must be greater than zero")
     return value
 
 
@@ -76,6 +83,10 @@ def _load_symbol_universe() -> list[str]:
     if not isinstance(symbols, list) or not symbols:
         raise RuntimeError("stocks.json must contain a non-empty 'symbols' array")
     normalized = [str(symbol).strip().upper() for symbol in symbols if str(symbol).strip()]
+    if len(normalized) != UNIVERSE_SIZE:
+        raise RuntimeError(
+            f"stocks.json must contain exactly {UNIVERSE_SIZE} unique symbols; got {len(normalized)}"
+        )
     if len(normalized) != len(set(normalized)):
         raise RuntimeError("stocks.json contains duplicate symbols")
     return normalized
@@ -83,37 +94,26 @@ def _load_symbol_universe() -> list[str]:
 
 def load_instruments() -> List[Instrument]:
     symbols = _load_symbol_universe()
-    max_instruments = _positive_int_env("MAX_INSTRUMENTS", 500)
-    if len(symbols) > max_instruments:
-        raise RuntimeError(f"Configured {len(symbols)} symbols; MAX_INSTRUMENTS={max_instruments}")
     security_ids = fetch_nse_equity_security_ids(symbols)
-    return [Instrument(symbol=symbol, security_id=security_ids[symbol]) for symbol in symbols]
+    if len(security_ids) != UNIVERSE_SIZE:
+        missing = sorted(set(symbols) - set(security_ids))
+        raise RuntimeError(
+            f"Dhan instrument master resolved {len(security_ids)}/{UNIVERSE_SIZE} symbols; missing={missing}"
+        )
+    instruments = [Instrument(symbol=symbol, security_id=security_ids[symbol]) for symbol in symbols]
+    if len({item.security_id for item in instruments}) != UNIVERSE_SIZE:
+        raise RuntimeError("Dhan instrument master returned duplicate security IDs")
+    return instruments
 
 
 def load_settings() -> Settings:
     client_id = _required("DHAN_CLIENT_ID")
     access_token, token_expiry, token_source = token_from_environment(client_id)
-    market_start = os.getenv("MARKET_START", "09:15").strip()
-    market_end = os.getenv("MARKET_END", "15:15").strip()
-    if len(market_start) != 5 or len(market_end) != 5:
-        raise RuntimeError("MARKET_START and MARKET_END must use HH:MM")
     return Settings(
         client_id=client_id,
         access_token=access_token,
         token_source=token_source,
         token_expiry=token_expiry,
-        timezone=os.getenv("TIMEZONE", "Asia/Kolkata").strip(),
-        market_start=market_start,
-        market_end=market_end,
-        intraday_history_days=_positive_int_env("INTRADAY_HISTORY_DAYS", 7),
-        daily_lookback=_positive_int_env("DAILY_LOOKBACK", 7),
-        daily_indicator_warmup=_positive_int_env("DAILY_INDICATOR_WARMUP", 30),
-        weekly_lookback=_positive_int_env("WEEKLY_LOOKBACK", 7),
-        ma_period=_positive_int_env("MA_PERIOD", 9),
-        ema_period=_positive_int_env("EMA_PERIOD", 20),
-        rsi_period=_positive_int_env("RSI_PERIOD", 14),
-        max_instruments=_positive_int_env("MAX_INSTRUMENTS", 500),
-        max_live_age_seconds=_positive_int_env("MAX_LIVE_AGE_SECONDS", 30),
     )
 
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from indicators import ema, rsi, sma, vwap
+from indicators import enrich
 from output import market_live_json as _market_live_json, normalize_candle
 
 PUBLIC_TZ = ZoneInfo("Asia/Kolkata")
@@ -15,28 +15,17 @@ def _enrich_native(seed: list[dict], rows: list[dict], settings) -> list[dict]:
     """Enrich genuine Dhan candles without constructing new candles."""
     combined = [dict(c) for c in seed] + [dict(c) for c in rows]
     combined.sort(key=lambda c: int(c["timestamp"]))
-    closes = [float(c["close"]) for c in combined]
-    out: list[dict] = []
-    day_rows: list[dict] = []
-    current_day = None
     seed_count = len(seed)
-    for idx, row in enumerate(combined):
-        day = datetime.fromtimestamp(int(row["timestamp"]), PUBLIC_TZ).date()
-        if day != current_day:
-            day_rows = []
-            current_day = day
-        day_rows.append(row)
-        if idx < seed_count:
-            continue
-        item = dict(row)
-        prefix = closes[: idx + 1]
-        item["vwap"] = vwap(day_rows)
-        item["ma9"] = sma(prefix, settings.ma_period)
-        item["ema20"] = ema(prefix, settings.ema_period)
-        item["rsi14"] = rsi(prefix, settings.rsi_period)
-        item["complete"] = bool(row.get("complete", True))
-        out.append(item)
-    return out
+    enriched = enrich(
+        combined,
+        settings.ma_period,
+        settings.ema_period,
+        settings.rsi_period,
+        day_key=lambda candle: datetime.fromtimestamp(
+            int(candle["timestamp"]), PUBLIC_TZ
+        ).date(),
+    )
+    return enriched[seed_count:]
 
 
 def _native_timeframe_payload(state, security_id: str, key: str) -> list[dict]:
@@ -54,6 +43,7 @@ def _native_timeframe_payload(state, security_id: str, key: str) -> list[dict]:
 
 
 def _stock_fixups(state, payload: dict) -> None:
+    """Attach native HTFs and receipt-time freshness without changing source data."""
     for stock in payload.get("stocks", {}).values():
         security_id = str(stock.get("security_id", ""))
         received = state.last_tick_received_by_security.get(security_id)
@@ -98,21 +88,21 @@ def market_live_json(state, stock_range=None) -> dict:
 
     stocks = payload.get("stocks", {})
     fresh_count = sum(
-        1
-        for stock in stocks.values()
+        1 for stock in stocks.values()
         if bool(stock.get("freshness", {}).get("live_data_valid", False))
     )
     analysis_ready_count = sum(
-        1
-        for stock in stocks.values()
+        1 for stock in stocks.values()
         if bool(stock.get("freshness", {}).get("live_data_valid", False))
         and _higher_timeframes_ready(stock)
     )
+    stock_count = int(payload.get("stock_count", len(stocks)) or 0)
 
     signal_valid = bool(
         session.get("status") == "LIVE"
         and session.get("feed_status") == "CONNECTED"
-        and analysis_ready_count > 0
+        and stock_count > 0
+        and analysis_ready_count == stock_count
     )
     if signal_valid:
         reason = None
@@ -120,15 +110,15 @@ def market_live_json(state, stock_range=None) -> dict:
         reason = "MARKET_SESSION_NOT_LIVE"
     elif session.get("feed_status") != "CONNECTED":
         reason = f"FEED_STATUS_{session.get('feed_status', 'UNKNOWN')}"
-    elif fresh_count == 0:
-        reason = "NO_FRESH_LIVE_STOCKS"
+    elif fresh_count < stock_count:
+        reason = "INCOMPLETE_FRESH_LIVE_COVERAGE"
     else:
         reason = "NATIVE_HIGHER_TIMEFRAME_HISTORY_NOT_READY"
 
     payload["signal_input"] = {
         "valid": signal_valid,
         "status": "LIVE" if signal_valid else "BLOCKED",
-        "stock_count": int(payload.get("stock_count", len(stocks)) or 0),
+        "stock_count": stock_count,
         "fresh_stock_count": fresh_count,
         "analysis_ready_stock_count": analysis_ready_count,
         "max_live_age_seconds": MAX_SIGNAL_LIVE_AGE_SECONDS,
@@ -136,5 +126,6 @@ def market_live_json(state, stock_range=None) -> dict:
         "per_stock_freshness_required": True,
         "native_higher_timeframes_required": True,
         "synthetic_candles_allowed": False,
+        "all_stocks_must_be_analysis_ready": True,
     }
     return payload
