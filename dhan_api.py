@@ -75,8 +75,6 @@ class DhanAPI:
                 response.raise_for_status()
                 data = response.json()
                 if isinstance(data, dict) and str(data.get("status", "")).lower() == "failure":
-                    # Input/auth/data errors are deterministic. Retrying them
-                    # only multiplies Dhan errors and wastes the rate budget.
                     raise RuntimeError(str(data))
                 if not isinstance(data, dict):
                     raise RuntimeError("Dhan API returned a non-object response")
@@ -88,8 +86,6 @@ class DhanAPI:
                     continue
                 raise RuntimeError(f"Dhan API network failure: {exc}") from exc
             except requests.HTTPError as exc:
-                # 4xx responses other than 429 are deterministic and must not
-                # be retried. This makes invalid input/auth errors fail fast.
                 raise RuntimeError(f"Dhan API HTTP error: {exc}") from exc
         raise RuntimeError(f"Dhan API failed: {last_error}")
 
@@ -192,8 +188,16 @@ class DhanAPI:
         start = now - timedelta(days=max(days, 1))
         rows = self.intraday(item, interval, start, now)
         today = now.date()
+        now_epoch = int(now.timestamp())
+        candle_seconds = int(interval) * 60
         previous = [r for r in rows if datetime.fromtimestamp(r["timestamp"], self.tz).date() < today]
-        current = [r for r in rows if datetime.fromtimestamp(r["timestamp"], self.tz).date() == today]
+        # Dhan can return the currently-forming candle when the request ends at now.
+        # It is never valid input for completed native timeframe analysis.
+        current = [
+            r for r in rows
+            if datetime.fromtimestamp(r["timestamp"], self.tz).date() == today
+            and int(r["timestamp"]) + candle_seconds <= now_epoch
+        ]
         previous.sort(key=lambda r: r["timestamp"])
         current.sort(key=lambda r: r["timestamp"])
         return previous, current
