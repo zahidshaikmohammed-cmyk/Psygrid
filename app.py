@@ -11,13 +11,16 @@ from config import load_instruments, load_settings
 from dhan_api import DhanAPI
 from feed_runtime import LiveFeed
 from output_runtime import market_live_json
-from output_scan import build_scan_90
+from output_scan import build_scan_90, build_scan_270
 from output import stock_json
 from session import SessionManager
 from state_runtime import RuntimeFreshnessState
 
 
 app = FastAPI(title="Psygrid", docs_url=None, redoc_url=None)
+# Compress large JSON responses on the wire. The underlying JSON/state is unchanged.
+# A lower compression level keeps the free instance responsive while still
+# shrinking repetitive market JSON substantially.
 app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
 
 settings = None
@@ -55,6 +58,8 @@ def shutdown() -> None:
 
 
 def json_response(payload: dict, status_code: int = 200) -> Response:
+    # orjson is used only for public serialization; all backend state and
+    # calculations remain unchanged. This reduces CPU time for large payloads.
     body = orjson.dumps(payload, option=orjson.OPT_APPEND_NEWLINE)
     return Response(
         content=body,
@@ -71,7 +76,9 @@ def json_response(payload: dict, status_code: int = 200) -> Response:
 
 def _error_response() -> Response | None:
     if config_error:
-        return json_response({"service": "PSYGRID", "status": "CONFIG_ERROR", "error": config_error})
+        return json_response(
+            {"service": "PSYGRID", "status": "CONFIG_ERROR", "error": config_error}
+        )
     return None
 
 
@@ -84,12 +91,21 @@ def root() -> Response:
         "synthetic_candles": False,
         "storage": "RAM_ONLY",
         "live_endpoint": "/public/live.json",
-        "scan_endpoint": "/public/scan-90.json",
         "live_endpoints": [
-            "/public/live-a.json", "/public/live-b.json", "/public/live-c.json",
-            "/public/live-d.json", "/public/live-e.json", "/public/live-f.json",
-            "/public/live-01.json", "/public/live-02.json", "/public/live-03.json",
-            "/public/live-04.json", "/public/live-05.json", "/public/live-06.json",
+            "/public/live-a.json",
+            "/public/live-b.json",
+            "/public/live-c.json",
+            "/public/live-d.json",
+            "/public/live-e.json",
+            "/public/live-f.json",
+            "/public/scan-90.json",
+            "/public/scan-270.json",
+            "/public/live-01.json",
+            "/public/live-02.json",
+            "/public/live-03.json",
+            "/public/live-04.json",
+            "/public/live-05.json",
+            "/public/live-06.json",
         ],
     })
 
@@ -117,6 +133,14 @@ def public_scan_90() -> Response:
     if error:
         return error
     return json_response(build_scan_90(state))
+
+
+@app.get("/public/scan-270.json", response_class=Response)
+def public_scan_270() -> Response:
+    error = _error_response()
+    if error:
+        return error
+    return json_response(build_scan_270(state))
 
 
 @app.get("/public/live-a.json", response_class=Response)
@@ -167,7 +191,9 @@ def public_live_f() -> Response:
     return json_response(market_live_json(state, (225, 270)))
 
 
-# Smaller views of the same RAM snapshot; no additional Dhan feeds are created.
+# Six smaller, identical-schema views. They do not create extra Dhan feeds;
+# they only expose slices of the same 270-stock RAM snapshot for faster machine
+# and browser consumption.
 def _public_live_slice(start: int, end: int) -> Response:
     error = _error_response()
     if error:
