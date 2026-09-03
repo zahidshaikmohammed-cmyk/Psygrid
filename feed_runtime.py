@@ -12,7 +12,7 @@ from self_keepalive import SelfKeepAlive
 
 
 class LiveFeed(BaseLiveFeed):
-    """Runtime WebSocket feed with bounded quote recovery."""
+    """Runtime WebSocket feed with bounded quote/depth recovery."""
 
     SOCKET_READ_CHECK_SECONDS = 5.0
     PING_INTERVAL_SECONDS = 15.0
@@ -69,7 +69,7 @@ class LiveFeed(BaseLiveFeed):
                 continue
             try:
                 await feed.ws.send(json.dumps({
-                    "RequestCode": 17,
+                    "RequestCode": 21,
                     "InstrumentCount": 1,
                     "InstrumentList": [{
                         "ExchangeSegment": item.exchange_segment,
@@ -88,9 +88,77 @@ class LiveFeed(BaseLiveFeed):
             try:
                 snapshot = self.dhan_api.quote_snapshot(self.instruments)
                 self.state.apply_rest_snapshot(snapshot)
+                self._apply_rest_market_context(snapshot)
                 self._last_rest_fallback = time.time()
             except Exception as exc:
                 self.state.set_feed_status(self.state.feed_status, f"REST_RECOVERY:{exc}")
+
+    def _apply_rest_market_context(self, snapshot: dict) -> None:
+        context = getattr(self.state, "market_context", None)
+        if context is None:
+            context = {}
+            self.state.market_context = context
+        now = time.time()
+        for security_id, row in snapshot.items():
+            if not isinstance(row, dict) or security_id not in self.state.instruments:
+                continue
+            existing = dict(context.get(str(security_id), {}))
+            mapping = {
+                "last_price": "ltp",
+                "open": "day_open",
+                "high": "day_high",
+                "low": "day_low",
+                "close": "prev_close",
+            }
+            for source, target in mapping.items():
+                value = row.get(source)
+                if value is None and isinstance(row.get("ohlc"), dict):
+                    value = row["ohlc"].get(source)
+                try:
+                    value = float(value)
+                except (TypeError, ValueError):
+                    continue
+                if value > 0:
+                    existing[target] = value
+            depth = row.get("depth")
+            if isinstance(depth, list) and depth:
+                normalized = []
+                for level in depth[:5]:
+                    if not isinstance(level, dict):
+                        continue
+                    def num(*keys):
+                        for key in keys:
+                            if key in level:
+                                try:
+                                    return float(level[key])
+                                except (TypeError, ValueError):
+                                    pass
+                        return None
+                    bid = num("bid_price", "bidPrice")
+                    ask = num("ask_price", "askPrice")
+                    bq = num("bid_quantity", "bidQty", "bid_qty")
+                    aq = num("ask_quantity", "askQty", "ask_qty")
+                    bo = num("bid_orders", "bidOrders")
+                    ao = num("ask_orders", "askOrders")
+                    normalized.append({
+                        "bid_price": bid if bid and bid > 0 else None,
+                        "ask_price": ask if ask and ask > 0 else None,
+                        "bid_qty": int(bq or 0),
+                        "ask_qty": int(aq or 0),
+                        "bid_orders": int(bo or 0),
+                        "ask_orders": int(ao or 0),
+                    })
+                if normalized:
+                    existing["depth"] = normalized
+                    existing["best_bid"] = normalized[0]["bid_price"]
+                    existing["best_ask"] = normalized[0]["ask_price"]
+                    existing["bid_qty"] = normalized[0]["bid_qty"]
+                    existing["ask_qty"] = normalized[0]["ask_qty"]
+                    existing["bid_orders"] = normalized[0]["bid_orders"]
+                    existing["ask_orders"] = normalized[0]["ask_orders"]
+            existing["received_epoch"] = now
+            existing["source"] = "DHAN_REST_QUOTE_RECOVERY"
+            context[str(security_id)] = existing
 
     def _run_connected_session(self, feed) -> None:
         feed.loop.run_until_complete(feed.connect())
@@ -165,6 +233,7 @@ class LiveFeed(BaseLiveFeed):
             return
         self._stop_requested.clear()
         self.self_keepalive.start()
+        self.state.market_context = {}
         self._thread = threading.Thread(target=self._run, daemon=True, name="psygrid-dhan-feed")
         self._thread.start()
 
