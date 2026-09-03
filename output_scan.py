@@ -4,8 +4,8 @@ from datetime import datetime
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-from output_runtime import _higher_timeframes_ready, _stock_fixups
-from output import market_live_json as _base_market_live_json
+from output_runtime import _higher_timeframes_ready, market_live_json
+from output import normalize_candle
 
 PUBLIC_TZ = ZoneInfo("Asia/Kolkata")
 SCAN_START = 0
@@ -18,20 +18,17 @@ def _latest_completed_1m(state, security_id: str) -> Optional[dict]:
     if not rows:
         return None
     rows.sort(key=lambda row: int(row.get("epoch", row.get("timestamp", 0))))
-    from output import normalize_candle
     return normalize_candle(rows[-1])
 
 
 def build_scan_90(state) -> dict:
-    """Return a compact, complete machine-readable scan for the first 90 sorted stocks.
+    """Return one compact, complete machine-readable A45+B45 scan.
 
-    This endpoint intentionally omits the full candle histories that make the
-    normal live endpoints very large. It preserves the latest current quote,
-    freshness, latest completed 1m candle, and latest native 5m/15m/1h candles
-    needed for universe qualification.
+    Full candle histories stay on the normal live endpoints. This scan exposes
+    exactly the records needed for qualification without truncation: freshness,
+    current quote, latest completed 1m, and latest native 5m/15m/1h candles.
     """
-    payload = _base_market_live_json(state, (SCAN_START, SCAN_END))
-    _stock_fixups(state, payload)
+    payload = market_live_json(state, (SCAN_START, SCAN_END))
     stocks = payload.get("stocks", {})
 
     compact = {}
@@ -66,6 +63,7 @@ def build_scan_90(state) -> dict:
             "generated_at_ist": datetime.now(PUBLIC_TZ).strftime("%Y-%m-%d %H:%M:%S IST"),
         },
         "session": payload.get("session", {}),
+        "signal_input": payload.get("signal_input", {}),
         "rules": {
             "max_live_age_seconds": state.settings.max_live_age_seconds,
             "synthetic_candles": False,
