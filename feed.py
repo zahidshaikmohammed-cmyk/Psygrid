@@ -15,7 +15,7 @@ class DhanConnectionLimited(RuntimeError):
 
 
 class LiveFeed:
-    """One persistent Dhan v2 Quote WebSocket; live data flows continuously into RAM."""
+    """One persistent Dhan v2 Full WebSocket; live data flows continuously into RAM."""
 
     NORMAL_INITIAL_BACKOFF = 5.0
     NORMAL_MAX_BACKOFF = 120.0
@@ -35,7 +35,7 @@ class LiveFeed:
     def _build_feed(self):
         context = DhanContext(self.settings.client_id, self.settings.access_token)
         subscriptions = [
-            (MarketFeed.NSE, item.security_id, MarketFeed.Quote)
+            (MarketFeed.NSE, item.security_id, MarketFeed.Full)
             for item in self.instruments
         ]
         return MarketFeed(context, subscriptions, version="v2", on_connect=self._on_connect, on_message=self._on_message, on_close=self._on_close, on_error=self._on_error)
@@ -68,14 +68,9 @@ class LiveFeed:
         now_int = int(now_epoch)
         if epoch <= now_int + tolerance:
             return epoch
-
         offset = cls._timezone_offset_seconds(timezone_name, now_epoch)
         if offset <= 0:
             return None
-
-        # Only correct a timestamp that is approximately one full timezone
-        # offset ahead. A timestamp merely one hour in the future is genuine
-        # future data and must be rejected, not shifted backwards.
         delta = epoch - now_epoch
         if abs(delta - offset) <= tolerance:
             corrected = epoch - offset
@@ -102,8 +97,7 @@ class LiveFeed:
                 parsed = datetime.strptime(text, fmt).replace(tzinfo=timezone.utc)
                 now_utc = datetime.now(timezone.utc)
                 parsed = parsed.replace(year=now_utc.year, month=now_utc.month, day=now_utc.day)
-                epoch = int(parsed.timestamp())
-                return cls._normalize_future_epoch(epoch, timezone_name, now_epoch)
+                return cls._normalize_future_epoch(int(parsed.timestamp()), timezone_name, now_epoch)
             except ValueError:
                 continue
         try:
@@ -131,8 +125,86 @@ class LiveFeed:
             raise RuntimeError(f"Dhan feed error {code}: {message}")
         self._handle_packet(data)
 
+    @staticmethod
+    def _to_float(value):
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    def _store_market_context(self, security_id: str, data: dict, ltt_epoch: int | None = None) -> None:
+        """Keep execution-critical quote/depth context in RAM without synthesizing values."""
+        depth = data.get("depth")
+        normalized_depth = []
+        if isinstance(depth, list):
+            for level in depth[:5]:
+                if not isinstance(level, dict):
+                    continue
+                bid = self._to_float(level.get("bid_price"))
+                ask = self._to_float(level.get("ask_price"))
+                try:
+                    bid_qty = int(level.get("bid_quantity", 0) or 0)
+                    ask_qty = int(level.get("ask_quantity", 0) or 0)
+                    bid_orders = int(level.get("bid_orders", 0) or 0)
+                    ask_orders = int(level.get("ask_orders", 0) or 0)
+                except (TypeError, ValueError):
+                    continue
+                normalized_depth.append({
+                    "bid_price": bid if bid and bid > 0 else None,
+                    "ask_price": ask if ask and ask > 0 else None,
+                    "bid_qty": max(0, bid_qty),
+                    "ask_qty": max(0, ask_qty),
+                    "bid_orders": max(0, bid_orders),
+                    "ask_orders": max(0, ask_orders),
+                })
+        context = getattr(self.state, "market_context", None)
+        if context is None:
+            context = {}
+            self.state.market_context = context
+        existing = dict(context.get(security_id, {}))
+        for src, dst in (("open", "day_open"), ("high", "day_high"), ("low", "day_low")):
+            value = self._to_float(data.get(src))
+            if value is not None and value > 0:
+                existing[dst] = value
+        ltp = self._to_float(data.get("LTP"))
+        if ltp is not None and ltp > 0:
+            existing["ltp"] = ltp
+        if normalized_depth:
+            existing["depth"] = normalized_depth
+            best = normalized_depth[0]
+            existing["best_bid"] = best.get("bid_price")
+            existing["best_ask"] = best.get("ask_price")
+            existing["bid_qty"] = best.get("bid_qty")
+            existing["ask_qty"] = best.get("ask_qty")
+            existing["bid_orders"] = best.get("bid_orders")
+            existing["ask_orders"] = best.get("ask_orders")
+        if ltt_epoch is not None:
+            existing["ltt_epoch"] = ltt_epoch
+        existing["received_epoch"] = time.time()
+        existing["source"] = "DHAN_WEBSOCKET_FULL"
+        context[security_id] = existing
+
+    def _store_prev_close(self, security_id: str, value) -> None:
+        close = self._to_float(value)
+        if close is None or close <= 0:
+            return
+        context = getattr(self.state, "market_context", None)
+        if context is None:
+            context = {}
+            self.state.market_context = context
+        existing = dict(context.get(security_id, {}))
+        existing["prev_close"] = close
+        existing["received_epoch"] = time.time()
+        existing["source"] = "DHAN_WEBSOCKET_FULL"
+        context[security_id] = existing
+
     def _handle_packet(self, data) -> None:
         packet_type = str(data.get("type", data.get("Type", ""))).strip().lower()
+        if packet_type in {"previous close", "prev close", "previous day"}:
+            security_id = str(data.get("security_id", data.get("securityId", ""))).strip()
+            if security_id in self.state.instruments:
+                self._store_prev_close(security_id, data.get("prev_close"))
+            return
         if packet_type not in {"quote data", "quote", "full data", "full"}:
             return
         security_id = str(data.get("security_id", data.get("securityId", ""))).strip()
@@ -149,6 +221,7 @@ class LiveFeed:
             return
         if ltt_epoch is None or ltp <= 0 or volume < 0:
             return
+        self._store_market_context(security_id, data, ltt_epoch)
         quote = dict(data)
         quote.update({"LTT_EPOCH": ltt_epoch, "LTP": ltp, "volume": volume, "LTQ": ltq})
         if avg_price is not None:
@@ -224,6 +297,7 @@ class LiveFeed:
             return
         self._stop_requested.clear()
         self._backoff = self.NORMAL_INITIAL_BACKOFF
+        self.state.market_context = {}
         self._thread = threading.Thread(target=self._run, daemon=True, name="psygrid-dhan-feed")
         self._thread.start()
 
