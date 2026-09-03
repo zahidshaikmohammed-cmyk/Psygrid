@@ -12,12 +12,12 @@ from self_keepalive import SelfKeepAlive
 
 
 class LiveFeed(BaseLiveFeed):
-    """Runtime anti-staleness layer around the Dhan v2 WebSocket."""
+    """Runtime WebSocket feed with continuous Dhan quote recovery."""
 
     SOCKET_READ_CHECK_SECONDS = 5.0
     PING_INTERVAL_SECONDS = 15.0
     PONG_TIMEOUT_SECONDS = 30.0
-    REST_FALLBACK_AFTER_SECONDS = 45.0
+    REST_FALLBACK_AFTER_SECONDS = 1.0
     RESUBSCRIBE_COOLDOWN_SECONDS = 30.0
     BACKOFF_INITIAL_SECONDS = 1.0
     BACKOFF_MAX_SECONDS = 15.0
@@ -36,7 +36,7 @@ class LiveFeed(BaseLiveFeed):
         return self.state.session_status == "LIVE"
 
     async def _heartbeat_and_health(self, feed) -> None:
-        """Ping every 15s and enforce 30s per-stock freshness."""
+        """Ping every 15s and keep every configured quote current within 30s."""
         last_ping = 0.0
         while not self._stop_requested.is_set():
             now_mono = time.monotonic()
@@ -61,7 +61,7 @@ class LiveFeed(BaseLiveFeed):
         for item in self.instruments:
             health = self.state.freshness(item.security_id, now)
             age = health.get("data_age_seconds")
-            if age is None or age > 30.0:
+            if age is None or age > self.state.settings.max_live_age_seconds:
                 stale.append(item)
 
         # Dhan v2 Quote subscription is RequestCode 17. Re-subscribe only the
@@ -83,15 +83,17 @@ class LiveFeed(BaseLiveFeed):
             except Exception as exc:
                 raise RuntimeError(f"LIVE_HEALTH: failed to re-subscribe {item.symbol}") from exc
 
-        # Dhan Quote API accepts the full 180-stock universe in one request, so
-        # REST fallback never produces a 180-request burst.
+        # Dhan Quote API supports the full configured universe in one request
+        # and is limited to 1 request/sec. Use it continuously only while any
+        # symbol lacks a fresh WebSocket quote, making the REST path recovery,
+        # not the primary acquisition source.
         if stale and now - self._last_rest_fallback >= self.REST_FALLBACK_AFTER_SECONDS:
             try:
                 snapshot = self.dhan_api.quote_snapshot(self.instruments)
                 self.state.apply_rest_snapshot(snapshot)
-                self._last_rest_fallback = now
+                self._last_rest_fallback = time.time()
             except Exception as exc:
-                self.state.set_feed_status(self.state.feed_status, f"REST_FALLBACK:{exc}")
+                self.state.set_feed_status(self.state.feed_status, f"REST_RECOVERY:{exc}")
 
     def _run_connected_session(self, feed) -> None:
         feed.loop.run_until_complete(feed.connect())
