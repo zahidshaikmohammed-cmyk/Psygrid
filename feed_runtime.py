@@ -35,21 +35,8 @@ class LiveFeed(BaseLiveFeed):
         return self.state.session_status == "LIVE"
 
     async def _heartbeat_and_health(self, feed) -> None:
-        """Keep the socket alive and recover only symbols that actually go stale."""
-        last_ping = 0.0
+        """Run health checks without injecting client-side ping traffic into Dhan's socket."""
         while not self._stop_requested.is_set():
-            now_mono = time.monotonic()
-            if now_mono - last_ping >= self.PING_INTERVAL_SECONDS:
-                ws = getattr(feed, "ws", None)
-                if ws is None:
-                    raise RuntimeError("LIVE_HEARTBEAT: websocket object missing")
-                try:
-                    pong_waiter = await ws.ping()
-                    await asyncio.wait_for(pong_waiter, timeout=self.PONG_TIMEOUT_SECONDS)
-                except Exception as exc:
-                    raise RuntimeError("LIVE_HEARTBEAT: PONG not received within 30s") from exc
-                last_ping = time.monotonic()
-
             if self._market_hours():
                 await self._health_pass(feed)
             await asyncio.sleep(1.0)
