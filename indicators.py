@@ -3,13 +3,11 @@ from __future__ import annotations
 from typing import Callable, Dict, List, Optional
 
 
-
 def sma(values: List[float], period: int) -> Optional[float]:
     """Simple moving average of the last `period` observations."""
     if period <= 0 or len(values) < period:
         return None
     return sum(values[-period:]) / period
-
 
 
 def ema(values: List[float], period: int) -> Optional[float]:
@@ -24,30 +22,25 @@ def ema(values: List[float], period: int) -> Optional[float]:
     return result
 
 
-
 def rsi(values: List[float], period: int = 14) -> Optional[float]:
     """Wilder RSI using the standard initial average gain/loss and smoothing."""
     if period <= 0 or len(values) < period + 1:
         return None
-
     gains = []
     losses = []
     for index in range(1, len(values)):
         change = values[index] - values[index - 1]
         gains.append(max(change, 0.0))
         losses.append(max(-change, 0.0))
-
     avg_gain = sum(gains[:period]) / period
     avg_loss = sum(losses[:period]) / period
     for gain, loss in zip(gains[period:], losses[period:]):
         avg_gain = ((avg_gain * (period - 1)) + gain) / period
         avg_loss = ((avg_loss * (period - 1)) + loss) / period
-
     if avg_loss == 0.0:
         return 100.0 if avg_gain > 0.0 else 50.0
     rs = avg_gain / avg_loss
     return 100.0 - (100.0 / (1.0 + rs))
-
 
 
 def vwap(candles: List[Dict]) -> Optional[float]:
@@ -59,16 +52,13 @@ def vwap(candles: List[Dict]) -> Optional[float]:
         if volume <= 0:
             continue
         typical = (
-            float(candle["high"])
-            + float(candle["low"])
-            + float(candle["close"])
+            float(candle["high"]) + float(candle["low"]) + float(candle["close"])
         ) / 3.0
         total_value += typical * volume
         total_volume += volume
     if total_volume <= 0.0:
         return None
     return total_value / total_volume
-
 
 
 def enrich(
@@ -78,24 +68,24 @@ def enrich(
     rsi_period: int = 14,
     day_key: Optional[Callable[[Dict], object]] = None,
 ) -> List[Dict]:
-    """Enrich a candle series in one O(n) pass.
+    """Enrich genuine candles with EMA(9), EMA(20), RSI(14) and VWAP.
 
-    The old implementation recalculated EMA, RSI and VWAP from every prefix,
-    which became unnecessarily expensive across 270 stocks. This implementation
-    keeps rolling state while preserving the same SMA/EMA/Wilder-RSI formulas.
-    When ``day_key`` is supplied, VWAP resets at each new day.
+    The legacy MA(9) output is intentionally removed. ``ma_period`` remains
+    the internal period setting for backward-compatible configuration, but it
+    now controls EMA(9). No candles are created or filled here.
     """
     ordered = sorted((dict(c) for c in candles), key=lambda c: int(c["timestamp"]))
     out: List[Dict] = []
     closes: List[float] = []
 
-    ema_value: Optional[float] = None
-    ema_alpha = 2.0 / (ema_period + 1.0) if ema_period > 0 else 0.0
+    ema9_value: Optional[float] = None
+    ema9_alpha = 2.0 / (ma_period + 1.0) if ma_period > 0 else 0.0
+    ema20_value: Optional[float] = None
+    ema20_alpha = 2.0 / (ema_period + 1.0) if ema_period > 0 else 0.0
+
     rsi_avg_gain: Optional[float] = None
     rsi_avg_loss: Optional[float] = None
     prev_close: Optional[float] = None
-
-    rolling_sum = 0.0
     gains_window: List[float] = []
     losses_window: List[float] = []
 
@@ -107,14 +97,6 @@ def enrich(
         close = float(candle["close"])
         closes.append(close)
 
-        if ma_period > 0:
-            rolling_sum += close
-            if len(closes) > ma_period:
-                rolling_sum -= closes[-ma_period - 1]
-            ma_value = rolling_sum / ma_period if len(closes) >= ma_period else None
-        else:
-            ma_value = None
-
         if day_key is not None:
             current_day = day_key(candle)
             if index == 0 or current_day != vwap_day:
@@ -125,21 +107,27 @@ def enrich(
         volume = float(candle.get("volume", 0) or 0)
         if volume > 0:
             typical = (
-                float(candle["high"])
-                + float(candle["low"])
-                + close
+                float(candle["high"]) + float(candle["low"]) + close
             ) / 3.0
             vwap_value += typical * volume
             vwap_volume += volume
         vwap_value_out = vwap_value / vwap_volume if vwap_volume > 0 else None
 
+        if ma_period > 0:
+            if len(closes) == ma_period:
+                ema9_value = sum(closes[:ma_period]) / ma_period
+            elif len(closes) > ma_period and ema9_value is not None:
+                ema9_value += ema9_alpha * (close - ema9_value)
+        else:
+            ema9_value = None
+
         if ema_period > 0:
             if len(closes) == ema_period:
-                ema_value = sum(closes[:ema_period]) / ema_period
-            elif len(closes) > ema_period and ema_value is not None:
-                ema_value += ema_alpha * (close - ema_value)
+                ema20_value = sum(closes[:ema_period]) / ema_period
+            elif len(closes) > ema_period and ema20_value is not None:
+                ema20_value += ema20_alpha * (close - ema20_value)
         else:
-            ema_value = None
+            ema20_value = None
 
         rsi_value: Optional[float] = None
         if prev_close is not None:
@@ -164,10 +152,11 @@ def enrich(
                 rsi_value = 100.0 - (100.0 / (1.0 + rs))
 
         item = dict(candle)
+        item.pop("ma9", None)
         item["vwap"] = vwap_value_out
-        item["ma9"] = ma_value if ma_period == 9 else (sma(closes, ma_period) if ma_period > 0 and len(closes) >= ma_period else None)
-        item["ema20"] = ema_value if ema_period == 20 else (ema(closes, ema_period) if ema_period > 0 and len(closes) >= ema_period else None)
-        item["rsi14"] = rsi_value if rsi_period == 14 else (rsi(closes, rsi_period) if rsi_period > 0 and len(closes) >= rsi_period + 1 else None)
+        item["ema9"] = ema9_value
+        item["ema20"] = ema20_value
+        item["rsi14"] = rsi_value
         item["complete"] = bool(item.get("complete", True))
         out.append(item)
         prev_close = close
