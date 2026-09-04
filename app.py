@@ -115,7 +115,6 @@ def root() -> Response:
 
 @app.get("/health", response_class=Response)
 def health() -> Response:
-    # Keep Render's process health probe cheap and independent of Dhan.
     return json_response({"service": "PSYGRID", "status": "OK"})
 
 
@@ -125,10 +124,14 @@ def ready() -> Response:
     if error:
         return error
     snap = state.snapshot()
-    ready_now = (
+    expected = int(snap.get("stock_count", 0) or 0)
+    ready_now = bool(
         snap.get("session_status") == "LIVE"
         and snap.get("feed_status") == "CONNECTED"
-        and snap.get("stock_count") == 270
+        and expected == 270
+        and snap.get("subscribed_count") == 270
+        and snap.get("live_stock_count") == 270
+        and snap.get("stream_health") == "FULL_LIVE"
     )
     return json_response({"service": "PSYGRID", "ready": ready_now, **snap}, 200 if ready_now else 503)
 
