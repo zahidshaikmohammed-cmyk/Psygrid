@@ -89,7 +89,8 @@ def enrich_history(candles: list, settings) -> list:
         day_window.append(row)
         close_window = closes[: idx + 1]
         row["vwap"] = vwap(day_window)
-        row["ma9"] = sma(close_window, settings.ma_period)
+        row.pop("ma9", None)
+        row["ema9"] = ema(close_window, settings.ma_period)
         row["ema20"] = ema(close_window, settings.ema_period)
         row["rsi14"] = rsi(close_window, settings.rsi_period)
         row["complete"] = True
@@ -106,7 +107,7 @@ def normalize_candle(row: dict) -> dict:
         "volume": row.get("volume"),
         "vwap": _price(row.get("vwap")),
         "dhan_day_vwap": _price(row.get("dhan_day_vwap")),
-        "ma9": _price(row.get("ma9")),
+        "ema9": _price(row.get("ema9")),
         "ema20": _price(row.get("ema20")),
         "rsi14": _price(row.get("rsi14")),
     }
@@ -180,7 +181,7 @@ def _rules(state) -> dict:
             "1d": f"PREVIOUS_{state.settings.daily_lookback}_TRADING_DAYS",
             "1w": f"PREVIOUS_{state.settings.weekly_lookback}_NATIVE_DHAN_CANDLES_ONLY",
         },
-        "public_candle_fields": "timestamp,open,high,low,close,volume,vwap,dhan_day_vwap,ma9,ema20,rsi14",
+        "public_candle_fields": "timestamp,open,high,low,close,volume,vwap,dhan_day_vwap,ema9,ema20,rsi14",
         "public_timestamp_timezone": PUBLIC_TIMEZONE_NAME,
         "public_timestamp_format": "YYYY-MM-DD HH:MM:SS IST",
         "public_freshness_display": "data_age_seconds + age_display + last_trade_time_ist + source",
