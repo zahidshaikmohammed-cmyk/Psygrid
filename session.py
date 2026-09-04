@@ -206,6 +206,9 @@ class SessionManager:
                 )
                 self.state.set_historical(item.security_id, f"{key}_seed", seed)
                 self.state.set_historical(item.security_id, key, today)
+                if key == "1m":
+                    self.state.set_indicator_seed_1m(item.security_id, seed)
+                    self.state.merge_today_1m_history(item.security_id, today)
             except Exception as exc:
                 self.state.last_feed_error = f"history:{item.symbol}:{key}:{exc}"
 
@@ -231,16 +234,11 @@ class SessionManager:
                     except Exception:
                         pass
 
-        # Phase barriers are intentional: ALL 270 get each native timeframe
-        # before the next phase begins, so the signal gate cannot see a partial
-        # bootstrap merely because one stock happened to finish earlier.
         for interval, key in ((5, "5m"), (15, "15m"), (60, "1h")):
             run_phase(key, lambda item, interval=interval, key=key: set_window(item, interval, key))
             if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
                 return
 
-        # 1m historical seed is separate from live 1m WebSocket candles and is
-        # needed to warm indicators without fabricating missing bars.
         run_phase("1m", lambda item: set_window(item, 1, "1m"))
         if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
             return
@@ -307,9 +305,6 @@ class SessionManager:
                 slot = elapsed_minutes // interval
                 if slot <= 0 or self._last_htf_refresh_slot.get(key, -1) >= slot:
                     continue
-                # Refresh the latest completed slot even if a slower preceding
-                # refresh crossed this boundary. This prevents 15m/1h updates
-                # from being silently skipped while 5m refresh is running.
                 self._last_htf_refresh_slot[key] = slot
                 self._refresh_native_interval(interval, key)
 
