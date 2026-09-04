@@ -132,7 +132,7 @@ def _stock_payload(state, security_id: str, meta: dict) -> dict:
     raw_freshness = state.freshness(security_id)
     freshness = _public_freshness(raw_freshness, state.last_ltt_by_security.get(security_id))
     live_valid = freshness["live_data_valid"]
-    ws_ltp = state.last_ltp_by_security.get(security_id) if live_valid and freshness.get("source") == "DHAN_WEBSOCKET_QUOTE" else None
+    ws_ltp = state.last_ltp_by_security.get(security_id) if live_valid and freshness.get("source") == "DHAN_WEBSOCKET_FULL" else None
     with state.lock:
         recovery = state.rest_fallback_by_security.get(security_id, {})
     recovery_ltp = recovery.get("ltp") if live_valid else None
@@ -167,7 +167,7 @@ def _rules(state) -> dict:
         "storage": "RAM_ONLY",
         "synthetic_candles": False,
         "source": "DHAN",
-        "live_candle_source": "DHAN_WEBSOCKET_QUOTE",
+        "live_candle_source": "DHAN_WEBSOCKET_FULL",
         "historical_candle_source": "DHAN_HISTORICAL_API",
         "calculated_indicator_source": "PSYGRID_FROM_GENUINE_DHAN_OHLCV",
         "candle_vwap_method": "TYPICAL_PRICE_VOLUME_WEIGHTED_DAILY_RESET",
@@ -192,7 +192,7 @@ def _rules(state) -> dict:
         },
         "weekly_synthetic_policy": "FORBIDDEN",
         "live_freshness_policy": f"MAX_{state.settings.max_live_age_seconds}_SECONDS",
-        "live_acquisition": "WEBSOCKET_PRIMARY_DHAN_QUOTE_RECOVERY",
+        "live_acquisition": "WEBSOCKET_PRIMARY_DHAN_REST_QUOTE_RECOVERY",
     }
 
 
