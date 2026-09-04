@@ -157,7 +157,7 @@ def _stock_fixups(state, payload: dict) -> None:
 
         completed_1m = _completed_rows(stock.get("timeframes", {}).get("1m", []), 1)
         latest_1m = completed_1m[-1] if completed_1m else None
-        one_min_ready = bool(latest_1m) and all(latest_1m.get(k) is not None for k in ("ma9", "ema20", "rsi14"))
+        one_min_ready = bool(latest_1m) and all(latest_1m.get(k) is not None for k in ("ema9", "ema20", "rsi14"))
         continuity_valid = all(
             not any(bool(c.get("is_gap")) for c in _completed_rows(stock.get("timeframes", {}).get(key, []), minutes))
             for key, minutes in TIMEFRAME_MINUTES.items()
@@ -170,9 +170,9 @@ def _stock_fixups(state, payload: dict) -> None:
             "live_quote_valid": fresh,
             "market_depth_valid": depth_ready,
             "1m_ready": one_min_ready,
-            "5m_ready": bool(stock.get("timeframes", {}).get("5m")) and all(stock["timeframes"]["5m"][-1].get(k) is not None for k in ("ma9", "ema20", "rsi14")),
-            "15m_ready": bool(stock.get("timeframes", {}).get("15m")) and all(stock["timeframes"]["15m"][-1].get(k) is not None for k in ("ma9", "ema20", "rsi14")),
-            "1h_ready": bool(stock.get("timeframes", {}).get("1h")) and all(stock["timeframes"]["1h"][-1].get(k) is not None for k in ("ma9", "ema20", "rsi14")),
+            "5m_ready": bool(stock.get("timeframes", {}).get("5m")) and all(stock["timeframes"]["5m"][-1].get(k) is not None for k in ("ema9", "ema20", "rsi14")),
+            "15m_ready": bool(stock.get("timeframes", {}).get("15m")) and all(stock["timeframes"]["15m"][-1].get(k) is not None for k in ("ema9", "ema20", "rsi14")),
+            "1h_ready": bool(stock.get("timeframes", {}).get("1h")) and all(stock["timeframes"]["1h"][-1].get(k) is not None for k in ("ema9", "ema20", "rsi14")),
             "continuity_valid": continuity_valid,
             "no_forming_candle_used_for_readiness": True,
             "execution_ready": execution_ready,
@@ -200,7 +200,7 @@ def _higher_timeframes_ready(stock: dict) -> bool:
         if not rows:
             return False
         latest = rows[-1]
-        if any(latest.get(field) is None for field in ("ma9", "ema20", "rsi14")):
+        if any(latest.get(field) is None for field in ("ema9", "ema20", "rsi14")):
             return False
     return True
 
@@ -221,6 +221,7 @@ def market_live_json(state, stock_range=None) -> dict:
     rules["market_depth_levels"] = 5
     rules["repeated_candle_dhan_day_vwap"] = "REMOVED; SESSION_LEVEL_CURRENT_FIELD_ONLY"
     rules["candle_continuity_policy"] = "EXPLICIT_IS_GAP_NO_SYNTHETIC_FILL"
+    rules["indicator_set"] = "EMA9+EMA20+RSI14+VWAP"
     rules["execution_readiness_requires"] = "FRESH_LIVE+1M_INDICATORS+NATIVE_5M_15M_1H+CONTINUITY+MARKET_DEPTH"
 
     if session.get("status") == "LIVE":
