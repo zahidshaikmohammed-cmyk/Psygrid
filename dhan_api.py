@@ -9,10 +9,11 @@ from zoneinfo import ZoneInfo
 import requests
 
 BASE_URL = "https://api.dhan.co/v2"
-# Dhan v2.2 removed rate limits for minute/hour historical data.
-# Keep pacing for other Data API calls, but do not serialize intraday requests.
+# Keep a single conservative global pacing gate for Dhan historical POSTs.
+# The previous zero-throttle deployment produced HTTP 429s under the 8-worker bootstrap.
+# 0.205s is ~4.88 requests/sec and preserves the known-good behavior.
 DATA_API_MIN_INTERVAL = 0.205
-INTRADAY_MIN_INTERVAL = 0.0
+INTRADAY_MIN_INTERVAL = DATA_API_MIN_INTERVAL
 
 
 class DhanAPI:
