@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 import re
-import time
 from typing import Any
 
 import pyotp
@@ -40,20 +39,16 @@ def _request_token(client_id: str, pin: str, totp: str) -> tuple[str | None, str
         headers={"Accept": "application/json"},
         timeout=20,
     )
-
     try:
         payload: Any = response.json()
     except ValueError:
         payload = {"message": response.text[:500]}
-
     if not isinstance(payload, dict):
         payload = {"message": str(payload)}
-
     token = str(payload.get("accessToken", "")).strip()
     expiry = str(payload.get("expiryTime", "")).strip() or None
     if token:
         return token, expiry, ""
-
     message = payload.get("errorMessage") or payload.get("message")
     if not message and isinstance(payload.get("remarks"), dict):
         message = payload["remarks"].get("error_message") or payload["remarks"].get("errorMessage")
@@ -63,56 +58,67 @@ def _request_token(client_id: str, pin: str, totp: str) -> tuple[str | None, str
 
 
 def _rate_limit_seconds(message: str) -> int | None:
+    """Extract Dhan's temporary token-generation cooldown from its message."""
     text = message.lower()
-    if "once every 2 minutes" not in text and "2 minutes" not in text and "two minutes" not in text:
+    rate_limit_hint = any(
+        phrase in text
+        for phrase in (
+            "once every 2 minutes",
+            "once every two minutes",
+            "token can be generated once",
+            "too frequently",
+            "rate limit",
+            "rate-limited",
+            "retry after",
+            "try again after",
+            "temporarily blocked",
+        )
+    )
+    if not rate_limit_hint:
         return None
-    match = re.search(r"(\d+)\s*(?:second|seconds|sec|secs)", text)
-    if match:
-        return max(30, int(match.group(1)) + 2)
+    seconds_match = re.search(r"(\d+)\s*(?:second|seconds|sec|secs)", text)
+    if seconds_match:
+        return max(30, int(seconds_match.group(1)) + 2)
+    minutes_match = re.search(r"(\d+)\s*(?:minute|minutes|min|mins)", text)
+    if minutes_match:
+        return max(30, int(minutes_match.group(1)) * 60 + 2)
     return 120
 
 
 def generate_access_token(client_id: str, pin: str, totp_secret: str) -> tuple[str, str | None]:
-    """Generate a fresh Dhan 24-hour token using PIN + TOTP."""
+    """Generate one fresh Dhan 24-hour token using PIN + TOTP."""
     if not client_id or not pin or not totp_secret:
         raise RuntimeError(
             "Dhan automatic token generation requires DHAN_CLIENT_ID, DHAN_PIN and DHAN_TOTP_SECRET"
         )
-
     normalized_secret = "".join(totp_secret.split()).upper()
     if not normalized_secret:
         raise RuntimeError("Invalid DHAN_TOTP_SECRET")
-
     try:
         pyotp.TOTP(normalized_secret).now()
     except Exception as exc:
         raise RuntimeError("Invalid DHAN_TOTP_SECRET") from exc
 
-    for attempt in range(2):
-        totp = _generate_totp(normalized_secret)
-        try:
-            token, expiry, message = _request_token(client_id, pin, totp)
-        except requests.RequestException as exc:
-            raise RuntimeError(f"Dhan access-token generation failed: {exc}") from exc
-
-        if token:
-            return token, expiry
-
-        retry_after = _rate_limit_seconds(message)
-        if retry_after is not None:
-            raise DhanTokenRateLimited(
-                "Dhan token generation is temporarily rate-limited; retry will be deferred.",
-                retry_after,
-            )
-
-        if attempt == 0 and "totp" in message.lower():
-            remaining = 30.0 - (time.time() % 30.0)
-            time.sleep(max(0.75, remaining + 0.25))
-            continue
-
-        raise RuntimeError(f"Dhan access-token generation returned no token: {message}")
-
-    raise RuntimeError("Dhan access-token generation failed after TOTP rollover retry")
+    # Dhan limits token generation frequency. Make exactly one request per call;
+    # temporary cooldowns are returned to SessionManager for deferred retry.
+    totp = _generate_totp(normalized_secret)
+    try:
+        token, expiry, message = _request_token(client_id, pin, totp)
+    except requests.RequestException as exc:
+        raise RuntimeError(f"Dhan access-token generation failed: {exc}") from exc
+    if token:
+        return token, expiry
+    retry_after = _rate_limit_seconds(message)
+    if retry_after is not None:
+        raise DhanTokenRateLimited(
+            "Dhan token generation is temporarily rate-limited; retry will be deferred.",
+            retry_after,
+        )
+    if "totp" in message.lower() and "invalid" in message.lower():
+        raise RuntimeError(
+            "Dhan rejected the current TOTP. Check DHAN_TOTP_SECRET and Dhan TOTP setup."
+        )
+    raise RuntimeError(f"Dhan access-token generation returned no token: {message}")
 
 
 def token_from_environment(client_id: str) -> tuple[str, str | None, str]:
@@ -121,12 +127,10 @@ def token_from_environment(client_id: str) -> tuple[str, str | None, str]:
     existing = _env(token_var)
     if existing:
         return existing, None, "ENVIRONMENT_TOKEN"
-
     pin = _env("DHAN_PIN")
     totp_secret = _env("DHAN_TOTP_SECRET")
     if pin and totp_secret:
         return "", None, "TOTP_PENDING"
-
     raise RuntimeError(
         f"Missing Dhan token. Expected {token_var}, or provide DHAN_PIN + DHAN_TOTP_SECRET for automatic daily token generation"
     )
