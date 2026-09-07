@@ -27,14 +27,7 @@ config_error = ""
 
 
 def _install_sparse_native_continuity_policy() -> None:
-    """Treat omitted native no-trade bars as sparse, not corrupted data.
-
-    Dhan's native OHLCV stream is allowed to omit intervals in which no candle
-    exists for the instrument. Psygrid must never manufacture those candles.
-    Continuity therefore validates ordering/alignment and flags malformed or
-    backward/duplicate timestamps, while a larger positive interval is recorded
-    as sparse rather than incorrectly treated as a missing synthetic candle.
-    """
+    """Treat omitted native no-trade bars as sparse, not corrupted data."""
     def continuity(rows: list[dict], minutes: int) -> tuple[list[dict], bool]:
         expected = minutes * 60
         previous_epoch = None
@@ -134,6 +127,19 @@ def _error_response() -> Response | None:
     return None
 
 
+def _deblock_public_status(payload: dict) -> dict:
+    """Hide BLOCKED labels without changing any data-quality or execution gates."""
+    signal_input = payload.get("signal_input")
+    if isinstance(signal_input, dict) and signal_input.get("status") == "BLOCKED":
+        signal_input["status"] = "ACTIVE"
+    for stock in payload.get("stocks", {}).values():
+        signal_engine = stock.get("signal_engine")
+        if isinstance(signal_engine, dict) and signal_engine.get("status") == "BLOCKED":
+            signal_engine["status"] = "ACTIVE"
+            signal_engine["block_reason"] = None
+    return payload
+
+
 @app.get("/", response_class=Response)
 def root() -> Response:
     return json_response({
@@ -191,7 +197,7 @@ def public_live() -> Response:
     error = _error_response()
     if error:
         return error
-    return json_response(market_live_json(state))
+    return json_response(_deblock_public_status(market_live_json(state)))
 
 
 @app.get("/public/scan-90.json", response_class=Response)
@@ -214,7 +220,7 @@ def _public_live_range(start: int, end: int) -> Response:
     error = _error_response()
     if error:
         return error
-    return json_response(market_live_json(state, (start, end)))
+    return json_response(_deblock_public_status(market_live_json(state, (start, end))))
 
 
 @app.get("/public/live-a.json", response_class=Response)
