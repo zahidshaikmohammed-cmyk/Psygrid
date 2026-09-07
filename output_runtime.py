@@ -30,6 +30,21 @@ def _enrich_native(seed: list[dict], rows: list[dict], settings) -> list[dict]:
     return enriched[seed_count:]
 
 
+def _enrich_native_all(seed: list[dict], rows: list[dict], settings) -> list[dict]:
+    """Enrich the full genuine native history for readiness checks."""
+    combined = [dict(c) for c in seed] + [dict(c) for c in rows]
+    combined.sort(key=lambda c: int(c["timestamp"]))
+    return enrich(
+        combined,
+        settings.ma_period,
+        settings.ema_period,
+        settings.rsi_period,
+        day_key=lambda candle: datetime.fromtimestamp(
+            int(candle["timestamp"]), PUBLIC_TZ
+        ).date(),
+    )
+
+
 def _native_timeframe_payload(state, security_id: str, key: str) -> list[dict]:
     today = datetime.now(PUBLIC_TZ).date()
     with state.lock:
@@ -42,6 +57,23 @@ def _native_timeframe_payload(state, security_id: str, key: str) -> list[dict]:
     ]
     enriched = _enrich_native(seed, rows, state.settings)
     return [normalize_candle(row) for row in enriched]
+
+
+def _native_readiness_rows(state, security_id: str, key: str) -> list[dict]:
+    """Return genuine completed native candles for readiness, including warmup history.
+
+    The public payload intentionally keeps intraday higher-timeframe display scoped to
+    today's session. Readiness must not do that for the strategic 1h layer: before the
+    first completed 1h candle of the current session exists, the latest completed native
+    1h candle from the historical seed is still valid and must be usable. No candle is
+    aggregated or synthesized here.
+    """
+    with state.lock:
+        history = state.historical.get(security_id, {})
+        seed = [dict(c) for c in history.get(f"{key}_seed", []) if c.get("complete", True)]
+        rows = [dict(c) for c in history.get(key, []) if c.get("complete", True)]
+    enriched = _enrich_native_all(seed, rows, state.settings)
+    return [row for row in enriched if row.get("complete", True)]
 
 
 def _parse_public_epoch(value) -> int | None:
@@ -163,16 +195,21 @@ def _stock_fixups(state, payload: dict) -> None:
             for key, minutes in TIMEFRAME_MINUTES.items()
         )
         fresh = bool(stock.get("freshness", {}).get("live_data_valid", False))
-        native_ready = _higher_timeframes_ready(stock)
+        native_ready = _higher_timeframes_ready(state, stock)
         depth_ready = context["depth_valid"]
         execution_ready = bool(fresh and one_min_ready and native_ready and continuity_valid and depth_ready)
+        readiness_rows_1h = _native_readiness_rows(state, security_id, "1h")
+        latest_1h_readiness = readiness_rows_1h[-1] if readiness_rows_1h else None
+        one_hour_ready = bool(latest_1h_readiness) and all(
+            latest_1h_readiness.get(k) is not None for k in ("ema9", "ema20", "rsi14")
+        )
         stock["data_quality"] = {
             "live_quote_valid": fresh,
             "market_depth_valid": depth_ready,
             "1m_ready": one_min_ready,
             "5m_ready": bool(stock.get("timeframes", {}).get("5m")) and all(stock["timeframes"]["5m"][-1].get(k) is not None for k in ("ema9", "ema20", "rsi14")),
             "15m_ready": bool(stock.get("timeframes", {}).get("15m")) and all(stock["timeframes"]["15m"][-1].get(k) is not None for k in ("ema9", "ema20", "rsi14")),
-            "1h_ready": bool(stock.get("timeframes", {}).get("1h")) and all(stock["timeframes"]["1h"][-1].get(k) is not None for k in ("ema9", "ema20", "rsi14")),
+            "1h_ready": one_hour_ready,
             "continuity_valid": continuity_valid,
             "no_forming_candle_used_for_readiness": True,
             "execution_ready": execution_ready,
@@ -192,17 +229,32 @@ def _stock_fixups(state, payload: dict) -> None:
         }
 
 
-def _higher_timeframes_ready(stock: dict) -> bool:
-    """Require real native 5m/15m/1h candles and calculated indicators."""
+def _higher_timeframes_ready(state, stock: dict) -> bool:
+    """Require genuine native 5m/15m/1h candles and calculated indicators.
+
+    For 1h, use the latest completed native candle available from Dhan's historical
+    seed when today's first 1h candle is still forming. Never use the forming candle
+    and never aggregate lower timeframes into a synthetic 1h candle.
+    """
     timeframes = stock.get("timeframes", {})
-    for key in NATIVE_HIGHER_TIMEFRAMES:
+    for key in ("5m", "15m"):
         rows = timeframes.get(key) or []
         if not rows:
             return False
         latest = rows[-1]
         if any(latest.get(field) is None for field in ("ema9", "ema20", "rsi14")):
             return False
-    return True
+
+    security_id = str(stock.get("security_id", ""))
+    rows_1h = _native_readiness_rows(state, security_id, "1h")
+    completed_1h = _completed_rows(
+        [normalize_candle(row) for row in rows_1h],
+        60,
+    )
+    if not completed_1h:
+        return False
+    latest_1h = completed_1h[-1]
+    return all(latest_1h.get(field) is not None for field in ("ema9", "ema20", "rsi14"))
 
 
 def market_live_json(state, stock_range=None) -> dict:
@@ -235,7 +287,7 @@ def market_live_json(state, stock_range=None) -> dict:
     analysis_ready_count = sum(
         1 for stock in stocks.values()
         if bool(stock.get("freshness", {}).get("live_data_valid", False))
-        and _higher_timeframes_ready(stock)
+        and _higher_timeframes_ready(state, stock)
     )
     execution_ready_count = sum(
         1 for stock in stocks.values()
