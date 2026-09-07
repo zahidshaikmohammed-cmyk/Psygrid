@@ -71,7 +71,25 @@ def _install_sparse_native_continuity_policy() -> None:
     _output_runtime._mark_continuity = continuity
 
 
+def _install_completed_candle_public_policy() -> None:
+    """Never expose a forming 1m candle through the public timeframe payload.
+
+    The WebSocket may maintain the active minute internally so it can be
+    finalized at the next native minute boundary. Public 1m data, however,
+    contains completed candles only. This does not alter the internal candle
+    builder, indicators, historical data, or execution-readiness rules.
+    """
+    original = RuntimeFreshnessState.live_enriched
+
+    def completed_only(self, security_id: str) -> list[dict]:
+        rows = original(self, security_id)
+        return [row for row in rows if row.get("complete", True)]
+
+    RuntimeFreshnessState.live_enriched = completed_only
+
+
 _install_sparse_native_continuity_policy()
+_install_completed_candle_public_policy()
 
 
 def startup() -> None:
