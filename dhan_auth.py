@@ -70,7 +70,9 @@ def _rate_limit_seconds(message: str) -> int | None:
             "rate limit",
             "rate-limited",
             "retry after",
+            "retry in",
             "try again after",
+            "try again in",
             "temporarily blocked",
         )
     )
