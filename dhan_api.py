@@ -9,16 +9,18 @@ from zoneinfo import ZoneInfo
 import requests
 
 BASE_URL = "https://api.dhan.co/v2"
-# Keep a single conservative global pacing gate for Dhan historical POSTs.
-# The previous zero-throttle deployment produced HTTP 429s under the 8-worker bootstrap.
-# 0.205s is ~4.88 requests/sec and preserves the known-good behavior.
-DATA_API_MIN_INTERVAL = 0.205
+# Dhan has returned real HTTP 429s even when requests are paced just below the
+# documented 5/sec boundary. Keep historical traffic deliberately conservative
+# and coordinate the backoff globally so concurrent bootstrap workers cannot
+# create a retry storm.
+DATA_API_MIN_INTERVAL = 0.5
 INTRADAY_MIN_INTERVAL = DATA_API_MIN_INTERVAL
 
 
 class DhanAPI:
     _rate_lock = threading.Lock()
     _last_post_at = 0.0
+    _cooldown_until = 0.0
 
     def __init__(self, settings):
         self.settings = settings
@@ -40,10 +42,32 @@ class DhanAPI:
             return
         with cls._rate_lock:
             now = time.monotonic()
-            wait = minimum_interval - (now - cls._last_post_at)
+            wait = max(
+                minimum_interval - (now - cls._last_post_at),
+                cls._cooldown_until - now,
+                0.0,
+            )
             if wait > 0:
                 time.sleep(wait)
             cls._last_post_at = time.monotonic()
+
+    @classmethod
+    def _set_rate_cooldown(cls, seconds: float) -> None:
+        if seconds <= 0:
+            return
+        with cls._rate_lock:
+            cls._cooldown_until = max(
+                cls._cooldown_until,
+                time.monotonic() + seconds,
+            )
+
+    @staticmethod
+    def _retry_after_seconds(response) -> float:
+        value = response.headers.get("Retry-After")
+        try:
+            return max(0.0, min(30.0, float(value))) if value is not None else 2.0
+        except (TypeError, ValueError):
+            return 2.0
 
     def _post(
         self,
@@ -58,7 +82,7 @@ class DhanAPI:
             "access-token": self.settings.access_token,
         }
         last_error = None
-        for attempt in range(5):
+        for attempt in range(10):
             try:
                 self._throttle_post(minimum_interval)
                 response = self.session.post(
@@ -68,15 +92,17 @@ class DhanAPI:
                     timeout=30,
                 )
                 if response.status_code == 429:
+                    retry_after = self._retry_after_seconds(response)
+                    self._set_rate_cooldown(retry_after)
                     last_error = RuntimeError("Dhan API HTTP 429 rate limit")
-                    if attempt < 4:
-                        time.sleep(min(8.0, 1.0 * (2 ** attempt)))
+                    if attempt < 9:
+                        time.sleep(min(retry_after, 30.0))
                         continue
                     raise last_error
                 if response.status_code >= 500:
                     last_error = RuntimeError(f"Dhan API HTTP {response.status_code}")
-                    if attempt < 4:
-                        time.sleep(min(8.0, 1.0 * (2 ** attempt)))
+                    if attempt < 9:
+                        time.sleep(min(8.0, 1.0 * (2 ** min(attempt, 3))))
                         continue
                     raise last_error
                 response.raise_for_status()
@@ -88,8 +114,8 @@ class DhanAPI:
                 return data
             except (requests.Timeout, requests.ConnectionError) as exc:
                 last_error = exc
-                if attempt < 4:
-                    time.sleep(min(8.0, 1.0 * (2 ** attempt)))
+                if attempt < 9:
+                    time.sleep(min(8.0, 1.0 * (2 ** min(attempt, 3))))
                     continue
                 raise RuntimeError(f"Dhan API network failure: {exc}") from exc
             except requests.HTTPError as exc:
