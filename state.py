@@ -339,10 +339,15 @@ class PsygridState:
 
     def live_enriched(self, security_id: str) -> List[dict]:
         with self.lock:
-            candles = [dict(c) for c in self.live_candles.get(security_id, [])]
-            current = self.current_1m.get(security_id)
-            if current is not None:
-                candles.append(dict(current))
+            # Public 1m candles are completed-only. The active minute remains
+            # internal so it can be finalized on the next native minute boundary,
+            # but it is never exposed here and therefore cannot produce null
+            # indicators or be consumed as a completed candle downstream.
+            candles = [
+                dict(c)
+                for c in self.live_candles.get(security_id, [])
+                if c.get("complete", True)
+            ]
             seed = [dict(c) for c in self.indicator_seed_1m.get(security_id, [])]
             dhan_avg_price = self.dhan_day_average_price.get(security_id)
             enriched = self._enrich_live(seed, candles, dhan_avg_price)
