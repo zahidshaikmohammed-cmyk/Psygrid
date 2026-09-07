@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime
 
 import orjson
 import uvicorn
@@ -11,6 +12,7 @@ from starlette.middleware.gzip import GZipMiddleware
 from config import load_instruments, load_settings
 from dhan_api import DhanAPI
 from feed_runtime import LiveFeed
+import output_runtime as _output_runtime
 from output_runtime import market_live_json
 from output_scan import build_scan_90, build_scan_270
 from output import stock_json
@@ -22,6 +24,54 @@ settings = None
 state = None
 manager = None
 config_error = ""
+
+
+def _install_sparse_native_continuity_policy() -> None:
+    """Treat omitted native no-trade bars as sparse, not corrupted data.
+
+    Dhan's native OHLCV stream is allowed to omit intervals in which no candle
+    exists for the instrument. Psygrid must never manufacture those candles.
+    Continuity therefore validates ordering/alignment and flags malformed or
+    backward/duplicate timestamps, while a larger positive interval is recorded
+    as sparse rather than incorrectly treated as a missing synthetic candle.
+    """
+    def continuity(rows: list[dict], minutes: int) -> tuple[list[dict], bool]:
+        expected = minutes * 60
+        previous_epoch = None
+        valid = True
+        out = []
+        for row in rows:
+            item = dict(row)
+            epoch = _output_runtime._parse_public_epoch(item.get("timestamp"))
+            gap = False
+            sparse = False
+            missing_intervals = 0
+            if epoch is None:
+                gap = True
+            elif previous_epoch is not None:
+                delta = epoch - previous_epoch
+                if delta <= 0 or delta % expected != 0:
+                    gap = True
+                elif delta > expected:
+                    sparse = True
+                    missing_intervals = int(delta // expected) - 1
+            item["is_gap"] = gap
+            if sparse:
+                item["is_sparse"] = True
+                item["sparse_missing_intervals"] = missing_intervals
+            else:
+                item["is_sparse"] = False
+            if gap:
+                valid = False
+            if epoch is not None:
+                previous_epoch = epoch
+            out.append(item)
+        return out, valid
+
+    _output_runtime._mark_continuity = continuity
+
+
+_install_sparse_native_continuity_policy()
 
 
 def startup() -> None:
