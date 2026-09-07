@@ -190,24 +190,23 @@ class SessionManager:
             self.history_thread.start()
 
     def _load_history(self, now: datetime) -> None:
-        """Bootstrap native history in universe-wide phases.
+        """Bootstrap genuine native history in execution-priority order.
 
-        Every native timeframe is completed across the full universe before the
-        next timeframe starts. This prevents readiness from depending on the
-        arbitrary order in which individual stocks finish. Forming candles are
-        excluded by DhanAPI.load_intraday_window(). No timeframe is aggregated.
+        1m history is loaded first because it is the immediate indicator gate.
+        Native 5m/15m/1h history follows; no timeframe is aggregated or synthesized.
+        The global execution gate remains closed until the required native layers
+        are complete for the full 270-stock universe. Daily history is non-critical
+        and therefore runs last.
         """
         def set_window(item, interval: int, key: str) -> None:
             if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
                 return
             try:
-                seed, today = self.dhan_api.load_intraday_window(
-                    item, interval, self.settings.intraday_history_days
-                )
-                # The strategic 1h layer needs enough genuine native 60m
-                # candles to calculate EMA20 and RSI14. Dhan supports native
-                # 60m history directly, so if the normal window is empty or
-                # too short, recover additional prior native 60m candles.
+                # Give native 1h enough calendar range in the primary request to
+                # provide EMA20/RSI14 warmup across holidays and weekends. This
+                # avoids a second historical request for ordinary sparse calendars.
+                request_days = max(self.settings.intraday_history_days, 10) if key == "1h" else self.settings.intraday_history_days
+                seed, today = self.dhan_api.load_intraday_window(item, interval, request_days)
                 if key == "1h":
                     minimum_warmup = max(
                         self.settings.ema_period,
@@ -215,7 +214,7 @@ class SessionManager:
                     ) + 1
                     if len(seed) < minimum_warmup:
                         extra = self.dhan_api.load_previous_intraday(
-                            item, interval, max(5, self.settings.intraday_history_days)
+                            item, interval, max(15, request_days)
                         )
                         merged = {}
                         for candle in list(seed) + list(extra):
@@ -251,14 +250,15 @@ class SessionManager:
                     except Exception:
                         pass
 
+        # Execution-priority order: 1m first, then genuine native higher timeframes.
+        run_phase("1m", lambda item: set_window(item, 1, "1m"))
+        if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
+            return
+
         for interval, key in ((5, "5m"), (15, "15m"), (60, "1h")):
             run_phase(key, lambda item, interval=interval, key=key: set_window(item, interval, key))
             if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
                 return
-
-        run_phase("1m", lambda item: set_window(item, 1, "1m"))
-        if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
-            return
 
         run_phase("1d", set_daily)
         if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
