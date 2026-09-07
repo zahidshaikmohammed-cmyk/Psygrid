@@ -163,6 +163,12 @@ def _stock_fixups(state, payload: dict) -> None:
                 state, security_id, key
             )
 
+        # The active 1m candle is maintained internally for minute-boundary
+        # finalization, but it must never cross the public API boundary.
+        one_minute_rows = stock.get("timeframes", {}).get("1m")
+        if isinstance(one_minute_rows, list):
+            stock["timeframes"]["1m"] = _completed_rows(one_minute_rows, 1)
+
         for key, minutes in TIMEFRAME_MINUTES.items():
             rows = stock.get("timeframes", {}).get(key)
             if isinstance(rows, list):

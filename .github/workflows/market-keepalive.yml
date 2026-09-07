@@ -1,0 +1,13 @@
+name: Psygrid Market Keepalive
+
+on:
+  schedule:
+    - cron: "*/5 3-9 * * 1-5"
+  workflow_dispatch:
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-slim
+    steps:
+      - name: Ping Psygrid during NSE hours
+        run: curl --fail --silent --show-error --max-time 20 https://psygrid.onrender.com/health
