@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 import requests
 
 BASE_URL = "https://api.dhan.co/v2"
+DATA_API_MIN_INTERVAL = 0.205
 
 
 class DhanAPI:
@@ -30,7 +31,7 @@ class DhanAPI:
         }
 
     @classmethod
-    def _throttle_post(cls, minimum_interval: float = 0.21) -> None:
+    def _throttle_post(cls, minimum_interval: float = DATA_API_MIN_INTERVAL) -> None:
         with cls._rate_lock:
             now = time.monotonic()
             wait = minimum_interval - (now - cls._last_post_at)
@@ -43,7 +44,7 @@ class DhanAPI:
         path: str,
         payload: dict,
         include_client_id: bool = False,
-        minimum_interval: float = 0.21,
+        minimum_interval: float = DATA_API_MIN_INTERVAL,
     ) -> dict:
         headers = self.headers if include_client_id else {
             "Accept": "application/json",
@@ -169,7 +170,7 @@ class DhanAPI:
             "fromDate": from_dt.strftime("%Y-%m-%d %H:%M:%S"),
             "toDate": to_dt.strftime("%Y-%m-%d %H:%M:%S"),
         }
-        return self._candles_from_arrays(self._post("/charts/intraday", payload, minimum_interval=0.21))
+        return self._candles_from_arrays(self._post("/charts/intraday", payload, minimum_interval=DATA_API_MIN_INTERVAL))
 
     def daily(self, item, from_date: datetime, to_date: datetime) -> List[dict]:
         payload = {
@@ -181,7 +182,7 @@ class DhanAPI:
             "fromDate": from_date.strftime("%Y-%m-%d"),
             "toDate": to_date.strftime("%Y-%m-%d"),
         }
-        return self._candles_from_arrays(self._post("/charts/historical", payload, minimum_interval=0.21))
+        return self._candles_from_arrays(self._post("/charts/historical", payload, minimum_interval=DATA_API_MIN_INTERVAL))
 
     def load_intraday_window(self, item, interval: int, days: int) -> tuple[List[dict], List[dict]]:
         now = datetime.now(self.tz)
@@ -191,8 +192,6 @@ class DhanAPI:
         now_epoch = int(now.timestamp())
         candle_seconds = int(interval) * 60
         previous = [r for r in rows if datetime.fromtimestamp(r["timestamp"], self.tz).date() < today]
-        # Dhan can return the currently-forming candle when the request ends at now.
-        # It is never valid input for completed native timeframe analysis.
         current = [
             r for r in rows
             if datetime.fromtimestamp(r["timestamp"], self.tz).date() == today
