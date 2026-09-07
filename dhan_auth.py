@@ -15,7 +15,7 @@ class DhanTokenRateLimited(RuntimeError):
 
     def __init__(self, message: str, retry_after: int = 120):
         super().__init__(message)
-        self.retry_after = max(30, int(retry_after))
+        self.retry_after = max(120, int(retry_after))
 
 
 def _env(name: str) -> str:
@@ -80,10 +80,10 @@ def _rate_limit_seconds(message: str) -> int | None:
         return None
     seconds_match = re.search(r"(\d+)\s*(?:second|seconds|sec|secs)", text)
     if seconds_match:
-        return max(30, int(seconds_match.group(1)) + 2)
+        return max(120, int(seconds_match.group(1)) + 2)
     minutes_match = re.search(r"(\d+)\s*(?:minute|minutes|min|mins)", text)
     if minutes_match:
-        return max(30, int(minutes_match.group(1)) * 60 + 2)
+        return max(120, int(minutes_match.group(1)) * 60 + 2)
     return 120
 
 
