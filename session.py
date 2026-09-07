@@ -204,6 +204,15 @@ class SessionManager:
                 seed, today = self.dhan_api.load_intraday_window(
                     item, interval, self.settings.intraday_history_days
                 )
+                # Dhan's intraday response can be session-scoped depending on
+                # the entitlement/account response. For the strategic 1h layer,
+                # explicitly recover prior native 60m candles when the normal
+                # window contains no prior-session seed. Never synthesize 1h from
+                # lower timeframes.
+                if key == "1h" and not seed:
+                    seed = self.dhan_api.load_previous_intraday(
+                        item, interval, max(3, self.settings.intraday_history_days)
+                    )
                 self.state.set_historical(item.security_id, f"{key}_seed", seed)
                 self.state.set_historical(item.security_id, key, today)
                 if key == "1m":
