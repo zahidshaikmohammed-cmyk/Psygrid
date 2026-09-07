@@ -149,6 +149,11 @@ class LiveFeed(BaseLiveFeed):
             existing["received_epoch"] = now
             existing["source"] = "DHAN_REST_QUOTE_RECOVERY"
             context[str(security_id)] = existing
+            # REST recovery is a genuine current Quote API observation. Count
+            # its receipt as fresh quote coverage, but do not touch the WebSocket
+            # candle state or manufacture a 1m candle.
+            with self.state.lock:
+                self.state.last_tick_by_security[str(security_id)] = now
 
     def _run_connected_session(self, feed) -> None:
         # The official SDK owns its event loop. Its websocket client handles
