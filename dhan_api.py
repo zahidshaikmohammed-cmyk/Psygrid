@@ -9,7 +9,10 @@ from zoneinfo import ZoneInfo
 import requests
 
 BASE_URL = "https://api.dhan.co/v2"
+# Dhan v2.2 removed rate limits for minute/hour historical data.
+# Keep pacing for other Data API calls, but do not serialize intraday requests.
 DATA_API_MIN_INTERVAL = 0.205
+INTRADAY_MIN_INTERVAL = 0.0
 
 
 class DhanAPI:
@@ -32,6 +35,8 @@ class DhanAPI:
 
     @classmethod
     def _throttle_post(cls, minimum_interval: float = DATA_API_MIN_INTERVAL) -> None:
+        if minimum_interval <= 0:
+            return
         with cls._rate_lock:
             now = time.monotonic()
             wait = minimum_interval - (now - cls._last_post_at)
@@ -170,7 +175,9 @@ class DhanAPI:
             "fromDate": from_dt.strftime("%Y-%m-%d %H:%M:%S"),
             "toDate": to_dt.strftime("%Y-%m-%d %H:%M:%S"),
         }
-        return self._candles_from_arrays(self._post("/charts/intraday", payload, minimum_interval=DATA_API_MIN_INTERVAL))
+        return self._candles_from_arrays(
+            self._post("/charts/intraday", payload, minimum_interval=INTRADAY_MIN_INTERVAL)
+        )
 
     def daily(self, item, from_date: datetime, to_date: datetime) -> List[dict]:
         payload = {
