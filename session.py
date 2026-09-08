@@ -185,63 +185,40 @@ class SessionManager:
                 target=self._load_history,
                 args=(now,),
                 daemon=True,
-                name="psygrid-history",
+                name="psygrid-live-candle-bootstrap",
             )
             self.history_thread.start()
 
     def _load_history(self, now: datetime) -> None:
-        """Bootstrap genuine native history in execution-priority order.
-
-        1m history is loaded first because it is the immediate indicator gate.
-        Native 5m/15m/1h history follows; no timeframe is aggregated or synthesized.
-        The global execution gate remains closed until the required native layers
-        are complete for the full 270-stock universe. Daily history is non-critical
-        and therefore runs last.
-        """
-        def set_window(item, interval: int, key: str) -> None:
+        """Bootstrap only today's genuine Dhan candles; never load prior days."""
+        def load_today(item, interval: int, key: str) -> None:
             if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
                 return
             try:
-                # Give native 1h enough calendar range in the primary request to
-                # provide EMA20/RSI14 warmup across holidays and weekends. This
-                # avoids a second historical request for ordinary sparse calendars.
-                request_days = max(self.settings.intraday_history_days, 10) if key == "1h" else self.settings.intraday_history_days
-                seed, today = self.dhan_api.load_intraday_window(item, interval, request_days)
-                if key == "1h":
-                    minimum_warmup = max(
-                        self.settings.ema_period,
-                        self.settings.rsi_period + 1,
-                    ) + 1
-                    if len(seed) < minimum_warmup:
-                        extra = self.dhan_api.load_previous_intraday(
-                            item, interval, max(15, request_days)
-                        )
-                        merged = {}
-                        for candle in list(seed) + list(extra):
-                            merged[int(candle["timestamp"])] = dict(candle)
-                        seed = [merged[timestamp] for timestamp in sorted(merged)]
-                self.state.set_historical(item.security_id, f"{key}_seed", seed)
-                self.state.set_historical(item.security_id, key, today)
+                rows = self.dhan_api.load_today_completed_intraday(item, interval)
                 if key == "1m":
-                    self.state.set_indicator_seed_1m(item.security_id, seed)
-                    self.state.merge_today_1m_history(item.security_id, today)
+                    self.state.merge_today_1m_history(item.security_id, rows)
+                else:
+                    self.state.set_historical(item.security_id, key, rows)
             except Exception as exc:
-                self.state.last_feed_error = f"history:{item.symbol}:{key}:{exc}"
+                if self._looks_like_auth_failure(exc):
+                    try:
+                        self._refresh_auth_once()
+                        rows = self.dhan_api.load_today_completed_intraday(item, interval)
+                        if key == "1m":
+                            self.state.merge_today_1m_history(item.security_id, rows)
+                        else:
+                            self.state.set_historical(item.security_id, key, rows)
+                        return
+                    except Exception as retry_exc:
+                        exc = retry_exc
+                self.state.last_feed_error = f"live_candle_bootstrap:{item.symbol}:{key}:{exc}"
 
-        def set_daily(item) -> None:
+        def run_phase(label: str, interval: int, key: str) -> None:
             if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
                 return
-            try:
-                daily = self.dhan_api.load_previous_daily(item, self.settings.daily_lookback)
-                self.state.set_historical(item.security_id, "1d", daily)
-            except Exception as exc:
-                self.state.last_feed_error = f"history:{item.symbol}:1d:{exc}"
-
-        def run_phase(label: str, fn) -> None:
-            if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
-                return
-            with ThreadPoolExecutor(max_workers=8, thread_name_prefix=f"psygrid-hist-{label}") as pool:
-                futures = [pool.submit(fn, item) for item in self.instruments]
+            with ThreadPoolExecutor(max_workers=8, thread_name_prefix=f"psygrid-live-{label}") as pool:
+                futures = [pool.submit(load_today, item, interval, key) for item in self.instruments]
                 for future in futures:
                     if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
                         break
@@ -250,19 +227,11 @@ class SessionManager:
                     except Exception:
                         pass
 
-        # Execution-priority order: 1m first, then genuine native higher timeframes.
-        run_phase("1m", lambda item: set_window(item, 1, "1m"))
-        if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
-            return
-
-        for interval, key in ((5, "5m"), (15, "15m"), (60, "1h")):
-            run_phase(key, lambda item, interval=interval, key=key: set_window(item, interval, key))
+        # Current-session-only native candles. Nothing from previous sessions is loaded.
+        for interval, key in ((1, "1m"), (5, "5m"), (15, "15m"), (60, "1h")):
+            run_phase(key, interval, key)
             if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
                 return
-
-        run_phase("1d", set_daily)
-        if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
-            return
 
         with self._lock:
             if not self.htf_thread or not self.htf_thread.is_alive():
