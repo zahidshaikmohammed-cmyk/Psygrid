@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 from contextlib import asynccontextmanager
-from datetime import datetime
 
 import orjson
 import uvicorn
@@ -12,10 +11,7 @@ from starlette.middleware.gzip import GZipMiddleware
 from config import load_instruments, load_settings
 from dhan_api import DhanAPI
 from feed_runtime import LiveFeed
-import output_runtime as _output_runtime
-from output_runtime import market_live_json
-from output_scan import build_scan_90, build_scan_270
-from output import stock_json, LIVE_TIMEFRAMES
+from output import LIVE_TIMEFRAMES, market_live_json, stock_json
 from session import SessionManager
 from state_runtime import RuntimeFreshnessState
 
@@ -24,47 +20,6 @@ settings = None
 state = None
 manager = None
 config_error = ""
-
-
-def _install_sparse_native_continuity_policy() -> None:
-    """Treat omitted native no-trade bars as sparse, not corrupted data."""
-    def continuity(rows: list[dict], minutes: int) -> tuple[list[dict], bool]:
-        expected = minutes * 60
-        previous_epoch = None
-        valid = True
-        out = []
-        for row in rows:
-            item = dict(row)
-            epoch = _output_runtime._parse_public_epoch(item.get("timestamp"))
-            gap = False
-            sparse = False
-            missing_intervals = 0
-            if epoch is None:
-                gap = True
-            elif previous_epoch is not None:
-                delta = epoch - previous_epoch
-                if delta <= 0 or delta % expected != 0:
-                    gap = True
-                elif delta > expected:
-                    sparse = True
-                    missing_intervals = int(delta // expected) - 1
-            item["is_gap"] = gap
-            if sparse:
-                item["is_sparse"] = True
-                item["sparse_missing_intervals"] = missing_intervals
-            else:
-                item["is_sparse"] = False
-            if gap:
-                valid = False
-            if epoch is not None:
-                previous_epoch = epoch
-            out.append(item)
-        return out, valid
-
-    _output_runtime._mark_continuity = continuity
-
-
-_install_sparse_native_continuity_policy()
 
 
 def startup() -> None:
@@ -127,19 +82,6 @@ def _error_response() -> Response | None:
     return None
 
 
-def _deblock_public_status(payload: dict) -> dict:
-    """Hide BLOCKED labels without changing any data-quality or execution gates."""
-    signal_input = payload.get("signal_input")
-    if isinstance(signal_input, dict) and signal_input.get("status") == "BLOCKED":
-        signal_input["status"] = "ACTIVE"
-    for stock in payload.get("stocks", {}).values():
-        signal_engine = stock.get("signal_engine")
-        if isinstance(signal_engine, dict) and signal_engine.get("status") == "BLOCKED":
-            signal_engine["status"] = "ACTIVE"
-            signal_engine["block_reason"] = None
-    return payload
-
-
 @app.get("/", response_class=Response)
 def root() -> Response:
     return json_response({
@@ -198,30 +140,14 @@ def public_live() -> Response:
     error = _error_response()
     if error:
         return error
-    return json_response(_deblock_public_status(market_live_json(state)))
-
-
-@app.get("/public/scan-90.json", response_class=Response)
-def public_scan_90() -> Response:
-    error = _error_response()
-    if error:
-        return error
-    return json_response(build_scan_90(state))
-
-
-@app.get("/public/scan-270.json", response_class=Response)
-def public_scan_270() -> Response:
-    error = _error_response()
-    if error:
-        return error
-    return json_response(build_scan_270(state))
+    return json_response(market_live_json(state))
 
 
 def _public_live_range(start: int, end: int) -> Response:
     error = _error_response()
     if error:
         return error
-    return json_response(_deblock_public_status(market_live_json(state, (start, end))))
+    return json_response(market_live_json(state, (start, end)))
 
 
 @app.get("/public/live-a.json", response_class=Response)
@@ -254,39 +180,34 @@ def public_live_f() -> Response:
     return _public_live_range(225, 270)
 
 
-# Smaller identical-schema views for clients that prefer 15-stock payloads.
-def _public_live_slice(start: int, end: int) -> Response:
-    return _public_live_range(start, end)
-
-
 @app.get("/public/live-01.json", response_class=Response)
 def public_live_01() -> Response:
-    return _public_live_slice(0, 15)
+    return _public_live_range(0, 15)
 
 
 @app.get("/public/live-02.json", response_class=Response)
 def public_live_02() -> Response:
-    return _public_live_slice(15, 30)
+    return _public_live_range(15, 30)
 
 
 @app.get("/public/live-03.json", response_class=Response)
 def public_live_03() -> Response:
-    return _public_live_slice(30, 45)
+    return _public_live_range(30, 45)
 
 
 @app.get("/public/live-04.json", response_class=Response)
 def public_live_04() -> Response:
-    return _public_live_slice(45, 60)
+    return _public_live_range(45, 60)
 
 
 @app.get("/public/live-05.json", response_class=Response)
 def public_live_05() -> Response:
-    return _public_live_slice(60, 75)
+    return _public_live_range(60, 75)
 
 
 @app.get("/public/live-06.json", response_class=Response)
 def public_live_06() -> Response:
-    return _public_live_slice(75, 90)
+    return _public_live_range(75, 90)
 
 
 @app.get("/public/stock/{symbol}.json", response_class=Response)
@@ -301,7 +222,11 @@ def public_stock(symbol: str) -> Response:
 def public_stock_timeframe(symbol: str, timeframe: str) -> Response:
     timeframe = timeframe.lower()
     if timeframe not in LIVE_TIMEFRAMES:
-        return json_response({"service": "PSYGRID", "status": "INVALID_TIMEFRAME", "allowed_timeframes": list(LIVE_TIMEFRAMES)}, 400)
+        return json_response({
+            "service": "PSYGRID",
+            "status": "INVALID_TIMEFRAME",
+            "allowed_timeframes": list(LIVE_TIMEFRAMES),
+        }, 400)
     error = _error_response()
     if error:
         return error
