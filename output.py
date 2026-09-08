@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from typing import Optional
 from zoneinfo import ZoneInfo
 
+from market_intelligence import enrich_market_payload, enrich_stock_payload
+
 
 PUBLIC_TIMEZONE = ZoneInfo("Asia/Kolkata")
 PUBLIC_TIMEZONE_NAME = "Asia/Kolkata"
@@ -122,7 +124,7 @@ def market_live_json(state, stock_range: Optional[tuple[int, int]] = None) -> di
             for security_id, meta in items
         }
 
-    return {
+    payload = {
         "service": "PSYGRID",
         "schema_version": "3.0",
         "session": _session_payload(state),
@@ -137,6 +139,9 @@ def market_live_json(state, stock_range: Optional[tuple[int, int]] = None) -> di
         "synthetic_candles": False,
         "stocks": stocks,
     }
+    # Additive only: existing fields/candles remain unchanged. The intelligence
+    # layer reads the same in-RAM Dhan data and attaches contextual analytics.
+    return enrich_market_payload(state, payload)
 
 
 def stock_json(state, symbol: str, timeframe: Optional[str] = None) -> dict:
@@ -168,7 +173,7 @@ def stock_json(state, symbol: str, timeframe: Optional[str] = None) -> dict:
 
     if timeframe is None:
         payload.update(full)
-        return payload
+        return enrich_stock_payload(state, payload)
 
     if timeframe not in LIVE_TIMEFRAMES:
         return {"service": "PSYGRID", "symbol": symbol, "status": "INVALID_TIMEFRAME"}
@@ -181,7 +186,7 @@ def stock_json(state, symbol: str, timeframe: Optional[str] = None) -> dict:
         "ltp_timestamp": full["ltp_timestamp"],
         timeframe: full[timeframe],
     })
-    return payload
+    return enrich_stock_payload(state, payload)
 
 
 def dumps_json(payload: dict) -> str:
