@@ -15,7 +15,7 @@ from feed_runtime import LiveFeed
 import output_runtime as _output_runtime
 from output_runtime import market_live_json
 from output_scan import build_scan_90, build_scan_270
-from output import stock_json
+from output import stock_json, LIVE_TIMEFRAMES
 from session import SessionManager
 from state_runtime import RuntimeFreshnessState
 
@@ -157,15 +157,16 @@ def root() -> Response:
             "/public/live-d.json",
             "/public/live-e.json",
             "/public/live-f.json",
-            "/public/scan-90.json",
-            "/public/scan-270.json",
             "/public/live-01.json",
             "/public/live-02.json",
             "/public/live-03.json",
             "/public/live-04.json",
             "/public/live-05.json",
             "/public/live-06.json",
+            "/public/stock/{symbol}.json",
+            "/public/stock/{symbol}/{timeframe}.json",
         ],
+        "live_timeframes": list(LIVE_TIMEFRAMES),
     })
 
 
@@ -299,8 +300,8 @@ def public_stock(symbol: str) -> Response:
 @app.get("/public/stock/{symbol}/{timeframe}.json", response_class=Response)
 def public_stock_timeframe(symbol: str, timeframe: str) -> Response:
     timeframe = timeframe.lower()
-    if timeframe not in {"1m", "5m", "15m", "1h", "1d", "1w"}:
-        return json_response({"service": "PSYGRID", "status": "INVALID_TIMEFRAME"}, 400)
+    if timeframe not in LIVE_TIMEFRAMES:
+        return json_response({"service": "PSYGRID", "status": "INVALID_TIMEFRAME", "allowed_timeframes": list(LIVE_TIMEFRAMES)}, 400)
     error = _error_response()
     if error:
         return error
