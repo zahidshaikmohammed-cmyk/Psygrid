@@ -51,6 +51,11 @@ def _normalize_ohlcv(row: dict) -> dict:
     }
 
 
+# Backward-compatible name for internal modules; it now emits OHLCV only.
+def normalize_candle(row: dict) -> dict:
+    return _normalize_ohlcv(row)
+
+
 def _completed_rows(rows: list[dict]) -> list[dict]:
     out = []
     for row in rows:
