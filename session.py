@@ -27,8 +27,10 @@ class SessionManager:
         self.thread: Optional[threading.Thread] = None
         self.history_thread: Optional[threading.Thread] = None
         self.htf_thread: Optional[threading.Thread] = None
+        self.htf_workers: dict[str, threading.Thread] = {}
         self._lock = threading.RLock()
         self._auth_refresh_lock = threading.Lock()
+        self._htf_slot_lock = threading.Lock()
         self._last_auth_refresh_epoch = 0.0
         self._started_for_date: Optional[str] = None
         self._auth_retry_at = 0.0
@@ -66,8 +68,12 @@ class SessionManager:
         if self.history_thread:
             self.history_thread.join(timeout=10)
             self.history_thread = None
+        for worker in list(self.htf_workers.values()):
+            if worker and worker is not threading.current_thread():
+                worker.join(timeout=10)
+        self.htf_workers.clear()
         if self.htf_thread:
-            self.htf_thread.join(timeout=10)
+            self.htf_thread.join(timeout=3)
             self.htf_thread = None
         self.state.reset()
         if self.thread and self.thread is not threading.current_thread():
@@ -135,6 +141,7 @@ class SessionManager:
                 return
             self.history_stop.clear()
             self._last_htf_refresh_slot.clear()
+            self.htf_workers.clear()
             self.state.begin(session_date, self.instruments)
             self.state.session_status = "AUTHENTICATING"
             self.state.set_feed_status("AUTHENTICATING")
@@ -273,27 +280,62 @@ class SessionManager:
                 except Exception:
                     pass
 
-    def _refresh_native_higher_timeframes(self) -> None:
-        """Maintain live native 5m/15m/1h data at completed candle boundaries."""
-        schedules = ((5, "5m"), (15, "15m"), (60, "1h"))
+    def _refresh_native_higher_timeframe_worker(self, interval: int, key: str) -> None:
+        """Refresh exactly one native timeframe on its own boundary clock.
+
+        The old implementation ran 5m -> 15m -> 1h in one serial loop. A slow
+        5m refresh therefore delayed the 15m and 1h clocks. Each timeframe now
+        owns an independent scheduler. The data source remains native Dhan;
+        no 1m aggregation or synthetic HTF candles are introduced.
+        """
         while not self.stop_event.is_set() and not self.history_stop.is_set():
             now = self.now()
             if not self.in_market(now):
-                break
+                return
             start_h, start_m = map(int, self.settings.market_start.split(":"))
             market_start = now.replace(hour=start_h, minute=start_m, second=0, microsecond=0)
             elapsed_minutes = int((now - market_start).total_seconds() // 60)
-            if elapsed_minutes < 5:
-                self.history_stop.wait(2.0)
+            if elapsed_minutes < interval:
+                self.history_stop.wait(1.0)
                 continue
 
-            for interval, key in schedules:
-                slot = elapsed_minutes // interval
-                if slot <= 0 or self._last_htf_refresh_slot.get(key, -1) >= slot:
-                    continue
-                self._last_htf_refresh_slot[key] = slot
+            slot = elapsed_minutes // interval
+            with self._htf_slot_lock:
+                last_slot = self._last_htf_refresh_slot.get(key, -1)
+                if slot <= last_slot:
+                    should_refresh = False
+                else:
+                    self._last_htf_refresh_slot[key] = slot
+                    should_refresh = True
+
+            if should_refresh:
                 self._refresh_native_interval(interval, key)
 
+            self.history_stop.wait(1.0)
+
+    def _refresh_native_higher_timeframes(self) -> None:
+        """Start independent native 5m/15m/1h schedulers.
+
+        This coordinator returns immediately; the three timeframe workers run
+        independently so one slow native refresh cannot block another timeframe.
+        """
+        schedules = ((5, "5m"), (15, "15m"), (60, "1h"))
+        for interval, key in schedules:
+            worker = self.htf_workers.get(key)
+            if worker and worker.is_alive():
+                continue
+            worker = threading.Thread(
+                target=self._refresh_native_higher_timeframe_worker,
+                args=(interval, key),
+                daemon=True,
+                name=f"psygrid-htf-{key}",
+            )
+            self.htf_workers[key] = worker
+            worker.start()
+
+        while not self.stop_event.is_set() and not self.history_stop.is_set():
+            if not self.in_market():
+                return
             self.history_stop.wait(2.0)
 
     def _end_session(self) -> None:
@@ -305,10 +347,14 @@ class SessionManager:
                 pass
             if self.history_thread:
                 self.history_thread.join(timeout=10)
-            if self.htf_thread:
-                self.htf_thread.join(timeout=10)
+            for worker in list(self.htf_workers.values()):
+                if worker and worker is not threading.current_thread():
+                    worker.join(timeout=10)
+            if self.htf_thread and self.htf_thread is not threading.current_thread():
+                self.htf_thread.join(timeout=3)
             self.history_thread = None
             self.htf_thread = None
+            self.htf_workers.clear()
             self.state.finalize_current()
             self.state.reset()
             self._started_for_date = None
