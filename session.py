@@ -100,8 +100,6 @@ class SessionManager:
                 for item in self.instruments:self.state.seed_cumulative_volume(item.security_id,int(snapshot.get(item.security_id,{}).get("volume",0) or 0))
             except Exception as exc:self.state.last_feed_error=f"snapshot:{exc}"
             self.feed.start()
-            # Start the native 5m/15m/1h clocks immediately. They must never wait
-            # behind the 1m bootstrap, otherwise the first HTF data can be minutes stale.
             self._start_htf_scheduler()
             self.history_thread=threading.Thread(target=self._load_1m_history,args=(now,),daemon=True,name="psygrid-live-candle-bootstrap"); self.history_thread.start()
 
@@ -130,13 +128,21 @@ class SessionManager:
         def refresh_one(item):
             if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():return
             try:
-                rows=self.dhan_api.load_today_completed_intraday(item,interval)
-                if rows:self.state.set_historical(item.security_id,key,rows)
+                rows=self.dhan_api.load_recent_completed_intraday(item,interval,4)
+                if rows:
+                    with self.state.lock:
+                        existing=[dict(c) for c in self.state.historical.get(item.security_id,{}).get(key,[])]
+                    merged={int(c["timestamp"]):c for c in existing}
+                    merged.update({int(c["timestamp"]):c for c in rows})
+                    self.state.set_historical(item.security_id,key,sorted(merged.values(),key=lambda c:int(c["timestamp"])))
             except Exception as exc:
                 if self._looks_like_auth_failure(exc):
                     try:
-                        self._refresh_auth_once(); rows=self.dhan_api.load_today_completed_intraday(item,interval)
-                        if rows:self.state.set_historical(item.security_id,key,rows)
+                        self._refresh_auth_once(); rows=self.dhan_api.load_recent_completed_intraday(item,interval,4)
+                        if rows:
+                            with self.state.lock: existing=[dict(c) for c in self.state.historical.get(item.security_id,{}).get(key,[])]
+                            merged={int(c["timestamp"]):c for c in existing}; merged.update({int(c["timestamp"]):c for c in rows})
+                            self.state.set_historical(item.security_id,key,sorted(merged.values(),key=lambda c:int(c["timestamp"])))
                         return
                     except Exception as retry_exc:exc=retry_exc
                 self.state.last_feed_error=f"history_refresh:{item.symbol}:{key}:{exc}"
