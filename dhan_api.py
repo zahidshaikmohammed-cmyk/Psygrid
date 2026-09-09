@@ -10,8 +10,6 @@ import requests
 
 BASE_URL = "https://api.dhan.co/v2"
 DATA_API_MIN_INTERVAL = 0.5
-# Dhan v2 release notes specify no per-second limit for minute/hourly
-# historical timeframes; retain 429 handling as the safety valve.
 INTRADAY_MIN_INTERVAL = 0.0
 
 
@@ -78,8 +76,7 @@ class DhanAPI:
                 data=response.json()
                 if isinstance(data,dict) and str(data.get("status","")).lower()=="failure":
                     raise RuntimeError(str(data))
-                if not isinstance(data,dict):
-                    raise RuntimeError("Dhan API returned a non-object response")
+                if not isinstance(data,dict): raise RuntimeError("Dhan API returned a non-object response")
                 return data
             except (requests.Timeout,requests.ConnectionError) as exc:
                 last_error=exc
@@ -134,33 +131,43 @@ class DhanAPI:
         payload={"securityId":item.security_id,"exchangeSegment":item.exchange_segment,"instrument":item.instrument,"interval":str(interval),"oi":False,"fromDate":from_dt.strftime("%Y-%m-%d %H:%M:%S"),"toDate":to_dt.strftime("%Y-%m-%d %H:%M:%S")}
         return self._candles_from_arrays(self._post("/charts/intraday",payload,minimum_interval=INTRADAY_MIN_INTERVAL))
 
-    def daily(self,item,from_date:datetime,to_date:datetime)->List[dict]:
-        payload={"securityId":item.security_id,"exchangeSegment":item.exchange_segment,"instrument":item.instrument,"expiryCode":0,"oi":False,"fromDate":from_date.strftime("%Y-%m-%d"),"toDate":to_date.strftime("%Y-%m-%d")}
-        return self._candles_from_arrays(self._post("/charts/historical",payload,minimum_interval=DATA_API_MIN_INTERVAL))
-
-    def load_intraday_window(self,item,interval:int,days:int)->tuple[List[dict],List[dict]]:
-        now=datetime.now(self.tz); start=now-timedelta(days=max(days,1)); rows=self.intraday(item,interval,start,now); today=now.date(); now_epoch=int(now.timestamp()); candle_seconds=interval*60
-        previous=[r for r in rows if datetime.fromtimestamp(r["timestamp"],self.tz).date()<today]
-        current=[r for r in rows if datetime.fromtimestamp(r["timestamp"],self.tz).date()==today and int(r["timestamp"])+candle_seconds<=now_epoch]
-        previous.sort(key=lambda r:r["timestamp"]); current.sort(key=lambda r:r["timestamp"]); return previous,current
+    def load_recent_completed_intraday(self,item,interval:int,lookback_intervals:int=4)->List[dict]:
+        """Fetch only a small recent native window for low-latency HTF refreshes."""
+        now=datetime.now(self.tz)
+        start=now-timedelta(minutes=max(1,int(interval))*max(2,int(lookback_intervals)))
+        rows=self.intraday(item,interval,start,now)
+        now_epoch=int(now.timestamp())
+        today=now.date()
+        completed=[r for r in rows if datetime.fromtimestamp(r["timestamp"],self.tz).date()==today and int(r["timestamp"])+int(interval)*60<=now_epoch]
+        completed.sort(key=lambda r:r["timestamp"])
+        return completed
 
     def load_today_completed_intraday(self,item,interval:int)->List[dict]:
         now=datetime.now(self.tz); start=now.replace(hour=9,minute=15,second=0,microsecond=0)
-        if now<=start: return []
+        if now<=start:return []
         rows=self.intraday(item,interval,start,now); now_epoch=int(now.timestamp()); today=now.date(); candle_seconds=interval*60
         completed=[r for r in rows if datetime.fromtimestamp(r["timestamp"],self.tz).date()==today and int(r["timestamp"])+candle_seconds<=now_epoch]
         completed.sort(key=lambda r:r["timestamp"]); return completed
 
+    def load_intraday_window(self,item,interval:int,days:int)->tuple[List[dict],List[dict]]:
+        now=datetime.now(self.tz); start=now-timedelta(days=max(days,1)); rows=self.intraday(item,interval,start,now); today=now.date(); now_epoch=int(now.timestamp()); candle_seconds=int(interval)*60
+        previous=[r for r in rows if datetime.fromtimestamp(r["timestamp"],self.tz).date()<today]
+        current=[r for r in rows if datetime.fromtimestamp(r["timestamp"],self.tz).date()==today and int(r["timestamp"])+candle_seconds<=now_epoch]
+        previous.sort(key=lambda r:r["timestamp"]); current.sort(key=lambda r:r["timestamp"]); return previous,current
+
     def load_previous_daily(self,item,lookback:int)->List[dict]:
         now=datetime.now(self.tz); warmup=max(self.settings.daily_indicator_warmup,self.settings.ma_period,self.settings.ema_period,self.settings.rsi_period+1); calendar_days=max((lookback+warmup)*2,90); rows=self.daily(item,now-timedelta(days=calendar_days),now); today=now.date(); rows=[r for r in rows if datetime.fromtimestamp(r["timestamp"],self.tz).date()<today]; rows.sort(key=lambda r:r["timestamp"]); return rows[-(lookback+warmup):]
 
+    def daily(self,item,from_date:datetime,to_date:datetime)->List[dict]:
+        payload={"securityId":item.security_id,"exchangeSegment":item.exchange_segment,"instrument":item.instrument,"expiryCode":0,"oi":False,"fromDate":from_date.strftime("%Y-%m-%d"),"toDate":to_date.strftime("%Y-%m-%d")}
+        return self._candles_from_arrays(self._post("/charts/historical",payload,minimum_interval=DATA_API_MIN_INTERVAL))
+
     def load_today_intraday(self,item,interval:int)->List[dict]:
         now=datetime.now(self.tz); start=now.replace(hour=9,minute=15,second=0,microsecond=0)
-        if now<start: return []
+        if now<start:return []
         rows=self.intraday(item,interval,start,now); today=now.date(); rows=[r for r in rows if datetime.fromtimestamp(r["timestamp"],self.tz).date()==today]; rows.sort(key=lambda r:r["timestamp"]); return rows
 
     def load_previous_intraday(self,item,interval:int,days:int)->List[dict]:
         now=datetime.now(self.tz); rows=self.intraday(item,interval,now-timedelta(days=max(days,1)),now); today=now.date(); rows=[r for r in rows if datetime.fromtimestamp(r["timestamp"],self.tz).date()<today]; rows.sort(key=lambda r:r["timestamp"]); return rows
 
-    def load_today_1m(self,item)->List[dict]:
-        return self.load_today_intraday(item,1)
+    def load_today_1m(self,item)->List[dict]: return self.load_today_intraday(item,1)
