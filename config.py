@@ -15,7 +15,7 @@ from instrument_master import fetch_nse_equity_security_ids
 # Psygrid is intentionally a fixed production configuration. Market-data
 # behavior must not change because a stale/leftover Render environment variable
 # is present from an earlier experiment.
-UNIVERSE_SIZE = 270
+UNIVERSE_SIZE = 360
 TIMEZONE = "Asia/Kolkata"
 MARKET_START = "09:15"
 MARKET_END = "15:15"
@@ -26,7 +26,7 @@ WEEKLY_LOOKBACK = 7
 MA_PERIOD = 9
 EMA_PERIOD = 20
 RSI_PERIOD = 14
-MAX_INSTRUMENTS = 270
+MAX_INSTRUMENTS = 360
 MAX_LIVE_AGE_SECONDS = 30
 
 
