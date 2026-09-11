@@ -30,22 +30,25 @@ class CandleStateTests(unittest.TestCase):
         )
         self.state.record_live_quote("123", ltt)
 
-    def test_first_quote_after_seed_creates_real_current_candle(self):
+    def test_first_quote_creates_real_current_candle_but_does_not_publish_active_candle(self):
         self._quote(1788234300)
-        rows = self.state.live_enriched("123")
-        self.assertEqual(len(rows), 1)
-        self.assertFalse(rows[0]["complete"])
-        self.assertEqual(rows[0]["open"], 100.0)
-        self.assertEqual(rows[0]["volume"], 1)
+        self.assertIsNotNone(self.state.current_1m["123"])
+        self.assertEqual(len(self.state.live_candles["123"]), 0)
+        self.assertEqual(self.state.current_1m["123"]["open"], 100.0)
+        self.assertEqual(self.state.current_1m["123"]["volume"], 1)
+        self.assertEqual(self.state.live_enriched("123"), [])
 
     def test_new_minute_completes_previous_without_gap_fill(self):
         self._quote(1788234300, 100.0, 1001)
         self._quote(1788234365, 101.0, 1002)
+        self.assertEqual(len(self.state.live_candles["123"]), 1)
+        self.assertTrue(self.state.live_candles["123"][0]["complete"])
+        self.assertIsNotNone(self.state.current_1m["123"])
+        self.assertEqual(self.state.current_1m["123"]["complete"], False)
         rows = self.state.live_enriched("123")
-        self.assertEqual(len(rows), 2)
+        self.assertEqual(len(rows), 1)
         self.assertTrue(rows[0]["complete"])
-        self.assertFalse(rows[1]["complete"])
-        self.assertEqual([r["volume"] for r in rows], [1, 1])
+        self.assertEqual(rows[0]["volume"], 1)
 
     def test_raw_tick_ring_is_flushed_when_minute_closes(self):
         self._quote(1788234301, 100.0, 1001)
@@ -67,10 +70,10 @@ class CandleStateTests(unittest.TestCase):
     def test_negative_cumulative_volume_reset_is_not_converted_to_fake_volume(self):
         self._quote(1788234300, 100.0, 1001)
         self._quote(1788234360, 100.0, 10)
-        rows = self.state.live_enriched("123")
-        self.assertEqual(len(rows), 2)
-        self.assertEqual(rows[0]["volume"], 1)
-        self.assertEqual(rows[1]["volume"], 0)
+        self.assertEqual(len(self.state.live_candles["123"]), 1)
+        self.assertEqual(self.state.live_candles["123"][0]["volume"], 1)
+        self.assertIsNotNone(self.state.current_1m["123"])
+        self.assertEqual(self.state.current_1m["123"]["volume"], 0)
 
     def test_freshness_turns_stale_after_thirty_seconds(self):
         self._quote(1788234300)
