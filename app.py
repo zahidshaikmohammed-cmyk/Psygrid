@@ -145,11 +145,11 @@ def public_live() -> Response:
     return json_response(market_live_json(state))
 
 
-def _public_live_range(start: int, end: int) -> Response:
+def _public_live_range(start: int, end: int, preserve_instrument_order: bool = False) -> Response:
     error = _error_response()
     if error:
         return error
-    return json_response(market_live_json(state, (start, end)))
+    return json_response(market_live_json(state, (start, end), preserve_instrument_order))
 
 
 @app.get("/public/live-a.json", response_class=Response)
@@ -184,12 +184,12 @@ def public_live_f() -> Response:
 
 @app.get("/public/live-g.json", response_class=Response)
 def public_live_g() -> Response:
-    return _public_live_range(270, 315)
+    return _public_live_range(270, 315, True)
 
 
 @app.get("/public/live-h.json", response_class=Response)
 def public_live_h() -> Response:
-    return _public_live_range(315, 360)
+    return _public_live_range(315, 360, True)
 
 
 @app.get("/public/live-01.json", response_class=Response)
