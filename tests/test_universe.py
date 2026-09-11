@@ -4,12 +4,12 @@ from pathlib import Path
 
 
 class UniverseTests(unittest.TestCase):
-    def test_exactly_360_unique_symbols(self):
+    def test_exactly_450_unique_symbols(self):
         path = Path(__file__).resolve().parents[1] / "stocks.json"
         payload = json.loads(path.read_text(encoding="utf-8"))
         symbols = payload["symbols"]
-        self.assertEqual(len(symbols), 360)
-        self.assertEqual(len(set(symbols)), 360)
+        self.assertEqual(len(symbols), 450)
+        self.assertEqual(len(set(symbols)), 450)
         self.assertEqual(payload["exchange"], "NSE")
         self.assertEqual(payload["instrument"], "EQUITY")
 
