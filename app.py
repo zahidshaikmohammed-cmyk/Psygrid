@@ -90,7 +90,7 @@ def root() -> Response:
         "data_source": "DHAN",
         "synthetic_candles": False,
         "storage": "RAM_ONLY",
-        "universe_size": 360,
+        "universe_size": 450,
         "live_endpoint": "/public/live.json",
         "live_endpoints": [
             "/public/live-a.json",
@@ -101,6 +101,8 @@ def root() -> Response:
             "/public/live-f.json",
             "/public/live-g.json",
             "/public/live-h.json",
+            "/public/live-i.json",
+            "/public/live-j.json",
             "/public/live-01.json",
             "/public/live-02.json",
             "/public/live-03.json",
@@ -129,9 +131,9 @@ def ready() -> Response:
     ready_now = bool(
         snap.get("session_status") == "LIVE"
         and snap.get("feed_status") == "CONNECTED"
-        and expected == 360
-        and snap.get("subscribed_count") == 360
-        and snap.get("live_stock_count") == 360
+        and expected == 450
+        and snap.get("subscribed_count") == 450
+        and snap.get("live_stock_count") == 450
         and snap.get("stream_health") == "FULL_LIVE"
     )
     return json_response({"service": "PSYGRID", "ready": ready_now, **snap}, 200 if ready_now else 503)
@@ -190,6 +192,16 @@ def public_live_g() -> Response:
 @app.get("/public/live-h.json", response_class=Response)
 def public_live_h() -> Response:
     return _public_live_range(315, 360, True)
+
+
+@app.get("/public/live-i.json", response_class=Response)
+def public_live_i() -> Response:
+    return _public_live_range(360, 405, True)
+
+
+@app.get("/public/live-j.json", response_class=Response)
+def public_live_j() -> Response:
+    return _public_live_range(405, 450, True)
 
 
 @app.get("/public/live-01.json", response_class=Response)
