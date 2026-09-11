@@ -85,6 +85,38 @@ def _timeframe_rows(state, security_id: str, timeframe: str) -> list[dict]:
     return _completed_rows(rows)
 
 
+def _historical_payload(state, security_id: str, timeframe: str) -> dict:
+    """Compatibility helper for historical-candle callers/tests.
+
+    Weekly candles are deliberately unavailable because Psygrid only exposes
+    native Dhan historical timeframes that are supported by the public API.
+    No weekly candles are synthesized.
+    """
+    if timeframe == "1w":
+        return {
+            "status": "UNAVAILABLE_NATIVE_DHAN_WEEKLY_CANDLE",
+            "synthetic_candles": False,
+            "timeframe": timeframe,
+            "security_id": security_id,
+            "candles": [],
+        }
+    if timeframe not in LIVE_TIMEFRAMES:
+        return {
+            "status": "INVALID_TIMEFRAME",
+            "synthetic_candles": False,
+            "timeframe": timeframe,
+            "security_id": security_id,
+            "candles": [],
+        }
+    return {
+        "status": "OK",
+        "synthetic_candles": False,
+        "timeframe": timeframe,
+        "security_id": security_id,
+        "candles": [_normalize_ohlcv(row) for row in _timeframe_rows(state, security_id, timeframe)],
+    }
+
+
 def _stock_payload(state, security_id: str, meta: dict) -> dict:
     with state.lock:
         ltp = state.last_ltp_by_security.get(security_id)
