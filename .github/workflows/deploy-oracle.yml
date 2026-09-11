@@ -1,0 +1,67 @@
+name: Psygrid Deploy to Oracle
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: psygrid-production
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest
+
+      - name: Compile Python
+        run: python -m compileall -q .
+
+      - name: Run tests
+        run: pytest -q
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Deploy to Oracle
+        env:
+          ORACLE_SSH_KEY: ${{ secrets.ORACLE_SSH_KEY }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$ORACLE_SSH_KEY" > ~/.ssh/psygrid_oracle
+          chmod 600 ~/.ssh/psygrid_oracle
+
+          ssh-keyscan -H 140.245.226.102 >> ~/.ssh/known_hosts
+
+          ssh -i ~/.ssh/psygrid_oracle ubuntu@140.245.226.102 <<'REMOTE'
+          set -euo pipefail
+
+          cd /home/ubuntu/Psygrid
+
+          git fetch origin main
+          git reset --hard origin/main
+
+          /home/ubuntu/Psygrid/.venv/bin/pip install -r requirements.txt
+          /home/ubuntu/Psygrid/.venv/bin/python -m py_compile app.py
+
+          sudo systemctl restart psygrid
+          sleep 3
+
+          curl -fsS http://127.0.0.1:10000/health
+          echo
+          REMOTE
