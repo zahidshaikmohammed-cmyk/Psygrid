@@ -22,8 +22,8 @@ class HardeningTests(unittest.TestCase):
             for i in range(20)
         ]
         enriched = enrich(rows, 9, 20, 14)
-        self.assertIsNone(enriched[7]["ma9"])
-        self.assertIsNotNone(enriched[8]["ma9"])
+        self.assertIsNone(enriched[7]["ema9"])
+        self.assertIsNotNone(enriched[8]["ema9"])
         self.assertIsNotNone(enriched[19]["ema20"])
         self.assertIsNotNone(enriched[14]["rsi14"])
 
