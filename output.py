@@ -145,9 +145,15 @@ def _session_payload(state) -> dict:
     }
 
 
-def market_live_json(state, stock_range: Optional[tuple[int, int]] = None) -> dict:
+def market_live_json(
+    state,
+    stock_range: Optional[tuple[int, int]] = None,
+    preserve_instrument_order: bool = False,
+) -> dict:
     with state.lock:
-        items = sorted(state.instruments.items(), key=lambda item: item[1]["symbol"])
+        items = list(state.instruments.items())
+        if not preserve_instrument_order:
+            items.sort(key=lambda item: item[1]["symbol"])
         if stock_range is not None:
             start, end = stock_range
             items = items[start:end]
