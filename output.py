@@ -166,6 +166,7 @@ def market_live_json(
         "service": "PSYGRID",
         "schema_version": "3.0",
         "session": _session_payload(state),
+        "universe_size": 450,
         "stock_count": len(stocks),
         "timeframes": list(LIVE_TIMEFRAMES),
         "candle_source": {
