@@ -103,3 +103,7 @@ Start command:
 `python app.py`
 
 Render environment variables supply the Dhan client ID and the daily-rotated access token. No market-data persistence service is required.
+
+## Deployment
+
+GitHub Actions automatically tests and deploys the `main` branch to the Oracle production VM.
