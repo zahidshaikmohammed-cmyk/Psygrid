@@ -11,6 +11,7 @@ from starlette.middleware.gzip import GZipMiddleware
 from config import load_instruments, load_settings
 from dhan_api import DhanAPI
 from feed_runtime import LiveFeed
+from nifty import NiftyManager, nifty_json
 from output import LIVE_TIMEFRAMES, market_live_json, stock_json
 from session import SessionManager
 from state_runtime import RuntimeFreshnessState
@@ -19,11 +20,12 @@ from state_runtime import RuntimeFreshnessState
 settings = None
 state = None
 manager = None
+nifty_manager = None
 config_error = ""
 
 
 def startup() -> None:
-    global settings, state, manager, config_error
+    global settings, state, manager, nifty_manager, config_error
     config_error = ""
     try:
         settings = load_settings()
@@ -37,12 +39,22 @@ def startup() -> None:
         feed = LiveFeed(settings, state, instruments)
         manager = SessionManager(settings, state, dhan_api, feed, instruments)
         manager.start()
+        # NIFTY is intentionally isolated from the 450-stock state. It gets its
+        # own IDX_I WebSocket subscription and native Dhan historical candles.
+        try:
+            nifty_manager = NiftyManager(settings, dhan_api)
+            nifty_manager.start()
+        except Exception:
+            nifty_manager = None
     except Exception as exc:
         config_error = str(exc)
 
 
 def shutdown() -> None:
-    global manager
+    global manager, nifty_manager
+    if nifty_manager is not None:
+        nifty_manager.stop()
+        nifty_manager = None
     if manager is not None:
         manager.stop()
         manager = None
@@ -109,6 +121,7 @@ def root() -> Response:
             "/public/live-04.json",
             "/public/live-05.json",
             "/public/live-06.json",
+            "/public/nifty.json",
             "/public/stock/{symbol}.json",
             "/public/stock/{symbol}/{timeframe}.json",
         ],
@@ -232,6 +245,20 @@ def public_live_05() -> Response:
 @app.get("/public/live-06.json", response_class=Response)
 def public_live_06() -> Response:
     return _public_live_range(75, 90)
+
+
+@app.get("/public/nifty.json", response_class=Response)
+def public_nifty() -> Response:
+    error = _error_response()
+    if error:
+        return error
+    if nifty_manager is None:
+        return json_response({
+            "service": "PSYGRID",
+            "symbol": "NIFTY",
+            "status": "NIFTY_UNAVAILABLE",
+        }, 503)
+    return json_response(nifty_json(nifty_manager.state))
 
 
 @app.get("/public/stock/{symbol}.json", response_class=Response)
