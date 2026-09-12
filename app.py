@@ -8,6 +8,7 @@ import uvicorn
 from fastapi import FastAPI, Response
 from starlette.middleware.gzip import GZipMiddleware
 
+from banknifty import BankNiftyManager, banknifty_json
 from config import load_instruments, load_settings
 from dhan_api import DhanAPI
 from feed_runtime import LiveFeed
@@ -21,11 +22,12 @@ settings = None
 state = None
 manager = None
 nifty_manager = None
+banknifty_manager = None
 config_error = ""
 
 
 def startup() -> None:
-    global settings, state, manager, nifty_manager, config_error
+    global settings, state, manager, nifty_manager, banknifty_manager, config_error
     config_error = ""
     try:
         settings = load_settings()
@@ -39,19 +41,27 @@ def startup() -> None:
         feed = LiveFeed(settings, state, instruments)
         manager = SessionManager(settings, state, dhan_api, feed, instruments)
         manager.start()
-        # NIFTY is intentionally isolated from the 450-stock state. It gets its
-        # own IDX_I WebSocket subscription and native Dhan historical candles.
+        # Index feeds are isolated from the 450-stock state. Each gets its own
+        # IDX_I WebSocket subscription and native Dhan historical candles.
         try:
             nifty_manager = NiftyManager(settings, dhan_api)
             nifty_manager.start()
         except Exception:
             nifty_manager = None
+        try:
+            banknifty_manager = BankNiftyManager(settings, dhan_api)
+            banknifty_manager.start()
+        except Exception:
+            banknifty_manager = None
     except Exception as exc:
         config_error = str(exc)
 
 
 def shutdown() -> None:
-    global manager, nifty_manager
+    global manager, nifty_manager, banknifty_manager
+    if banknifty_manager is not None:
+        banknifty_manager.stop()
+        banknifty_manager = None
     if nifty_manager is not None:
         nifty_manager.stop()
         nifty_manager = None
@@ -122,6 +132,7 @@ def root() -> Response:
             "/public/live-05.json",
             "/public/live-06.json",
             "/public/nifty.json",
+            "/public/banknifty.json",
             "/public/stock/{symbol}.json",
             "/public/stock/{symbol}/{timeframe}.json",
         ],
@@ -259,6 +270,20 @@ def public_nifty() -> Response:
             "status": "NIFTY_UNAVAILABLE",
         }, 503)
     return json_response(nifty_json(nifty_manager.state))
+
+
+@app.get("/public/banknifty.json", response_class=Response)
+def public_banknifty() -> Response:
+    error = _error_response()
+    if error:
+        return error
+    if banknifty_manager is None:
+        return json_response({
+            "service": "PSYGRID",
+            "symbol": "BANKNIFTY",
+            "status": "BANKNIFTY_UNAVAILABLE",
+        }, 503)
+    return json_response(banknifty_json(banknifty_manager.state))
 
 
 @app.get("/public/stock/{symbol}.json", response_class=Response)
