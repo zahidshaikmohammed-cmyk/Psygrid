@@ -17,9 +17,9 @@ class NiftySmallcap100EndpointTests(unittest.TestCase):
         state.session_status = "LIVE"
         state.last_ltp = 25000.0
         state.last_ltt = 1757667600
-        payload = niftysmallcap100_json(state, "17")
+        payload = niftysmallcap100_json(state, "TEST-ID")
         self.assertEqual(payload["symbol"], NIFTYSMALLCAP100_SYMBOL)
-        self.assertEqual(payload["security_id"], "17")
+        self.assertEqual(payload["security_id"], "TEST-ID")
         self.assertEqual(payload["exchange_segment"], NIFTYSMALLCAP100_EXCHANGE_SEGMENT)
         self.assertEqual(payload["instrument"], NIFTYSMALLCAP100_INSTRUMENT)
         self.assertEqual(payload["timeframes"], ["1m", "5m", "15m", "1h"])
