@@ -14,6 +14,7 @@ from dhan_api import DhanAPI
 from feed_runtime import LiveFeed
 from nifty import NiftyManager, nifty_json
 from output import LIVE_TIMEFRAMES, market_live_json, stock_json
+from sensex import SensexManager, sensex_json
 from session import SessionManager
 from state_runtime import RuntimeFreshnessState
 
@@ -23,11 +24,12 @@ state = None
 manager = None
 nifty_manager = None
 banknifty_manager = None
+sensex_manager = None
 config_error = ""
 
 
 def startup() -> None:
-    global settings, state, manager, nifty_manager, banknifty_manager, config_error
+    global settings, state, manager, nifty_manager, banknifty_manager, sensex_manager, config_error
     config_error = ""
     try:
         settings = load_settings()
@@ -53,12 +55,20 @@ def startup() -> None:
             banknifty_manager.start()
         except Exception:
             banknifty_manager = None
+        try:
+            sensex_manager = SensexManager(settings, dhan_api)
+            sensex_manager.start()
+        except Exception:
+            sensex_manager = None
     except Exception as exc:
         config_error = str(exc)
 
 
 def shutdown() -> None:
-    global manager, nifty_manager, banknifty_manager
+    global manager, nifty_manager, banknifty_manager, sensex_manager
+    if sensex_manager is not None:
+        sensex_manager.stop()
+        sensex_manager = None
     if banknifty_manager is not None:
         banknifty_manager.stop()
         banknifty_manager = None
@@ -133,6 +143,7 @@ def root() -> Response:
             "/public/live-06.json",
             "/public/nifty.json",
             "/public/banknifty.json",
+            "/public/sensex.json",
             "/public/stock/{symbol}.json",
             "/public/stock/{symbol}/{timeframe}.json",
         ],
@@ -284,6 +295,20 @@ def public_banknifty() -> Response:
             "status": "BANKNIFTY_UNAVAILABLE",
         }, 503)
     return json_response(banknifty_json(banknifty_manager.state))
+
+
+@app.get("/public/sensex.json", response_class=Response)
+def public_sensex() -> Response:
+    error = _error_response()
+    if error:
+        return error
+    if sensex_manager is None:
+        return json_response({
+            "service": "PSYGRID",
+            "symbol": "SENSEX",
+            "status": "SENSEX_UNAVAILABLE",
+        }, 503)
+    return json_response(sensex_json(sensex_manager.state))
 
 
 @app.get("/public/stock/{symbol}.json", response_class=Response)
