@@ -15,6 +15,7 @@ from feed_runtime import LiveFeed
 from nifty import NiftyManager, nifty_json
 from nifty500 import Nifty500Manager, nifty500_json
 from niftymidcap100 import NiftyMidcap100Manager, niftymidcap100_json
+from niftysmallcap100 import NiftySmallcap100Manager, niftysmallcap100_json
 from output import LIVE_TIMEFRAMES, market_live_json, stock_json
 from sensex import SensexManager, sensex_json
 from session import SessionManager
@@ -29,11 +30,12 @@ banknifty_manager = None
 sensex_manager = None
 nifty500_manager = None
 niftymidcap100_manager = None
+niftysmallcap100_manager = None
 config_error = ""
 
 
 def startup() -> None:
-    global settings, state, manager, nifty_manager, banknifty_manager, sensex_manager, nifty500_manager, niftymidcap100_manager, config_error
+    global settings, state, manager, nifty_manager, banknifty_manager, sensex_manager, nifty500_manager, niftymidcap100_manager, niftysmallcap100_manager, config_error
     config_error = ""
     try:
         settings = load_settings()
@@ -74,12 +76,20 @@ def startup() -> None:
             niftymidcap100_manager.start()
         except Exception:
             niftymidcap100_manager = None
+        try:
+            niftysmallcap100_manager = NiftySmallcap100Manager(settings, dhan_api)
+            niftysmallcap100_manager.start()
+        except Exception:
+            niftysmallcap100_manager = None
     except Exception as exc:
         config_error = str(exc)
 
 
 def shutdown() -> None:
-    global manager, nifty_manager, banknifty_manager, sensex_manager, nifty500_manager, niftymidcap100_manager
+    global manager, nifty_manager, banknifty_manager, sensex_manager, nifty500_manager, niftymidcap100_manager, niftysmallcap100_manager
+    if niftysmallcap100_manager is not None:
+        niftysmallcap100_manager.stop()
+        niftysmallcap100_manager = None
     if niftymidcap100_manager is not None:
         niftymidcap100_manager.stop()
         niftymidcap100_manager = None
@@ -152,6 +162,7 @@ def root() -> Response:
             "/public/live-03.json", "/public/live-04.json", "/public/live-05.json",
             "/public/live-06.json", "/public/nifty.json", "/public/banknifty.json",
             "/public/sensex.json", "/public/nifty500.json", "/public/niftymidcap100.json",
+            "/public/niftysmallcap100.json",
             "/public/stock/{symbol}.json", "/public/stock/{symbol}/{timeframe}.json",
         ],
         "live_timeframes": list(LIVE_TIMEFRAMES),
@@ -327,6 +338,21 @@ def public_niftymidcap100() -> Response:
         niftymidcap100_json(
             niftymidcap100_manager.state,
             niftymidcap100_manager.instrument.security_id,
+        )
+    )
+
+
+@app.get("/public/niftysmallcap100.json", response_class=Response)
+def public_niftysmallcap100() -> Response:
+    error = _error_response()
+    if error:
+        return error
+    if niftysmallcap100_manager is None:
+        return json_response({"service": "PSYGRID", "symbol": "NIFTY_SMALLCAP_100", "status": "NIFTYSMALLCAP100_UNAVAILABLE"}, 503)
+    return json_response(
+        niftysmallcap100_json(
+            niftysmallcap100_manager.state,
+            niftysmallcap100_manager.instrument.security_id,
         )
     )
 
