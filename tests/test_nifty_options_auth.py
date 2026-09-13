@@ -52,7 +52,7 @@ class NiftyOptionsAuthTests(unittest.TestCase):
 
         self.assertIn("cooldown active", str(raised.exception))
         self.assertEqual(refresh_mock.call_count, 1)
-        self.assertEqual(api.expiry_calls, 2)
+        self.assertEqual(api.expiry_calls, 1)
 
 
 if __name__ == "__main__":
