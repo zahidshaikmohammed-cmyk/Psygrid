@@ -18,14 +18,14 @@ class NiftyOptionsTests(unittest.TestCase):
         state.set_snapshot(
             {
                 "last_price": 25000.0,
-                "oc": _normalize_chain(
-                    {
+                "oc": _normalize_chain({
+                    "oc": {
                         "25000.000000": {
                             "ce": {"last_price": 120.0, "oi": 1000, "volume": 2000, "security_id": 101},
                             "pe": {"last_price": 110.0, "oi": 900, "volume": 1800, "security_id": 102},
                         }
                     }
-                ),
+                }),
             },
             ["2026-09-17", "2026-09-24"],
             "2026-09-17",
