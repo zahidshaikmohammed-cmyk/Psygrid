@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import List
 
 from dhan_auth import generate_access_token, token_from_environment
+from dhan_auth import refresh_access_token as coordinated_refresh_access_token
 from instrument_master import fetch_nse_equity_security_ids
 
 
@@ -141,7 +142,4 @@ def refresh_access_token(settings: Settings, force: bool = False) -> None:
         if settings.access_token and not force:
             return
         raise RuntimeError("No usable Dhan access token or TOTP credentials configured")
-    token, expiry = generate_access_token(settings.client_id, pin, totp_secret)
-    settings.access_token = token
-    settings.token_expiry = expiry
-    settings.token_source = "AUTO_GENERATED_TOTP"
+    coordinated_refresh_access_token(settings, force=True)
