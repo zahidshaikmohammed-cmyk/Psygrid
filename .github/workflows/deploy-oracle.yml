@@ -61,15 +61,19 @@ jobs:
 
           sudo systemctl restart psygrid
 
+          health_ok=0
           for attempt in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:10000/health; then
               echo
-              exit 0
+              health_ok=1
+              break
             fi
             sleep 2
           done
 
-          echo "Psygrid health check failed after 60 seconds" >&2
-          sudo systemctl status psygrid --no-pager || true
-          exit 1
+          if [ "$health_ok" -ne 1 ]; then
+            echo "Psygrid health check failed after 60 seconds" >&2
+            sudo systemctl status psygrid --no-pager || true
+            exit 1
+          fi
           REMOTE
