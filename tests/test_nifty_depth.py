@@ -20,7 +20,7 @@ class NiftyDepthTests(unittest.TestCase):
 
     def test_selects_nearest_25_strikes_and_both_sides(self):
         strikes = []
-        for strike in range(23000, 24001, 50):
+        for strike in range(22900, 24101, 50):
             strikes.append({
                 "strike": float(strike),
                 "ce": {"security_id": str(100000 + strike)},
@@ -41,7 +41,7 @@ class NiftyDepthTests(unittest.TestCase):
         contracts = [NiftyDepthContract("49081", 23500.0, "CE", "2026-09-17")]
         state.set_contracts(contracts, "2026-09-17")
         state.update_depth("49081", "bid", [{"level": 1, "price": 100.0, "quantity": 500, "orders": 3}])
-        state.update_quotes("49081" if False else {"49081": {"last_price": 101.0, "volume": 1234, "oi": 5678}})
+        state.update_quotes({"49081": {"last_price": 101.0, "volume": 1234, "oi": 5678}})
         payload = state.snapshot()
         self.assertEqual(payload["storage"], "RAM_ONLY")
         self.assertFalse(payload["synthetic_data"])
