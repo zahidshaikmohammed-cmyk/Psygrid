@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+from zoneinfo import ZoneInfo
 
 from feed import LiveFeed
 from indicators import ema, rsi, sma, vwap
@@ -7,12 +8,12 @@ from output import _historical_payload
 from state import PsygridState
 
 
-def test_dhan_ltt_accepts_sdk_utc_time_string():
-    expected_dt = datetime.now(timezone.utc).replace(microsecond=0) - timedelta(seconds=60)
+def test_dhan_ltt_accepts_exchange_wall_clock_time_string():
+    expected_dt = datetime.now(ZoneInfo("Asia/Kolkata")).replace(microsecond=0) - timedelta(seconds=60)
     text = expected_dt.strftime("%H:%M:%S")
     epoch = LiveFeed._parse_ltt(text)
     assert epoch is not None
-    assert datetime.fromtimestamp(epoch, timezone.utc).strftime("%H:%M:%S") == text
+    assert datetime.fromtimestamp(epoch, ZoneInfo("Asia/Kolkata")).strftime("%H:%M:%S") == text
 
 
 def test_dhan_ltt_accepts_epoch():
