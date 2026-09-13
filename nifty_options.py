@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, time as datetime_time
 from dataclasses import dataclass
 from zoneinfo import ZoneInfo
 
@@ -16,6 +16,8 @@ NIFTY_OPTIONS_EXCHANGE_SEGMENT = "IDX_I"
 NIFTY_OPTIONS_INSTRUMENT = "INDEX"
 OPTION_CHAIN_REFRESH_SECONDS = 3.2
 EXPIRY_REFRESH_SECONDS = 1800.0
+NIFTY_MARKET_OPEN = datetime_time(9, 15)
+NIFTY_MARKET_CLOSE = datetime_time(15, 30)
 
 
 @dataclass(frozen=True)
@@ -60,10 +62,14 @@ class NiftyOptionsState:
 
     def snapshot(self) -> dict:
         with self.lock:
+            now = datetime.now(self.tz)
+            market_open = _is_market_open(now)
             return {
                 "service": "PSYGRID",
                 "symbol": NIFTY_OPTIONS_SYMBOL,
                 "status": self.status,
+                "market_status": "OPEN" if market_open else "CLOSED",
+                "market_open": market_open,
                 "data_source": "DHAN_OPTION_CHAIN_API",
                 "security_id": NIFTY_OPTIONS_SECURITY_ID,
                 "exchange_segment": NIFTY_OPTIONS_EXCHANGE_SEGMENT,
@@ -79,6 +85,11 @@ class NiftyOptionsState:
                 "refresh_seconds": OPTION_CHAIN_REFRESH_SECONDS,
                 **({"error": self.last_error} if self.last_error else {}),
             }
+
+
+def _is_market_open(now: datetime) -> bool:
+    """Return regular NIFTY session status in the configured timezone."""
+    return now.weekday() < 5 and NIFTY_MARKET_OPEN <= now.time() < NIFTY_MARKET_CLOSE
 
 
 def _normalize_chain(raw: dict) -> list[dict]:
