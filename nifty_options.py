@@ -133,6 +133,10 @@ class NiftyOptionsManager:
         return any(token in text for token in ("401", "807", "808", "809", "810", "expired", "invalid token", "authentication failed", "unauthorized"))
 
     def _call_with_auth_retry(self, operation):
+        now = time.monotonic()
+        with self._auth_lock:
+            if now < self._auth_retry_at:
+                raise RuntimeError(f"Dhan authentication refresh cooldown active: {int(self._auth_retry_at - now)}s")
         try:
             return operation()
         except Exception as first_exc:
