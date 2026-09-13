@@ -11,6 +11,7 @@ import requests
 BASE_URL = "https://api.dhan.co/v2"
 DATA_API_MIN_INTERVAL = 0.5
 INTRADAY_MIN_INTERVAL = 0.0
+OPTION_CHAIN_MIN_INTERVAL = 3.0
 
 
 class DhanAPI:
@@ -86,6 +87,26 @@ class DhanAPI:
             except requests.HTTPError as exc:
                 raise RuntimeError(f"Dhan API HTTP error: {exc}") from exc
         raise RuntimeError(f"Dhan API failed: {last_error}")
+
+    def option_expiry_list(self, item) -> list[str]:
+        raw = self._post(
+            "/optionchain/expirylist",
+            {"UnderlyingScrip": int(item.security_id), "UnderlyingSeg": item.exchange_segment},
+            include_client_id=True,
+            minimum_interval=OPTION_CHAIN_MIN_INTERVAL,
+        )
+        data = raw.get("data")
+        if not isinstance(data, list):
+            raise RuntimeError("DHAN_OPTION_EXPIRY_LIST_INVALID")
+        return [str(value).strip() for value in data if str(value).strip()]
+
+    def option_chain(self, item, expiry: str) -> dict:
+        return self._post(
+            "/optionchain",
+            {"UnderlyingScrip": int(item.security_id), "UnderlyingSeg": item.exchange_segment, "Expiry": str(expiry)},
+            include_client_id=True,
+            minimum_interval=OPTION_CHAIN_MIN_INTERVAL,
+        )
 
     def profile(self) -> dict:
         response=self.session.get(BASE_URL+"/profile",headers={"Accept":"application/json","access-token":self.settings.access_token},timeout=20)
