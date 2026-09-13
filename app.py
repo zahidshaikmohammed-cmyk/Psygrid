@@ -25,6 +25,7 @@ from niftymetal import NiftyMetalManager, niftymetal_json
 from niftyfmcg import NiftyFmcgManager, niftyfmcg_json
 from niftyrealty import NiftyRealtyManager, niftyrealty_json
 from niftyenergy import NiftyEnergyManager, niftyenergy_json
+from niftyinfra import NiftyInfraManager, niftyinfra_json
 from output import LIVE_TIMEFRAMES, market_live_json, stock_json
 from sensex import SensexManager, sensex_json
 from session import SessionManager
@@ -32,12 +33,12 @@ from state_runtime import RuntimeFreshnessState
 
 settings = state = manager = nifty_manager = banknifty_manager = sensex_manager = None
 nifty500_manager = niftymidcap100_manager = niftysmallcap100_manager = finnifty_manager = None
-indiavix_manager = niftyit_manager = niftyauto_manager = niftypharma_manager = niftymetal_manager = niftyfmcg_manager = niftyrealty_manager = niftyenergy_manager = None
+indiavix_manager = niftyit_manager = niftyauto_manager = niftypharma_manager = niftymetal_manager = niftyfmcg_manager = niftyrealty_manager = niftyenergy_manager = niftyinfra_manager = None
 config_error = ""
 
 
 def startup() -> None:
-    global settings, state, manager, nifty_manager, banknifty_manager, sensex_manager, nifty500_manager, niftymidcap100_manager, niftysmallcap100_manager, finnifty_manager, indiavix_manager, niftyit_manager, niftyauto_manager, niftypharma_manager, niftymetal_manager, niftyfmcg_manager, niftyrealty_manager, niftyenergy_manager, config_error
+    global settings, state, manager, nifty_manager, banknifty_manager, sensex_manager, nifty500_manager, niftymidcap100_manager, niftysmallcap100_manager, finnifty_manager, indiavix_manager, niftyit_manager, niftyauto_manager, niftypharma_manager, niftymetal_manager, niftyfmcg_manager, niftyrealty_manager, niftyenergy_manager, niftyinfra_manager, config_error
     config_error = ""
     try:
         settings = load_settings(); instruments = load_instruments()
@@ -45,7 +46,7 @@ def startup() -> None:
             raise RuntimeError(f"Universe integrity failure: expected {settings.max_instruments}, got {len(instruments)}")
         state = RuntimeFreshnessState(settings); dhan_api = DhanAPI(settings)
         manager = SessionManager(settings, state, dhan_api, LiveFeed(settings, state, instruments), instruments); manager.start()
-        managers = [("nifty_manager", NiftyManager), ("banknifty_manager", BankNiftyManager), ("sensex_manager", SensexManager), ("nifty500_manager", Nifty500Manager), ("niftymidcap100_manager", NiftyMidcap100Manager), ("niftysmallcap100_manager", NiftySmallcap100Manager), ("finnifty_manager", FinNiftyManager), ("indiavix_manager", IndiaVixManager), ("niftyit_manager", NiftyItManager), ("niftyauto_manager", NiftyAutoManager), ("niftypharma_manager", NiftyPharmaManager), ("niftymetal_manager", NiftyMetalManager), ("niftyfmcg_manager", NiftyFmcgManager), ("niftyrealty_manager", NiftyRealtyManager), ("niftyenergy_manager", NiftyEnergyManager)]
+        managers = [("nifty_manager", NiftyManager), ("banknifty_manager", BankNiftyManager), ("sensex_manager", SensexManager), ("nifty500_manager", Nifty500Manager), ("niftymidcap100_manager", NiftyMidcap100Manager), ("niftysmallcap100_manager", NiftySmallcap100Manager), ("finnifty_manager", FinNiftyManager), ("indiavix_manager", IndiaVixManager), ("niftyit_manager", NiftyItManager), ("niftyauto_manager", NiftyAutoManager), ("niftypharma_manager", NiftyPharmaManager), ("niftymetal_manager", NiftyMetalManager), ("niftyfmcg_manager", NiftyFmcgManager), ("niftyrealty_manager", NiftyRealtyManager), ("niftyenergy_manager", NiftyEnergyManager), ("niftyinfra_manager", NiftyInfraManager)]
         for name, cls in managers:
             try:
                 obj = cls(settings, dhan_api); obj.start(); globals()[name] = obj
@@ -56,8 +57,8 @@ def startup() -> None:
 
 
 def shutdown() -> None:
-    global manager, nifty_manager, banknifty_manager, sensex_manager, nifty500_manager, niftymidcap100_manager, niftysmallcap100_manager, finnifty_manager, indiavix_manager, niftyit_manager, niftyauto_manager, niftypharma_manager, niftymetal_manager, niftyfmcg_manager, niftyrealty_manager, niftyenergy_manager
-    for name in ("niftyenergy_manager", "niftyrealty_manager", "niftyfmcg_manager", "niftymetal_manager", "niftypharma_manager", "niftyauto_manager", "niftyit_manager", "indiavix_manager", "finnifty_manager", "niftysmallcap100_manager", "niftymidcap100_manager", "nifty500_manager", "sensex_manager", "banknifty_manager", "nifty_manager", "manager"):
+    global manager, nifty_manager, banknifty_manager, sensex_manager, nifty500_manager, niftymidcap100_manager, niftysmallcap100_manager, finnifty_manager, indiavix_manager, niftyit_manager, niftyauto_manager, niftypharma_manager, niftymetal_manager, niftyfmcg_manager, niftyrealty_manager, niftyenergy_manager, niftyinfra_manager
+    for name in ("niftyinfra_manager", "niftyenergy_manager", "niftyrealty_manager", "niftyfmcg_manager", "niftymetal_manager", "niftypharma_manager", "niftyauto_manager", "niftyit_manager", "indiavix_manager", "finnifty_manager", "niftysmallcap100_manager", "niftymidcap100_manager", "nifty500_manager", "sensex_manager", "banknifty_manager", "nifty_manager", "manager"):
         obj = globals().get(name)
         if obj is not None:
             obj.stop(); globals()[name] = None
@@ -82,7 +83,7 @@ def _error_response() -> Response | None:
 
 @app.get("/", response_class=Response)
 def root() -> Response:
-    return json_response({"service": "PSYGRID", "status": "ONLINE" if not config_error else "CONFIG_ERROR", "data_source": "DHAN", "synthetic_candles": False, "storage": "RAM_ONLY", "universe_size": 450, "live_endpoint": "/public/live.json", "live_endpoints": ["/public/live-a.json", "/public/live-b.json", "/public/live-c.json", "/public/live-d.json", "/public/live-e.json", "/public/live-f.json", "/public/live-g.json", "/public/live-h.json", "/public/live-i.json", "/public/live-j.json", "/public/live-01.json", "/public/live-02.json", "/public/live-03.json", "/public/live-04.json", "/public/live-05.json", "/public/live-06.json", "/public/nifty.json", "/public/banknifty.json", "/public/sensex.json", "/public/nifty500.json", "/public/niftymidcap100.json", "/public/niftysmallcap100.json", "/public/finnifty.json", "/public/indiavix.json", "/public/niftyit.json", "/public/niftyauto.json", "/public/niftypharma.json", "/public/niftymetal.json", "/public/niftyfmcg.json", "/public/niftyrealty.json", "/public/niftyenergy.json", "/public/stock/{symbol}.json", "/public/stock/{symbol}/{timeframe}.json"], "live_timeframes": list(LIVE_TIMEFRAMES)})
+    return json_response({"service": "PSYGRID", "status": "ONLINE" if not config_error else "CONFIG_ERROR", "data_source": "DHAN", "synthetic_candles": False, "storage": "RAM_ONLY", "universe_size": 450, "live_endpoint": "/public/live.json", "live_endpoints": ["/public/live-a.json", "/public/live-b.json", "/public/live-c.json", "/public/live-d.json", "/public/live-e.json", "/public/live-f.json", "/public/live-g.json", "/public/live-h.json", "/public/live-i.json", "/public/live-j.json", "/public/live-01.json", "/public/live-02.json", "/public/live-03.json", "/public/live-04.json", "/public/live-05.json", "/public/live-06.json", "/public/nifty.json", "/public/banknifty.json", "/public/sensex.json", "/public/nifty500.json", "/public/niftymidcap100.json", "/public/niftysmallcap100.json", "/public/finnifty.json", "/public/indiavix.json", "/public/niftyit.json", "/public/niftyauto.json", "/public/niftypharma.json", "/public/niftymetal.json", "/public/niftyfmcg.json", "/public/niftyrealty.json", "/public/niftyenergy.json", "/public/niftyinfra.json", "/public/stock/{symbol}.json", "/public/stock/{symbol}/{timeframe}.json"], "live_timeframes": list(LIVE_TIMEFRAMES)})
 
 @app.get("/health", response_class=Response)
 def health() -> Response: return json_response({"service": "PSYGRID", "status": "OK"})
@@ -144,6 +145,8 @@ def public_niftyfmcg() -> Response: return _index_response(niftyfmcg_manager,"NI
 def public_niftyrealty() -> Response: return _index_response(niftyrealty_manager,"NIFTY_REALTY",niftyrealty_json)
 @app.get("/public/niftyenergy.json", response_class=Response)
 def public_niftyenergy() -> Response: return _index_response(niftyenergy_manager,"NIFTY_ENERGY",niftyenergy_json)
+@app.get("/public/niftyinfra.json", response_class=Response)
+def public_niftyinfra() -> Response: return _index_response(niftyinfra_manager,"NIFTY_INFRA",niftyinfra_json)
 
 @app.get("/public/stock/{symbol}.json", response_class=Response)
 def public_stock(symbol: str) -> Response:
