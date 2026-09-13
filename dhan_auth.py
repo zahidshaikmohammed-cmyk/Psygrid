@@ -2,12 +2,18 @@ from __future__ import annotations
 
 import os
 import re
+import threading
+import time
 from typing import Any
 
 import pyotp
 import requests
 
 TOKEN_URL = "https://auth.dhan.co/app/generateAccessToken"
+_AUTH_REFRESH_LOCK = threading.Lock()
+_AUTH_REFRESH_COOLDOWN_UNTIL = 0.0
+_AUTH_LAST_SUCCESS_AT = 0.0
+_AUTH_SUCCESS_GRACE_SECONDS = 5.0
 
 
 class DhanTokenRateLimited(RuntimeError):
@@ -101,8 +107,6 @@ def generate_access_token(client_id: str, pin: str, totp_secret: str) -> tuple[s
     except Exception as exc:
         raise RuntimeError("Invalid DHAN_TOTP_SECRET") from exc
 
-    # Dhan limits token generation frequency. Make exactly one request per call;
-    # temporary cooldowns are returned to SessionManager for deferred retry.
     totp = _generate_totp(normalized_secret)
     try:
         token, expiry, message = _request_token(client_id, pin, totp)
@@ -121,6 +125,43 @@ def generate_access_token(client_id: str, pin: str, totp_secret: str) -> tuple[s
             "Dhan rejected the current TOTP. Check DHAN_TOTP_SECRET and Dhan TOTP setup."
         )
     raise RuntimeError(f"Dhan access-token generation returned no token: {message}")
+
+
+def refresh_access_token(settings, force: bool = False) -> None:
+    """Refresh the shared process token once and coordinate concurrent callers."""
+    global _AUTH_REFRESH_COOLDOWN_UNTIL, _AUTH_LAST_SUCCESS_AT
+    if not force:
+        if settings.access_token:
+            return
+        pin = os.getenv("DHAN_PIN", "").strip()
+        totp_secret = os.getenv("DHAN_TOTP_SECRET", "").strip()
+        if not pin or not totp_secret:
+            raise RuntimeError("No usable Dhan access token or TOTP credentials configured")
+
+    with _AUTH_REFRESH_LOCK:
+        now = time.monotonic()
+        if now < _AUTH_REFRESH_COOLDOWN_UNTIL:
+            raise DhanTokenRateLimited(
+                "Dhan token generation is temporarily rate-limited; retry will be deferred.",
+                int(_AUTH_REFRESH_COOLDOWN_UNTIL - now) + 1,
+            )
+        if force and now - _AUTH_LAST_SUCCESS_AT < _AUTH_SUCCESS_GRACE_SECONDS and settings.access_token:
+            return
+        pin = os.getenv("DHAN_PIN", "").strip()
+        totp_secret = os.getenv("DHAN_TOTP_SECRET", "").strip()
+        if not pin or not totp_secret:
+            if settings.access_token and not force:
+                return
+            raise RuntimeError("No usable Dhan access token or TOTP credentials configured")
+        try:
+            token, expiry = generate_access_token(settings.client_id, pin, totp_secret)
+        except DhanTokenRateLimited as exc:
+            _AUTH_REFRESH_COOLDOWN_UNTIL = time.monotonic() + exc.retry_after
+            raise
+        settings.access_token = token
+        settings.token_expiry = expiry
+        settings.token_source = "AUTO_GENERATED_TOTP"
+        _AUTH_LAST_SUCCESS_AT = time.monotonic()
 
 
 def token_from_environment(client_id: str) -> tuple[str, str | None, str]:
