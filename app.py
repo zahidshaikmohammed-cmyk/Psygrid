@@ -28,18 +28,20 @@ from niftyenergy import NiftyEnergyManager, niftyenergy_json
 from niftyinfra import NiftyInfraManager, niftyinfra_json
 from nifty_options import NiftyOptionsManager, nifty_options_json
 from nifty_depth import NiftyDepthManager, nifty_depth_json
+from midcpnifty_options import MidcapNiftyOptionsManager, midcpnifty_options_json
+from midcpnifty_depth import MidcapNiftyDepthManager, midcpnifty_depth_json
 from output import LIVE_TIMEFRAMES, market_live_json, stock_json
 from sensex import SensexManager, sensex_json
 from session import SessionManager
 from state_runtime import RuntimeFreshnessState
 
-settings = state = manager = nifty_manager = banknifty_manager = sensex_manager = nifty_options_manager = nifty_depth_manager = banknifty_options_manager = banknifty_depth_manager = None
+settings = state = manager = nifty_manager = banknifty_manager = sensex_manager = nifty_options_manager = nifty_depth_manager = banknifty_options_manager = banknifty_depth_manager = midcpnifty_options_manager = midcpnifty_depth_manager = None
 nifty500_manager = niftymidcap100_manager = niftysmallcap100_manager = finnifty_manager = None
 indiavix_manager = niftyit_manager = niftyauto_manager = niftypharma_manager = niftymetal_manager = niftyfmcg_manager = niftyrealty_manager = niftyenergy_manager = niftyinfra_manager = None
 config_error = ""
 
 def startup() -> None:
-    global settings, state, manager, nifty_manager, banknifty_manager, sensex_manager, nifty_options_manager, nifty_depth_manager, banknifty_options_manager, banknifty_depth_manager, nifty500_manager, niftymidcap100_manager, niftysmallcap100_manager, finnifty_manager, indiavix_manager, niftyit_manager, niftyauto_manager, niftypharma_manager, niftymetal_manager, niftyfmcg_manager, niftyrealty_manager, niftyenergy_manager, niftyinfra_manager, config_error
+    global settings, state, manager, nifty_manager, banknifty_manager, sensex_manager, nifty_options_manager, nifty_depth_manager, banknifty_options_manager, banknifty_depth_manager, midcpnifty_options_manager, midcpnifty_depth_manager, nifty500_manager, niftymidcap100_manager, niftysmallcap100_manager, finnifty_manager, indiavix_manager, niftyit_manager, niftyauto_manager, niftypharma_manager, niftymetal_manager, niftyfmcg_manager, niftyrealty_manager, niftyenergy_manager, niftyinfra_manager, config_error
     config_error = ""
     try:
         settings = load_settings(); instruments = load_instruments()
@@ -61,11 +63,16 @@ def startup() -> None:
         if banknifty_options_manager is not None:
             try: banknifty_depth_manager = BankNiftyDepthManager(settings, dhan_api, banknifty_options_manager); banknifty_depth_manager.start()
             except Exception: banknifty_depth_manager = None
+        try: midcpnifty_options_manager = MidcapNiftyOptionsManager(settings, dhan_api); midcpnifty_options_manager.start()
+        except Exception: midcpnifty_options_manager = None
+        if midcpnifty_options_manager is not None:
+            try: midcpnifty_depth_manager = MidcapNiftyDepthManager(settings, dhan_api, midcpnifty_options_manager); midcpnifty_depth_manager.start()
+            except Exception: midcpnifty_depth_manager = None
     except Exception as exc: config_error = str(exc)
 
 def shutdown() -> None:
-    global manager, nifty_manager, banknifty_manager, sensex_manager, nifty_options_manager, nifty_depth_manager, banknifty_options_manager, banknifty_depth_manager, nifty500_manager, niftymidcap100_manager, niftysmallcap100_manager, finnifty_manager, indiavix_manager, niftyit_manager, niftyauto_manager, niftypharma_manager, niftymetal_manager, niftyfmcg_manager, niftyrealty_manager, niftyenergy_manager, niftyinfra_manager
-    for name in ("banknifty_depth_manager","banknifty_options_manager","nifty_depth_manager","nifty_options_manager","niftyinfra_manager","niftyenergy_manager","niftyrealty_manager","niftyfmcg_manager","niftymetal_manager","niftypharma_manager","niftyauto_manager","niftyit_manager","indiavix_manager","finnifty_manager","niftysmallcap100_manager","niftymidcap100_manager","nifty500_manager","sensex_manager","banknifty_manager","nifty_manager","manager"):
+    global manager, nifty_manager, banknifty_manager, sensex_manager, nifty_options_manager, nifty_depth_manager, banknifty_options_manager, banknifty_depth_manager, midcpnifty_options_manager, midcpnifty_depth_manager, nifty500_manager, niftymidcap100_manager, niftysmallcap100_manager, finnifty_manager, indiavix_manager, niftyit_manager, niftyauto_manager, niftypharma_manager, niftymetal_manager, niftyfmcg_manager, niftyrealty_manager, niftyenergy_manager, niftyinfra_manager
+    for name in ("midcpnifty_depth_manager","midcpnifty_options_manager","banknifty_depth_manager","banknifty_options_manager","nifty_depth_manager","nifty_options_manager","niftyinfra_manager","niftyenergy_manager","niftyrealty_manager","niftyfmcg_manager","niftymetal_manager","niftypharma_manager","niftyauto_manager","niftyit_manager","indiavix_manager","finnifty_manager","niftysmallcap100_manager","niftymidcap100_manager","nifty500_manager","sensex_manager","banknifty_manager","nifty_manager","manager"):
         obj = globals().get(name)
         if obj is not None: obj.stop(); globals()[name] = None
 
@@ -84,7 +91,7 @@ def _error_response() -> Response | None:
 
 @app.get("/", response_class=Response)
 def root() -> Response:
-    return json_response({"service":"PSYGRID","status":"ONLINE" if not config_error else "CONFIG_ERROR","data_source":"DHAN","synthetic_candles":False,"storage":"RAM_ONLY","universe_size":450,"live_endpoint":"/public/live.json","live_endpoints":["/public/live-a.json","/public/live-b.json","/public/live-c.json","/public/live-d.json","/public/live-e.json","/public/live-f.json","/public/live-g.json","/public/live-h.json","/public/live-i.json","/public/live-j.json","/public/live-01.json","/public/live-02.json","/public/live-03.json","/public/live-04.json","/public/live-05.json","/public/live-06.json","/public/nifty.json","/public/banknifty.json","/public/sensex.json","/public/nifty500.json","/public/niftymidcap100.json","/public/niftysmallcap100.json","/public/finnifty.json","/public/indiavix.json","/public/niftyit.json","/public/niftyauto.json","/public/niftypharma.json","/public/niftymetal.json","/public/niftyfmcg.json","/public/niftyrealty.json","/public/niftyenergy.json","/public/niftyinfra.json","/public/nifty-options.json","/public/nifty-depth.json","/public/banknifty-options.json","/public/banknifty-depth.json","/public/stock/{symbol}.json","/public/stock/{symbol}/{timeframe}.json"],"live_timeframes":list(LIVE_TIMEFRAMES)})
+    return json_response({"service":"PSYGRID","status":"ONLINE" if not config_error else "CONFIG_ERROR","data_source":"DHAN","synthetic_candles":False,"storage":"RAM_ONLY","universe_size":450,"live_endpoint":"/public/live.json","live_endpoints":["/public/live-a.json","/public/live-b.json","/public/live-c.json","/public/live-d.json","/public/live-e.json","/public/live-f.json","/public/live-g.json","/public/live-h.json","/public/live-i.json","/public/live-j.json","/public/live-01.json","/public/live-02.json","/public/live-03.json","/public/live-04.json","/public/live-05.json","/public/live-06.json","/public/nifty.json","/public/banknifty.json","/public/sensex.json","/public/nifty500.json","/public/niftymidcap100.json","/public/niftysmallcap100.json","/public/finnifty.json","/public/indiavix.json","/public/niftyit.json","/public/niftyauto.json","/public/niftypharma.json","/public/niftymetal.json","/public/niftyfmcg.json","/public/niftyrealty.json","/public/niftyenergy.json","/public/niftyinfra.json","/public/nifty-options.json","/public/nifty-depth.json","/public/banknifty-options.json","/public/banknifty-depth.json","/public/midcpnifty-options.json","/public/midcpnifty-depth.json","/public/stock/{symbol}.json","/public/stock/{symbol}/{timeframe}.json"],"live_timeframes":list(LIVE_TIMEFRAMES)})
 
 @app.get("/health", response_class=Response)
 def health() -> Response: return json_response({"service":"PSYGRID","status":"OK"})
@@ -167,6 +174,18 @@ def public_banknifty_depth()->Response:
     if error:return error
     if banknifty_depth_manager is None:return json_response({"service":"PSYGRID","symbol":"BANKNIFTY","status":"BANKNIFTY_DEPTH_UNAVAILABLE"},503)
     payload=banknifty_depth_json(banknifty_depth_manager.state); return json_response(payload,200 if payload.get("status")=="LIVE" else 503)
+@app.get("/public/midcpnifty-options.json",response_class=Response)
+def public_midcpnifty_options()->Response:
+    error=_error_response()
+    if error:return error
+    if midcpnifty_options_manager is None:return json_response({"service":"PSYGRID","symbol":"MIDCPNIFTY","status":"MIDCPNIFTY_OPTIONS_UNAVAILABLE"},503)
+    payload=midcpnifty_options_json(midcpnifty_options_manager.state); return json_response(payload,200 if payload.get("status")=="LIVE" else 503)
+@app.get("/public/midcpnifty-depth.json",response_class=Response)
+def public_midcpnifty_depth()->Response:
+    error=_error_response()
+    if error:return error
+    if midcpnifty_depth_manager is None:return json_response({"service":"PSYGRID","symbol":"MIDCPNIFTY","status":"MIDCPNIFTY_DEPTH_UNAVAILABLE"},503)
+    payload=midcpnifty_depth_json(midcpnifty_depth_manager.state); return json_response(payload,200 if payload.get("status")=="LIVE" else 503)
 
 @app.get("/public/stock/{symbol}.json",response_class=Response)
 def public_stock(symbol:str)->Response:
