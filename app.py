@@ -56,10 +56,13 @@ def startup() -> None:
                 globals()[name] = None
         try:
             nifty_options_manager = NiftyOptionsManager(settings, dhan_api); nifty_options_manager.start()
-            nifty_depth_manager = NiftyDepthManager(settings, dhan_api, nifty_options_manager); nifty_depth_manager.start()
         except Exception:
             nifty_options_manager = None
-            nifty_depth_manager = None
+        if nifty_options_manager is not None:
+            try:
+                nifty_depth_manager = NiftyDepthManager(settings, dhan_api, nifty_options_manager); nifty_depth_manager.start()
+            except Exception:
+                nifty_depth_manager = None
     except Exception as exc:
         config_error = str(exc)
 
