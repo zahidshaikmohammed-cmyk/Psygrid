@@ -60,8 +60,16 @@ jobs:
           /home/ubuntu/Psygrid/.venv/bin/python -m py_compile app.py
 
           sudo systemctl restart psygrid
-          sleep 3
 
-          curl -fsS http://127.0.0.1:10000/health
-          echo
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:10000/health; then
+              echo
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "Psygrid health check failed after 60 seconds" >&2
+          sudo systemctl status psygrid --no-pager || true
+          exit 1
           REMOTE
