@@ -18,264 +18,114 @@ from nifty import NiftyManager, nifty_json
 from nifty500 import Nifty500Manager, nifty500_json
 from niftymidcap100 import NiftyMidcap100Manager, niftymidcap100_json
 from niftysmallcap100 import NiftySmallcap100Manager, niftysmallcap100_json
+from niftyit import NiftyItManager, niftyit_json
 from output import LIVE_TIMEFRAMES, market_live_json, stock_json
 from sensex import SensexManager, sensex_json
 from session import SessionManager
 from state_runtime import RuntimeFreshnessState
 
-
-settings = None
-state = None
-manager = None
-nifty_manager = None
-banknifty_manager = None
-sensex_manager = None
-nifty500_manager = None
-niftymidcap100_manager = None
-niftysmallcap100_manager = None
-finnifty_manager = None
-indiavix_manager = None
+settings = state = manager = nifty_manager = banknifty_manager = sensex_manager = None
+nifty500_manager = niftymidcap100_manager = niftysmallcap100_manager = finnifty_manager = None
+indiavix_manager = niftyit_manager = None
 config_error = ""
 
 
 def startup() -> None:
-    global settings, state, manager, nifty_manager, banknifty_manager, sensex_manager, nifty500_manager, niftymidcap100_manager, niftysmallcap100_manager, finnifty_manager, indiavix_manager, config_error
+    global settings, state, manager, nifty_manager, banknifty_manager, sensex_manager, nifty500_manager, niftymidcap100_manager, niftysmallcap100_manager, finnifty_manager, indiavix_manager, niftyit_manager, config_error
     config_error = ""
     try:
-        settings = load_settings()
-        instruments = load_instruments()
+        settings = load_settings(); instruments = load_instruments()
         if len(instruments) != settings.max_instruments:
             raise RuntimeError(f"Universe integrity failure: expected {settings.max_instruments}, got {len(instruments)}")
-        state = RuntimeFreshnessState(settings)
-        dhan_api = DhanAPI(settings)
-        feed = LiveFeed(settings, state, instruments)
-        manager = SessionManager(settings, state, dhan_api, feed, instruments)
-        manager.start()
-        try:
-            nifty_manager = NiftyManager(settings, dhan_api)
-            nifty_manager.start()
-        except Exception:
-            nifty_manager = None
-        try:
-            banknifty_manager = BankNiftyManager(settings, dhan_api)
-            banknifty_manager.start()
-        except Exception:
-            banknifty_manager = None
-        try:
-            sensex_manager = SensexManager(settings, dhan_api)
-            sensex_manager.start()
-        except Exception:
-            sensex_manager = None
-        try:
-            nifty500_manager = Nifty500Manager(settings, dhan_api)
-            nifty500_manager.start()
-        except Exception:
-            nifty500_manager = None
-        try:
-            niftymidcap100_manager = NiftyMidcap100Manager(settings, dhan_api)
-            niftymidcap100_manager.start()
-        except Exception:
-            niftymidcap100_manager = None
-        try:
-            niftysmallcap100_manager = NiftySmallcap100Manager(settings, dhan_api)
-            niftysmallcap100_manager.start()
-        except Exception:
-            niftysmallcap100_manager = None
-        try:
-            finnifty_manager = FinNiftyManager(settings, dhan_api)
-            finnifty_manager.start()
-        except Exception:
-            finnifty_manager = None
-        try:
-            indiavix_manager = IndiaVixManager(settings, dhan_api)
-            indiavix_manager.start()
-        except Exception:
-            indiavix_manager = None
+        state = RuntimeFreshnessState(settings); dhan_api = DhanAPI(settings)
+        manager = SessionManager(settings, state, dhan_api, LiveFeed(settings, state, instruments), instruments); manager.start()
+        managers = [("nifty_manager", NiftyManager), ("banknifty_manager", BankNiftyManager), ("sensex_manager", SensexManager), ("nifty500_manager", Nifty500Manager), ("niftymidcap100_manager", NiftyMidcap100Manager), ("niftysmallcap100_manager", NiftySmallcap100Manager), ("finnifty_manager", FinNiftyManager), ("indiavix_manager", IndiaVixManager), ("niftyit_manager", NiftyItManager)]
+        for name, cls in managers:
+            try:
+                obj = cls(settings, dhan_api); obj.start(); globals()[name] = obj
+            except Exception:
+                globals()[name] = None
     except Exception as exc:
         config_error = str(exc)
 
 
 def shutdown() -> None:
-    global manager, nifty_manager, banknifty_manager, sensex_manager, nifty500_manager, niftymidcap100_manager, niftysmallcap100_manager, finnifty_manager, indiavix_manager
-    if indiavix_manager is not None:
-        indiavix_manager.stop()
-        indiavix_manager = None
-    if finnifty_manager is not None:
-        finnifty_manager.stop()
-        finnifty_manager = None
-    if niftysmallcap100_manager is not None:
-        niftysmallcap100_manager.stop()
-        niftysmallcap100_manager = None
-    if niftymidcap100_manager is not None:
-        niftymidcap100_manager.stop()
-        niftymidcap100_manager = None
-    if nifty500_manager is not None:
-        nifty500_manager.stop()
-        nifty500_manager = None
-    if sensex_manager is not None:
-        sensex_manager.stop()
-        sensex_manager = None
-    if banknifty_manager is not None:
-        banknifty_manager.stop()
-        banknifty_manager = None
-    if nifty_manager is not None:
-        nifty_manager.stop()
-        nifty_manager = None
-    if manager is not None:
-        manager.stop()
-        manager = None
+    global manager, nifty_manager, banknifty_manager, sensex_manager, nifty500_manager, niftymidcap100_manager, niftysmallcap100_manager, finnifty_manager, indiavix_manager, niftyit_manager
+    for name in ("niftyit_manager", "indiavix_manager", "finnifty_manager", "niftysmallcap100_manager", "niftymidcap100_manager", "nifty500_manager", "sensex_manager", "banknifty_manager", "nifty_manager", "manager"):
+        obj = globals().get(name)
+        if obj is not None:
+            obj.stop(); globals()[name] = None
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    startup()
-    yield
-    shutdown()
-
+    startup(); yield; shutdown()
 
 app = FastAPI(title="Psygrid", docs_url=None, redoc_url=None, lifespan=lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
 
 
 def json_response(payload: dict, status_code: int = 200) -> Response:
-    body = orjson.dumps(payload, option=orjson.OPT_APPEND_NEWLINE)
-    return Response(content=body, media_type="application/json", status_code=status_code, headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0", "Pragma": "no-cache", "Expires": "0", "Vary": "Accept-Encoding"})
+    return Response(content=orjson.dumps(payload, option=orjson.OPT_APPEND_NEWLINE), media_type="application/json", status_code=status_code, headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0", "Pragma": "no-cache", "Expires": "0", "Vary": "Accept-Encoding"})
 
 
 def _error_response() -> Response | None:
-    if config_error:
-        return json_response({"service": "PSYGRID", "status": "CONFIG_ERROR", "error": config_error})
-    if state is None:
-        return json_response({"service": "PSYGRID", "status": "STARTING"}, 503)
+    if config_error: return json_response({"service": "PSYGRID", "status": "CONFIG_ERROR", "error": config_error})
+    if state is None: return json_response({"service": "PSYGRID", "status": "STARTING"}, 503)
     return None
-
 
 @app.get("/", response_class=Response)
 def root() -> Response:
-    return json_response({"service": "PSYGRID", "status": "ONLINE" if not config_error else "CONFIG_ERROR", "data_source": "DHAN", "synthetic_candles": False, "storage": "RAM_ONLY", "universe_size": 450, "live_endpoint": "/public/live.json", "live_endpoints": ["/public/live-a.json", "/public/live-b.json", "/public/live-c.json", "/public/live-d.json", "/public/live-e.json", "/public/live-f.json", "/public/live-g.json", "/public/live-h.json", "/public/live-i.json", "/public/live-j.json", "/public/live-01.json", "/public/live-02.json", "/public/live-03.json", "/public/live-04.json", "/public/live-05.json", "/public/live-06.json", "/public/nifty.json", "/public/banknifty.json", "/public/sensex.json", "/public/nifty500.json", "/public/niftymidcap100.json", "/public/niftysmallcap100.json", "/public/finnifty.json", "/public/indiavix.json", "/public/stock/{symbol}.json", "/public/stock/{symbol}/{timeframe}.json"], "live_timeframes": list(LIVE_TIMEFRAMES)})
-
+    return json_response({"service": "PSYGRID", "status": "ONLINE" if not config_error else "CONFIG_ERROR", "data_source": "DHAN", "synthetic_candles": False, "storage": "RAM_ONLY", "universe_size": 450, "live_endpoint": "/public/live.json", "live_endpoints": ["/public/live-a.json", "/public/live-b.json", "/public/live-c.json", "/public/live-d.json", "/public/live-e.json", "/public/live-f.json", "/public/live-g.json", "/public/live-h.json", "/public/live-i.json", "/public/live-j.json", "/public/live-01.json", "/public/live-02.json", "/public/live-03.json", "/public/live-04.json", "/public/live-05.json", "/public/live-06.json", "/public/nifty.json", "/public/banknifty.json", "/public/sensex.json", "/public/nifty500.json", "/public/niftymidcap100.json", "/public/niftysmallcap100.json", "/public/finnifty.json", "/public/indiavix.json", "/public/niftyit.json", "/public/stock/{symbol}.json", "/public/stock/{symbol}/{timeframe}.json"], "live_timeframes": list(LIVE_TIMEFRAMES)})
 
 @app.get("/health", response_class=Response)
-def health() -> Response:
-    return json_response({"service": "PSYGRID", "status": "OK"})
-
+def health() -> Response: return json_response({"service": "PSYGRID", "status": "OK"})
 
 @app.get("/ready", response_class=Response)
 def ready() -> Response:
     error = _error_response()
-    if error:
-        return error
-    snap = state.snapshot()
-    expected = int(snap.get("stock_count", 0) or 0)
-    ready_now = bool(snap.get("session_status") == "LIVE" and snap.get("feed_status") == "CONNECTED" and expected == 450 and snap.get("subscribed_count") == 450 and snap.get("live_stock_count") == 450 and snap.get("stream_health") == "FULL_LIVE")
+    if error: return error
+    snap = state.snapshot(); ready_now = bool(snap.get("session_status") == "LIVE" and snap.get("feed_status") == "CONNECTED" and snap.get("stock_count") == 450 and snap.get("subscribed_count") == 450 and snap.get("live_stock_count") == 450 and snap.get("stream_health") == "FULL_LIVE")
     return json_response({"service": "PSYGRID", "ready": ready_now, **snap}, 200 if ready_now else 503)
-
 
 @app.get("/public/live.json", response_class=Response)
 def public_live() -> Response:
     error = _error_response()
-    if error:
-        return error
+    if error: return error
     return json_response(market_live_json(state))
-
 
 def _public_live_range(start: int, end: int, preserve_instrument_order: bool = False) -> Response:
     error = _error_response()
-    if error:
-        return error
+    if error: return error
     return json_response(market_live_json(state, (start, end), preserve_instrument_order))
 
+for route, start, end, preserve in [("a",0,45,False),("b",45,90,False),("c",90,135,False),("d",135,180,False),("e",180,225,False),("f",225,270,False),("g",270,315,True),("h",315,360,True),("i",360,405,True),("j",405,450,True),("01",0,15,False),("02",15,30,False),("03",30,45,False),("04",45,60,False),("05",60,75,False),("06",75,90,False)]:
+    globals()[f"public_live_{route}"] = app.get(f"/public/live-{route}.json", response_class=Response)(lambda start=start, end=end, preserve=preserve: _public_live_range(start,end,preserve))
 
-@app.get("/public/live-a.json", response_class=Response)
-def public_live_a() -> Response: return _public_live_range(0, 45)
-@app.get("/public/live-b.json", response_class=Response)
-def public_live_b() -> Response: return _public_live_range(45, 90)
-@app.get("/public/live-c.json", response_class=Response)
-def public_live_c() -> Response: return _public_live_range(90, 135)
-@app.get("/public/live-d.json", response_class=Response)
-def public_live_d() -> Response: return _public_live_range(135, 180)
-@app.get("/public/live-e.json", response_class=Response)
-def public_live_e() -> Response: return _public_live_range(180, 225)
-@app.get("/public/live-f.json", response_class=Response)
-def public_live_f() -> Response: return _public_live_range(225, 270)
-@app.get("/public/live-g.json", response_class=Response)
-def public_live_g() -> Response: return _public_live_range(270, 315, True)
-@app.get("/public/live-h.json", response_class=Response)
-def public_live_h() -> Response: return _public_live_range(315, 360, True)
-@app.get("/public/live-i.json", response_class=Response)
-def public_live_i() -> Response: return _public_live_range(360, 405, True)
-@app.get("/public/live-j.json", response_class=Response)
-def public_live_j() -> Response: return _public_live_range(405, 450, True)
-@app.get("/public/live-01.json", response_class=Response)
-def public_live_01() -> Response: return _public_live_range(0, 15)
-@app.get("/public/live-02.json", response_class=Response)
-def public_live_02() -> Response: return _public_live_range(15, 30)
-@app.get("/public/live-03.json", response_class=Response)
-def public_live_03() -> Response: return _public_live_range(30, 45)
-@app.get("/public/live-04.json", response_class=Response)
-def public_live_04() -> Response: return _public_live_range(45, 60)
-@app.get("/public/live-05.json", response_class=Response)
-def public_live_05() -> Response: return _public_live_range(60, 75)
-@app.get("/public/live-06.json", response_class=Response)
-def public_live_06() -> Response: return _public_live_range(75, 90)
-
+def _index_response(obj, symbol, fn):
+    error = _error_response()
+    if error: return error
+    if obj is None: return json_response({"service":"PSYGRID","symbol":symbol,"status":f"{symbol}_UNAVAILABLE"},503)
+    return json_response(fn(obj.state, obj.instrument.security_id) if fn not in (nifty_json, banknifty_json, sensex_json) else fn(obj.state))
 
 @app.get("/public/nifty.json", response_class=Response)
-def public_nifty() -> Response:
-    error = _error_response()
-    if error: return error
-    if nifty_manager is None: return json_response({"service": "PSYGRID", "symbol": "NIFTY", "status": "NIFTY_UNAVAILABLE"}, 503)
-    return json_response(nifty_json(nifty_manager.state))
-
+def public_nifty() -> Response: return _index_response(nifty_manager,"NIFTY",nifty_json)
 @app.get("/public/banknifty.json", response_class=Response)
-def public_banknifty() -> Response:
-    error = _error_response()
-    if error: return error
-    if banknifty_manager is None: return json_response({"service": "PSYGRID", "symbol": "BANKNIFTY", "status": "BANKNIFTY_UNAVAILABLE"}, 503)
-    return json_response(banknifty_json(banknifty_manager.state))
-
+def public_banknifty() -> Response: return _index_response(banknifty_manager,"BANKNIFTY",banknifty_json)
 @app.get("/public/sensex.json", response_class=Response)
-def public_sensex() -> Response:
-    error = _error_response()
-    if error: return error
-    if sensex_manager is None: return json_response({"service": "PSYGRID", "symbol": "SENSEX", "status": "SENSEX_UNAVAILABLE"}, 503)
-    return json_response(sensex_json(sensex_manager.state))
-
+def public_sensex() -> Response: return _index_response(sensex_manager,"SENSEX",sensex_json)
 @app.get("/public/nifty500.json", response_class=Response)
-def public_nifty500() -> Response:
-    error = _error_response()
-    if error: return error
-    if nifty500_manager is None: return json_response({"service": "PSYGRID", "symbol": "NIFTY500", "status": "NIFTY500_UNAVAILABLE"}, 503)
-    return json_response(nifty500_json(nifty500_manager.state))
-
+def public_nifty500() -> Response: return _index_response(nifty500_manager,"NIFTY500",nifty500_json)
 @app.get("/public/niftymidcap100.json", response_class=Response)
-def public_niftymidcap100() -> Response:
-    error = _error_response()
-    if error: return error
-    if niftymidcap100_manager is None: return json_response({"service": "PSYGRID", "symbol": "NIFTY_MIDCAP_100", "status": "NIFTYMIDCAP100_UNAVAILABLE"}, 503)
-    return json_response(niftymidcap100_json(niftymidcap100_manager.state, niftymidcap100_manager.instrument.security_id))
-
+def public_niftymidcap100() -> Response: return _index_response(niftymidcap100_manager,"NIFTY_MIDCAP_100",niftymidcap100_json)
 @app.get("/public/niftysmallcap100.json", response_class=Response)
-def public_niftysmallcap100() -> Response:
-    error = _error_response()
-    if error: return error
-    if niftysmallcap100_manager is None: return json_response({"service": "PSYGRID", "symbol": "NIFTY_SMALLCAP_100", "status": "NIFTYSMALLCAP100_UNAVAILABLE"}, 503)
-    return json_response(niftysmallcap100_json(niftysmallcap100_manager.state, niftysmallcap100_manager.instrument.security_id))
-
+def public_niftysmallcap100() -> Response: return _index_response(niftysmallcap100_manager,"NIFTY_SMALLCAP_100",niftysmallcap100_json)
 @app.get("/public/finnifty.json", response_class=Response)
-def public_finnifty() -> Response:
-    error = _error_response()
-    if error: return error
-    if finnifty_manager is None: return json_response({"service": "PSYGRID", "symbol": "NIFTY_FIN_SERVICE", "status": "FINNIFTY_UNAVAILABLE"}, 503)
-    return json_response(finnifty_json(finnifty_manager.state, finnifty_manager.instrument.security_id))
-
+def public_finnifty() -> Response: return _index_response(finnifty_manager,"NIFTY_FIN_SERVICE",finnifty_json)
 @app.get("/public/indiavix.json", response_class=Response)
-def public_indiavix() -> Response:
-    error = _error_response()
-    if error: return error
-    if indiavix_manager is None: return json_response({"service": "PSYGRID", "symbol": "INDIA VIX", "status": "INDIAVIX_UNAVAILABLE"}, 503)
-    return json_response(indiavix_json(indiavix_manager.state, indiavix_manager.instrument.security_id))
-
+def public_indiavix() -> Response: return _index_response(indiavix_manager,"INDIA VIX",indiavix_json)
+@app.get("/public/niftyit.json", response_class=Response)
+def public_niftyit() -> Response: return _index_response(niftyit_manager,"NIFTY_IT",niftyit_json)
 
 @app.get("/public/stock/{symbol}.json", response_class=Response)
 def public_stock(symbol: str) -> Response:
@@ -286,13 +136,10 @@ def public_stock(symbol: str) -> Response:
 @app.get("/public/stock/{symbol}/{timeframe}.json", response_class=Response)
 def public_stock_timeframe(symbol: str, timeframe: str) -> Response:
     timeframe = timeframe.lower()
-    if timeframe not in LIVE_TIMEFRAMES:
-        return json_response({"service": "PSYGRID", "status": "INVALID_TIMEFRAME", "allowed_timeframes": list(LIVE_TIMEFRAMES)}, 400)
+    if timeframe not in LIVE_TIMEFRAMES: return json_response({"service":"PSYGRID","status":"INVALID_TIMEFRAME","allowed_timeframes":list(LIVE_TIMEFRAMES)},400)
     error = _error_response()
     if error: return error
     return json_response(stock_json(state, symbol, timeframe))
 
-
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", "10000"))
-    uvicorn.run(app, host="0.0.0.0", port=port, access_log=False)
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT","10000")), access_log=False)
