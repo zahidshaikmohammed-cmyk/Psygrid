@@ -1,5 +1,7 @@
 import unittest
+from datetime import datetime
 from types import SimpleNamespace
+from zoneinfo import ZoneInfo
 
 from nifty_options import (
     NIFTY_OPTIONS_EXCHANGE_SEGMENT,
@@ -7,6 +9,7 @@ from nifty_options import (
     NIFTY_OPTIONS_SECURITY_ID,
     NIFTY_OPTIONS_SYMBOL,
     NiftyOptionsState,
+    _is_market_open,
     _normalize_chain,
     nifty_options_json,
 )
@@ -40,10 +43,20 @@ class NiftyOptionsTests(unittest.TestCase):
         self.assertEqual(payload["expiry"], "2026-09-17")
         self.assertFalse(payload["synthetic_data"])
         self.assertEqual(payload["storage"], "RAM_ONLY")
+        self.assertIn(payload["market_status"], ("OPEN", "CLOSED"))
+        self.assertIsInstance(payload["market_open"], bool)
         self.assertEqual(len(payload["strikes"]), 1)
         self.assertEqual(payload["strikes"][0]["strike"], 25000.0)
         self.assertEqual(payload["strikes"][0]["ce"]["security_id"], 101)
         self.assertEqual(payload["strikes"][0]["pe"]["security_id"], 102)
+
+    def test_market_session_hours(self):
+        tz = ZoneInfo("Asia/Kolkata")
+        self.assertFalse(_is_market_open(datetime(2026, 9, 13, 12, 0, tzinfo=tz)))  # Sunday
+        self.assertFalse(_is_market_open(datetime(2026, 9, 14, 9, 14, tzinfo=tz)))
+        self.assertTrue(_is_market_open(datetime(2026, 9, 14, 9, 15, tzinfo=tz)))
+        self.assertTrue(_is_market_open(datetime(2026, 9, 14, 15, 29, tzinfo=tz)))
+        self.assertFalse(_is_market_open(datetime(2026, 9, 14, 15, 30, tzinfo=tz)))
 
     def test_normalize_chain_sorts_strikes(self):
         rows = _normalize_chain({
