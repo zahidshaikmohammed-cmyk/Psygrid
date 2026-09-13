@@ -43,7 +43,8 @@ class NiftyOptionsState:
             self.underlying_ltp = payload.get("last_price")
             self.expiry_list = list(expiry_list)
             self.expiry = expiry
-            self.rows = payload.get("oc", [])
+            chain = payload.get("oc", [])
+            self.rows = list(chain) if isinstance(chain, list) else _normalize_chain(payload)
             self.updated_at = datetime.now(self.tz).isoformat()
             self.fetch_count += 1
             self.status = "LIVE"
