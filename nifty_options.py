@@ -6,6 +6,9 @@ from datetime import datetime
 from dataclasses import dataclass
 from zoneinfo import ZoneInfo
 
+from config import refresh_access_token
+from dhan_auth import DhanTokenRateLimited
+
 
 NIFTY_OPTIONS_SYMBOL = "NIFTY"
 NIFTY_OPTIONS_SECURITY_ID = "13"
@@ -108,6 +111,8 @@ class NiftyOptionsManager:
         self.stop_event = threading.Event()
         self.thread: threading.Thread | None = None
         self._expiry_loaded_at = 0.0
+        self._auth_retry_at = 0.0
+        self._auth_lock = threading.Lock()
 
     def start(self) -> None:
         if self.thread and self.thread.is_alive():
@@ -122,12 +127,39 @@ class NiftyOptionsManager:
             self.thread.join(timeout=8)
         self.thread = None
 
+    @staticmethod
+    def _looks_like_auth_failure(exc: Exception) -> bool:
+        text = str(exc).lower()
+        return any(token in text for token in ("401", "807", "808", "809", "810", "expired", "invalid token", "authentication failed", "unauthorized"))
+
+    def _call_with_auth_retry(self, operation):
+        try:
+            return operation()
+        except Exception as first_exc:
+            if not self._looks_like_auth_failure(first_exc):
+                raise
+            now = time.monotonic()
+            with self._auth_lock:
+                if now < self._auth_retry_at:
+                    raise RuntimeError(f"Dhan authentication refresh cooldown active: {int(self._auth_retry_at - now)}s") from first_exc
+                try:
+                    refresh_access_token(self.settings, force=True)
+                except DhanTokenRateLimited as exc:
+                    self._auth_retry_at = time.monotonic() + exc.retry_after
+                    raise
+                self.dhan_api.settings = self.settings
+                self._auth_retry_at = 0.0
+            return operation()
+
     def _load_expiries(self) -> list[str]:
-        expiries = self.dhan_api.option_expiry_list(self.instrument)
+        expiries = self._call_with_auth_retry(lambda: self.dhan_api.option_expiry_list(self.instrument))
         if not expiries:
             raise RuntimeError("DHAN_NIFTY_OPTIONS_NO_ACTIVE_EXPIRIES")
         self._expiry_loaded_at = time.monotonic()
         return expiries
+
+    def _load_chain(self, expiry: str) -> dict:
+        return self._call_with_auth_retry(lambda: self.dhan_api.option_chain(self.instrument, expiry))
 
     def _loop(self) -> None:
         expiries: list[str] = []
@@ -140,7 +172,7 @@ class NiftyOptionsManager:
                 elif expiry not in expiries:
                     expiry = expiries[0]
 
-                raw = self.dhan_api.option_chain(self.instrument, expiry)
+                raw = self._load_chain(expiry)
                 payload = raw.get("data") if isinstance(raw, dict) else None
                 if not isinstance(payload, dict):
                     raise RuntimeError("DHAN_NIFTY_OPTIONS_INVALID_RESPONSE")
