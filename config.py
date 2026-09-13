@@ -130,15 +130,15 @@ def _token_expiry_epoch(token: str) -> int | None:
         return None
 
 
-def refresh_access_token(settings: Settings) -> None:
+def refresh_access_token(settings: Settings, force: bool = False) -> None:
     pin = os.getenv("DHAN_PIN", "").strip()
     totp_secret = os.getenv("DHAN_TOTP_SECRET", "").strip()
-    if settings.access_token:
+    if settings.access_token and not force:
         expiry_epoch = _token_expiry_epoch(settings.access_token)
         if expiry_epoch is None or expiry_epoch > int(time.time()) + 1800:
             return
     if not pin or not totp_secret:
-        if settings.access_token:
+        if settings.access_token and not force:
             return
         raise RuntimeError("No usable Dhan access token or TOTP credentials configured")
     token, expiry = generate_access_token(settings.client_id, pin, totp_secret)
