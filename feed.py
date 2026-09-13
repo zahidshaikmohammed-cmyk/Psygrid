@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 from zoneinfo import ZoneInfo
 
@@ -39,15 +39,7 @@ class LiveFeed:
     def _build_feed(self):
         context = DhanContext(self.settings.client_id, self.settings.access_token)
         subscriptions = [(MarketFeed.NSE, item.security_id, MarketFeed.Full) for item in self.instruments]
-        return MarketFeed(
-            context,
-            subscriptions,
-            version="v2",
-            on_connect=self._on_connect,
-            on_message=self._on_message,
-            on_close=self._on_close,
-            on_error=self._on_error,
-        )
+        return MarketFeed(context, subscriptions, version="v2", on_connect=self._on_connect, on_message=self._on_message, on_close=self._on_close, on_error=self._on_error)
 
     @staticmethod
     def _describe_error(error) -> str:
@@ -63,11 +55,7 @@ class LiveFeed:
     @staticmethod
     def _is_rate_limited_error(error) -> bool:
         text = str(error).lower()
-        return (
-            "429" in text or "805" in text or "too many requests" in text
-            or ("too many" in text and "connection" in text)
-            or "connection limit" in text
-        )
+        return "429" in text or "805" in text or "too many requests" in text or ("too many" in text and "connection" in text) or "connection limit" in text
 
     def _on_connect(self, _feed) -> None:
         self._backoff = self.NORMAL_INITIAL_BACKOFF
@@ -123,10 +111,18 @@ class LiveFeed:
             return cls._normalize_future_epoch(epoch, timezone_name, now_epoch) if epoch > 0 else None
         for fmt in ("%H:%M:%S", "%H:%M:%S.%f"):
             try:
-                parsed = datetime.strptime(text, fmt).replace(tzinfo=timezone.utc)
-                now_utc = datetime.now(timezone.utc)
-                parsed = parsed.replace(year=now_utc.year, month=now_utc.month, day=now_utc.day)
-                return cls._normalize_future_epoch(int(parsed.timestamp()), timezone_name, now_epoch)
+                parsed = datetime.strptime(text, fmt)
+                tz = ZoneInfo(timezone_name)
+                now_local = datetime.fromtimestamp(now_epoch, tz)
+                candidates = []
+                for day_delta in (-1, 0, 1):
+                    local_date = now_local.date() + timedelta(days=day_delta)
+                    local = parsed.replace(year=local_date.year, month=local_date.month, day=local_date.day, tzinfo=tz)
+                    candidates.append(int(local.timestamp()))
+                nearest = min(candidates, key=lambda epoch: abs(epoch - now_epoch))
+                if nearest <= int(now_epoch) + cls.FUTURE_TIMESTAMP_TOLERANCE_SECONDS:
+                    return nearest
+                return None
             except ValueError:
                 continue
         try:
@@ -178,14 +174,7 @@ class LiveFeed:
                     ask_orders = int(level.get("ask_orders", 0) or 0)
                 except (TypeError, ValueError):
                     continue
-                normalized_depth.append({
-                    "bid_price": bid if bid and bid > 0 else None,
-                    "ask_price": ask if ask and ask > 0 else None,
-                    "bid_qty": max(0, bid_qty),
-                    "ask_qty": max(0, ask_qty),
-                    "bid_orders": max(0, bid_orders),
-                    "ask_orders": max(0, ask_orders),
-                })
+                normalized_depth.append({"bid_price": bid if bid and bid > 0 else None, "ask_price": ask if ask and ask > 0 else None, "bid_qty": max(0, bid_qty), "ask_qty": max(0, ask_qty), "bid_orders": max(0, bid_orders), "ask_orders": max(0, ask_orders)})
         context = getattr(self.state, "market_context", None)
         if context is None:
             context = {}
@@ -239,10 +228,7 @@ class LiveFeed:
         security_id = str(data.get("security_id", data.get("securityId", ""))).strip()
         if not security_id or security_id not in self.state.instruments:
             return
-        ltt_epoch = self._parse_ltt(
-            data.get("LTT", data.get("ltt", data.get("last_trade_time"))),
-            self.settings.timezone,
-        )
+        ltt_epoch = self._parse_ltt(data.get("LTT", data.get("ltt", data.get("last_trade_time"))), self.settings.timezone)
         try:
             ltp = float(data.get("LTP", data.get("ltp")))
             volume = int(data.get("volume", 0) or 0)
@@ -271,9 +257,7 @@ class LiveFeed:
                 continue
             if self.state.feed_messages > baseline:
                 return
-            self.state.mark_websocket_error(
-                f"websocket:No market-feed messages received for {int(self.NO_MESSAGE_WATCHDOG_SECONDS)}s after connect"
-            )
+            self.state.mark_websocket_error(f"websocket:No market-feed messages received for {int(self.NO_MESSAGE_WATCHDOG_SECONDS)}s after connect")
             try:
                 feed.close_connection()
             except Exception as exc:
@@ -282,15 +266,9 @@ class LiveFeed:
 
     def _run_connected_session(self, feed) -> None:
         self._connection_stop.clear()
-        self._watchdog = threading.Thread(
-            target=self._watch_connection,
-            args=(feed,),
-            daemon=True,
-            name="psygrid-dhan-watchdog",
-        )
+        self._watchdog = threading.Thread(target=self._watch_connection, args=(feed,), daemon=True, name="psygrid-dhan-watchdog")
         self._watchdog.start()
         try:
-            # Let the official SDK own its asyncio receive loop and ping/pong.
             feed.run()
         finally:
             self._connection_stop.set()
@@ -329,14 +307,10 @@ class LiveFeed:
                 message = self._describe_error(exc)
                 self.state.mark_websocket_error("websocket:" + message)
                 if self._is_rate_limited_error(message):
-                    self.state.mark_websocket_reconnecting(
-                        f"Dhan rate/connection limit; retrying in {int(self.RATE_LIMIT_COOLDOWN)}s"
-                    )
+                    self.state.mark_websocket_reconnecting(f"Dhan rate/connection limit; retrying in {int(self.RATE_LIMIT_COOLDOWN)}s")
                     self._backoff = self.RATE_LIMIT_COOLDOWN
                 else:
-                    self.state.mark_websocket_reconnecting(
-                        f"websocket reconnect in {int(self._backoff)}s; cause={message}"
-                    )
+                    self.state.mark_websocket_reconnecting(f"websocket reconnect in {int(self._backoff)}s; cause={message}")
             finally:
                 self._close_feed(feed)
                 with self._lock:
