@@ -73,7 +73,10 @@ jobs:
 
           if [ "$health_ok" -ne 1 ]; then
             echo "Psygrid health check failed after 60 seconds" >&2
+            echo "--- systemd status ---" >&2
             sudo systemctl status psygrid --no-pager || true
+            echo "--- recent Psygrid journal ---" >&2
+            sudo journalctl -u psygrid -n 200 --no-pager || true
             exit 1
           fi
           REMOTE
