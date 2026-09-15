@@ -5,9 +5,6 @@ from datetime import datetime, timezone
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-from market_intelligence import enrich_market_payload, enrich_stock_payload
-
-
 PUBLIC_TIMEZONE = ZoneInfo("Asia/Kolkata")
 PUBLIC_TIMEZONE_NAME = "Asia/Kolkata"
 LIVE_TIMEFRAMES = ("1m", "5m", "15m", "1h")
@@ -53,7 +50,7 @@ def _normalize_ohlcv(row: dict) -> dict:
     }
 
 
-# Backward-compatible name for internal modules; it now emits OHLCV only.
+# Backward-compatible name for internal modules; it emits OHLCV only.
 def normalize_candle(row: dict) -> dict:
     return _normalize_ohlcv(row)
 
@@ -74,8 +71,7 @@ def _completed_rows(rows: list[dict]) -> list[dict]:
 
 def _timeframe_rows(state, security_id: str, timeframe: str) -> list[dict]:
     if timeframe == "1m":
-        # Only finalized WebSocket-built 1m candles are public. The active minute
-        # remains internal and is deliberately never exposed.
+        # Only finalized WebSocket-built 1m candles are public.
         with state.lock:
             rows = [dict(row) for row in state.live_candles.get(security_id, [])]
         return _completed_rows(rows)
@@ -83,38 +79,6 @@ def _timeframe_rows(state, security_id: str, timeframe: str) -> list[dict]:
     with state.lock:
         rows = [dict(row) for row in state.historical.get(security_id, {}).get(timeframe, [])]
     return _completed_rows(rows)
-
-
-def _historical_payload(state, security_id: str, timeframe: str) -> dict:
-    """Compatibility helper for historical-candle callers/tests.
-
-    Weekly candles are deliberately unavailable because Psygrid only exposes
-    native Dhan historical timeframes that are supported by the public API.
-    No weekly candles are synthesized.
-    """
-    if timeframe == "1w":
-        return {
-            "status": "UNAVAILABLE_NATIVE_DHAN_WEEKLY_CANDLE",
-            "synthetic_candles": False,
-            "timeframe": timeframe,
-            "security_id": security_id,
-            "candles": [],
-        }
-    if timeframe not in LIVE_TIMEFRAMES:
-        return {
-            "status": "INVALID_TIMEFRAME",
-            "synthetic_candles": False,
-            "timeframe": timeframe,
-            "security_id": security_id,
-            "candles": [],
-        }
-    return {
-        "status": "OK",
-        "synthetic_candles": False,
-        "timeframe": timeframe,
-        "security_id": security_id,
-        "candles": [_normalize_ohlcv(row) for row in _timeframe_rows(state, security_id, timeframe)],
-    }
 
 
 def _stock_payload(state, security_id: str, meta: dict) -> dict:
@@ -162,7 +126,7 @@ def market_live_json(
             for security_id, meta in items
         }
 
-    payload = {
+    return {
         "service": "PSYGRID",
         "schema_version": "3.0",
         "session": _session_payload(state),
@@ -178,9 +142,6 @@ def market_live_json(
         "synthetic_candles": False,
         "stocks": stocks,
     }
-    # Additive only: existing fields/candles remain unchanged. The intelligence
-    # layer reads the same in-RAM Dhan data and attaches contextual analytics.
-    return enrich_market_payload(state, payload)
 
 
 def stock_json(state, symbol: str, timeframe: Optional[str] = None) -> dict:
@@ -212,7 +173,7 @@ def stock_json(state, symbol: str, timeframe: Optional[str] = None) -> dict:
 
     if timeframe is None:
         payload.update(full)
-        return enrich_stock_payload(state, payload)
+        return payload
 
     if timeframe not in LIVE_TIMEFRAMES:
         return {"service": "PSYGRID", "symbol": symbol, "status": "INVALID_TIMEFRAME"}
@@ -225,7 +186,7 @@ def stock_json(state, symbol: str, timeframe: Optional[str] = None) -> dict:
         "ltp_timestamp": full["ltp_timestamp"],
         timeframe: full[timeframe],
     })
-    return enrich_stock_payload(state, payload)
+    return payload
 
 
 def dumps_json(payload: dict) -> str:
