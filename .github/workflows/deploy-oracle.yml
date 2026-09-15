@@ -59,6 +59,7 @@ jobs:
           /home/ubuntu/Psygrid/.venv/bin/pip install -r requirements.txt
           /home/ubuntu/Psygrid/.venv/bin/python -m py_compile app.py
 
+          sudo systemctl daemon-reload
           sudo systemctl restart psygrid
 
           health_ok=0
@@ -79,4 +80,18 @@ jobs:
             sudo journalctl -u psygrid -n 200 --no-pager || true
             exit 1
           fi
+
+          echo "Initial health check passed; verifying process stability for 60 seconds..."
+          sleep 60
+          if ! curl -fsS http://127.0.0.1:10000/health; then
+            echo >&2
+            echo "Psygrid became unhealthy after initial startup" >&2
+            echo "--- systemd status ---" >&2
+            sudo systemctl status psygrid --no-pager || true
+            echo "--- recent Psygrid journal ---" >&2
+            sudo journalctl -u psygrid -n 300 --no-pager || true
+            exit 1
+          fi
+          echo
+          echo "Psygrid stability check passed."
           REMOTE
