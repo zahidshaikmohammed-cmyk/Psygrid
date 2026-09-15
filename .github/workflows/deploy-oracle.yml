@@ -60,6 +60,9 @@ jobs:
           /home/ubuntu/Psygrid/.venv/bin/python -m py_compile app.py
 
           sudo systemctl daemon-reload
+          if ! sudo iptables -C INPUT -p tcp --dport 10000 -j ACCEPT 2>/dev/null; then
+            sudo iptables -I INPUT 5 -p tcp --dport 10000 -j ACCEPT
+          fi
           sudo systemctl restart psygrid
 
           health_ok=0
@@ -78,6 +81,10 @@ jobs:
             sudo systemctl status psygrid --no-pager || true
             echo "--- recent Psygrid journal ---" >&2
             sudo journalctl -u psygrid -n 200 --no-pager || true
+            echo "--- listener ---" >&2
+            sudo ss -lntp | grep ':10000' || true
+            echo "--- firewall ---" >&2
+            sudo iptables -L INPUT -n --line-numbers | grep 10000 || true
             exit 1
           fi
 
@@ -90,8 +97,31 @@ jobs:
             sudo systemctl status psygrid --no-pager || true
             echo "--- recent Psygrid journal ---" >&2
             sudo journalctl -u psygrid -n 300 --no-pager || true
+            echo "--- listener ---" >&2
+            sudo ss -lntp | grep ':10000' || true
+            echo "--- firewall ---" >&2
+            sudo iptables -L INPUT -n --line-numbers | grep 10000 || true
             exit 1
           fi
           echo
           echo "Psygrid stability check passed."
+          echo "--- listener ---"
+          sudo ss -lntp | grep ':10000' || true
+          echo "--- firewall ---"
+          sudo iptables -L INPUT -n --line-numbers | grep 10000 || true
           REMOTE
+
+          echo "Checking public Psygrid health from the deployment runner..."
+          public_ok=0
+          for attempt in $(seq 1 10); do
+            if curl -fsS --max-time 5 http://140.245.226.102:10000/health; then
+              echo
+              public_ok=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$public_ok" -ne 1 ]; then
+            echo "Public Psygrid health check failed from deployment runner" >&2
+            exit 1
+          fi
