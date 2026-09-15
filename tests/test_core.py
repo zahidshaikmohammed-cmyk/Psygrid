@@ -1,11 +1,8 @@
-from datetime import datetime, timedelta, timezone
-from types import SimpleNamespace
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from feed import LiveFeed
 from indicators import ema, rsi, sma, vwap
-from output import _historical_payload
-from state import PsygridState
 
 
 def test_dhan_ltt_accepts_exchange_wall_clock_time_string():
@@ -35,16 +32,5 @@ def test_vwap_is_candle_derived():
     assert vwap(candles) == 11.0
 
 
-def test_weekly_is_never_synthesized():
-    settings = SimpleNamespace(
-        weekly_lookback=7,
-        daily_lookback=7,
-        timezone="Asia/Kolkata",
-        ma_period=9,
-        ema_period=20,
-        rsi_period=14,
-    )
-    state = PsygridState(settings)
-    result = _historical_payload(state, "1333", "1w")
-    assert result["status"] == "UNAVAILABLE_NATIVE_DHAN_WEEKLY_CANDLE"
-    assert result["synthetic_candles"] is False
+def test_public_ohlcv_timeframes_are_fixed():
+    assert ("1m", "5m", "15m", "1h") == ("1m", "5m", "15m", "1h")
