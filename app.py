@@ -11,7 +11,8 @@ from starlette.middleware.gzip import GZipMiddleware
 from config import load_instruments, load_settings
 from dhan_api import DhanAPI
 from feed_runtime import LiveFeed
-from output import LIVE_TIMEFRAMES, market_live_json, stock_json
+from output import LIVE_TIMEFRAMES, stock_json
+from runtime_output import market_live_json
 from session import SessionManager
 from state_runtime import RuntimeFreshnessState
 
@@ -31,7 +32,6 @@ def startup() -> None:
             )
         state = RuntimeFreshnessState(settings)
         dhan_api = DhanAPI(settings)
-        # ONE Dhan market-feed WebSocket for the complete 450-stock OHLCV universe.
         manager = SessionManager(
             settings, state, dhan_api, LiveFeed(settings, state, instruments), instruments
         )
@@ -91,14 +91,17 @@ def root() -> Response:
         "universe_size": 450,
         "live_endpoint": "/public/live.json",
         "live_endpoints": [
+            "/public/live.json",
             "/public/live-a.json", "/public/live-b.json", "/public/live-c.json",
             "/public/live-d.json", "/public/live-e.json", "/public/live-f.json",
             "/public/live-g.json", "/public/live-h.json", "/public/live-i.json",
-            "/public/live-j.json", "/public/live-01.json", "/public/live-02.json",
-            "/public/live-03.json", "/public/live-04.json", "/public/live-05.json",
-            "/public/live-06.json", "/public/stock/{symbol}.json",
-            "/public/stock/{symbol}/{timeframe}.json",
+            "/public/live-j.json",
         ],
+        "legacy_overlapping_endpoints": [
+            "/public/live-01.json", "/public/live-02.json", "/public/live-03.json",
+            "/public/live-04.json", "/public/live-05.json", "/public/live-06.json",
+        ],
+        "canonical_shard_family": "live-a-through-live-j",
         "live_timeframes": list(LIVE_TIMEFRAMES),
     })
 
@@ -133,24 +136,34 @@ def public_live() -> Response:
     return json_response(market_live_json(state))
 
 
-def _public_live_range(start: int, end: int, preserve_instrument_order: bool = False) -> Response:
+def _public_live_range(start: int, end: int, preserve_instrument_order: bool = False, legacy: bool = False) -> Response:
     error = _error_response()
     if error:
         return error
-    return json_response(market_live_json(state, (start, end), preserve_instrument_order))
+    payload = market_live_json(state, (start, end), preserve_instrument_order)
+    payload.setdefault("shard", {})["canonical"] = not legacy
+    payload["shard"]["family"] = "live-a-through-live-j" if not legacy else "legacy-overlapping"
+    payload["shard"]["range"] = [start, end]
+    return json_response(payload)
 
 
 for route, start, end, preserve in [
     ("a", 0, 45, False), ("b", 45, 90, False), ("c", 90, 135, False),
     ("d", 135, 180, False), ("e", 180, 225, False), ("f", 225, 270, False),
     ("g", 270, 315, True), ("h", 315, 360, True), ("i", 360, 405, True),
-    ("j", 405, 450, True), ("01", 0, 15, False), ("02", 15, 30, False),
-    ("03", 30, 45, False), ("04", 45, 60, False), ("05", 60, 75, False),
-    ("06", 75, 90, False),
+    ("j", 405, 450, True),
 ]:
     globals()[f"public_live_{route}"] = app.get(
         f"/public/live-{route}.json", response_class=Response
-    )(lambda start=start, end=end, preserve=preserve: _public_live_range(start, end, preserve))
+    )(lambda start=start, end=end, preserve=preserve: _public_live_range(start, end, preserve, False))
+
+for route, start, end in [
+    ("01", 0, 15), ("02", 15, 30), ("03", 30, 45),
+    ("04", 45, 60), ("05", 60, 75), ("06", 75, 90),
+]:
+    globals()[f"public_live_{route}"] = app.get(
+        f"/public/live-{route}.json", response_class=Response
+    )(lambda start=start, end=end: _public_live_range(start, end, False, True))
 
 
 @app.get("/public/stock/{symbol}.json", response_class=Response)
