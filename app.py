@@ -30,13 +30,17 @@ def startup() -> None:
                 f"Universe integrity failure: expected {settings.max_instruments}, got {len(instruments)}"
             )
 
-        # One canonical universe order is used everywhere.  Shards are fixed
-        # contiguous slices of that single order; no shard may sort/reorder
-        # independently or the A-J family can overlap.
+        # Preserve the one canonical universe order returned by config.
+        # Shards are fixed contiguous slices of this exact order.
         ordered_instruments = dict(instruments)
         symbols = [meta["symbol"] for meta in ordered_instruments.values()]
         if len(symbols) != len(set(symbols)):
-            duplicates = sorted({s for s in symbols if symbols.count(s) > 1})
+            seen = set()
+            duplicates = []
+            for symbol in symbols:
+                if symbol in seen and symbol not in duplicates:
+                    duplicates.append(symbol)
+                seen.add(symbol)
             raise RuntimeError(
                 f"Universe integrity failure: duplicate symbols in canonical universe: {duplicates}"
             )
@@ -154,12 +158,13 @@ def _public_live_range(start: int, end: int) -> Response:
     error = _error_response()
     if error:
         return error
+    # Never sort a shard independently. Every shard is a slice of the same
+    # canonical 450-instrument order used by the feed and configuration.
     return json_response(market_live_json(state, (start, end), True))
 
 
-# IMPORTANT: every shard uses the exact same canonical instrument order.
-# 10 shards x 45 instruments = 450 unique instruments, with no overlap.
-for route, start, end in [
+# Canonical 450-stock universe: exactly 10 disjoint shards of 45.
+SHARD_RANGES = (
     ("a", 0, 45),
     ("b", 45, 90),
     ("c", 90, 135),
@@ -170,7 +175,9 @@ for route, start, end in [
     ("h", 315, 360),
     ("i", 360, 405),
     ("j", 405, 450),
-]:
+)
+
+for route, start, end in SHARD_RANGES:
     globals()[f"public_live_{route}"] = app.get(
         f"/public/live-{route}.json", response_class=Response
     )(lambda start=start, end=end: _public_live_range(start, end))
