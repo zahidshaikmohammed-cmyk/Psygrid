@@ -10,7 +10,9 @@ import requests
 
 BASE_URL = "https://api.dhan.co/v2"
 DATA_API_MIN_INTERVAL = 0.5
-INTRADAY_MIN_INTERVAL = 0.0
+# Keep intraday history requests within a bounded request rate while allowing
+# the 450-stock bootstrap to run concurrently without request bursts.
+INTRADAY_MIN_INTERVAL = 0.21
 OPTION_CHAIN_MIN_INTERVAL = 3.0
 
 
@@ -153,7 +155,6 @@ class DhanAPI:
         return self._candles_from_arrays(self._post("/charts/intraday",payload,minimum_interval=INTRADAY_MIN_INTERVAL))
 
     def load_recent_completed_intraday(self,item,interval:int,lookback_intervals:int=4)->List[dict]:
-        """Fetch only a small recent native window for low-latency HTF refreshes."""
         now=datetime.now(self.tz)
         start=now-timedelta(minutes=max(1,int(interval))*max(2,int(lookback_intervals)))
         rows=self.intraday(item,interval,start,now)
@@ -164,7 +165,10 @@ class DhanAPI:
         return completed
 
     def load_today_completed_intraday(self,item,interval:int)->List[dict]:
-        now=datetime.now(self.tz); start=now.replace(hour=9,minute=15,second=0,microsecond=0)
+        now=datetime.now(self.tz)
+        # Start one minute early so a provider boundary rule cannot drop the
+        # genuine 09:15 opening candle. We still filter strictly to today's data.
+        start=now.replace(hour=9,minute=14,second=0,microsecond=0)
         if now<=start:return []
         rows=self.intraday(item,interval,start,now); now_epoch=int(now.timestamp()); today=now.date(); candle_seconds=interval*60
         completed=[r for r in rows if datetime.fromtimestamp(r["timestamp"],self.tz).date()==today and int(r["timestamp"])+candle_seconds<=now_epoch]
