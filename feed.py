@@ -34,7 +34,7 @@ class LiveFeed:
         self._lock = threading.Lock()
         self._backoff = self.NORMAL_INITIAL_BACKOFF
         self._connection_started_epoch = 0.0
-        self._connection_message_baseline = 0
+        self._connection_quote_baseline = 0
 
     def _build_feed(self):
         context = DhanContext(self.settings.client_id, self.settings.access_token)
@@ -72,7 +72,7 @@ class LiveFeed:
     def _on_connect(self, _feed) -> None:
         self._backoff = self.NORMAL_INITIAL_BACKOFF
         self._connection_started_epoch = time.time()
-        self._connection_message_baseline = self.state.feed_messages
+        self._connection_quote_baseline = self.state.quote_packets
         self._connection_stop.clear()
         self.state.mark_websocket_connected(len(self.instruments))
 
@@ -196,16 +196,16 @@ class LiveFeed:
 
     def _watch_connection(self, feed) -> None:
         started = self._connection_started_epoch
-        baseline = self._connection_message_baseline
+        baseline = self._connection_quote_baseline
         while not self._stop_requested.is_set() and not self._connection_stop.wait(2.0):
             if self.state.session_status != "LIVE":
                 continue
             if time.time() - started < self.NO_MESSAGE_WATCHDOG_SECONDS:
                 continue
-            if self.state.feed_messages > baseline:
+            if self.state.quote_packets > baseline:
                 return
             self.state.mark_websocket_error(
-                f"websocket:No market-feed messages received for {int(self.NO_MESSAGE_WATCHDOG_SECONDS)}s after connect"
+                f"websocket:No market-feed quote packets received for {int(self.NO_MESSAGE_WATCHDOG_SECONDS)}s after connect"
             )
             try:
                 feed.close_connection()
