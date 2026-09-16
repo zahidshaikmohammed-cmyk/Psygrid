@@ -53,16 +53,13 @@ def _stock_payload(state, security_id: str, meta: dict) -> dict:
     with state.lock:
         candles = [dict(c) for c in state.live_candles.get(security_id, []) if c.get("complete", True)]
         reference = dict(state.market_reference.get(security_id, {}))
-        ltp = state.last_ltp_by_security.get(security_id)
-        ltt = state.last_ltt_by_security.get(security_id)
+    candles.sort(key=lambda c: int(c.get("epoch", c.get("timestamp", 0))))
     return {
         "symbol": meta["symbol"],
         "security_id": security_id,
         "previous_close": _price(reference.get("previous_close")),
         "today_open": _price(reference.get("today_open")),
-        "candles_1m": [_clean_candle(c) for c in sorted(candles, key=lambda c: int(c.get("epoch", c.get("timestamp", 0))))],
-        "ltp": _price(ltp),
-        "ltp_timestamp": _ist_timestamp(ltt),
+        "candles_1m": [_clean_candle(c) for c in candles],
     }
 
 
@@ -74,7 +71,6 @@ def market_live_json(state, stock_range: Optional[tuple[int, int]] = None, prese
         if stock_range is not None:
             items = items[stock_range[0]:stock_range[1]]
     stocks = {meta["symbol"]: _stock_payload(state, security_id, meta) for security_id, meta in items}
-    snap = state.snapshot()
     return {
         "service": "PSYGRID",
         "schema_version": "4.0",
@@ -100,12 +96,11 @@ def stock_json(state, symbol: str) -> dict:
     if found is None:
         return {"service": "PSYGRID", "symbol": symbol, "status": "NOT_FOUND"}
     security_id, meta = found
-    payload = _stock_payload(state, security_id, meta)
     return {
         "service": "PSYGRID",
         "schema_version": "4.0",
         "status": "OK",
-        **payload,
+        **_stock_payload(state, security_id, meta),
     }
 
 
