@@ -55,12 +55,7 @@ app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
 
 
 def json_response(payload: dict, status_code: int = 200) -> Response:
-    return Response(
-        content=orjson.dumps(payload, option=orjson.OPT_APPEND_NEWLINE),
-        media_type="application/json",
-        status_code=status_code,
-        headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0", "Pragma": "no-cache", "Expires": "0", "Vary": "Accept-Encoding"},
-    )
+    return Response(content=orjson.dumps(payload, option=orjson.OPT_APPEND_NEWLINE), media_type="application/json", status_code=status_code, headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0", "Pragma": "no-cache", "Expires": "0", "Vary": "Accept-Encoding"})
 
 
 def _error_response() -> Response | None:
@@ -73,15 +68,7 @@ def _error_response() -> Response | None:
 
 @app.get("/", response_class=Response)
 def root() -> Response:
-    return json_response({
-        "service": "PSYGRID", "status": "ONLINE" if not config_error else "CONFIG_ERROR", "data_source": "DHAN",
-        "output_policy": "1M_OHLCV_PLUS_PREVIOUS_CLOSE_AND_TODAY_OPEN", "synthetic_candles": False,
-        "universe_size": 450, "live_endpoint": "/public/live.json",
-        "canonical_shard_family": "live-a-through-live-j",
-        "live_endpoints": ["/public/live.json"] + [f"/public/live-{x}.json" for x in "abcdefghij"],
-        "legacy_overlapping_endpoints": [f"/public/live-{i:02d}.json" for i in range(1, 7)],
-        "live_timeframes": ["1m"],
-    })
+    return json_response({"service": "PSYGRID", "status": "ONLINE" if not config_error else "CONFIG_ERROR", "data_source": "DHAN", "output_policy": "1M_OHLCV_PLUS_PREVIOUS_CLOSE_AND_TODAY_OPEN", "synthetic_candles": False, "universe_size": 450, "live_endpoint": "/public/live.json", "canonical_shard_family": "live-a-through-live-j", "live_endpoints": ["/public/live.json"] + [f"/public/live-{x}.json" for x in "abcdefghij"], "legacy_overlapping_endpoints": [f"/public/live-{i:02d}.json" for i in range(1, 7)], "live_timeframes": ["1m"]})
 
 
 @app.get("/health", response_class=Response)
@@ -118,11 +105,7 @@ def _public_live_range(start: int, end: int, preserve_instrument_order: bool = F
     return json_response(payload)
 
 
-for route, start, end, preserve in [
-    ("a", 0, 45, False), ("b", 45, 90, False), ("c", 90, 135, False), ("d", 135, 180, False),
-    ("e", 180, 225, False), ("f", 225, 270, False), ("g", 270, 315, True), ("h", 315, 360, True),
-    ("i", 360, 405, True), ("j", 405, 450, True),
-]:
+for route, start, end, preserve in [("a", 0, 45, False), ("b", 45, 90, False), ("c", 90, 135, False), ("d", 135, 180, False), ("e", 180, 225, False), ("f", 225, 270, False), ("g", 270, 315, True), ("h", 315, 360, True), ("i", 360, 405, True), ("j", 405, 450, True)]:
     globals()[f"public_live_{route}"] = app.get(f"/public/live-{route}.json", response_class=Response)(lambda start=start, end=end, preserve=preserve: _public_live_range(start, end, preserve, False))
 
 for route, start, end in [("01", 0, 15), ("02", 15, 30), ("03", 30, 45), ("04", 45, 60), ("05", 60, 75), ("06", 75, 90)]:
