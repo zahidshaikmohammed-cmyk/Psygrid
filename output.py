@@ -78,6 +78,9 @@ def _clean_candle(candle: dict) -> dict:
 def _stock_payload(state, security_id: str, meta: dict) -> dict:
     with state.lock:
         candles = [dict(c) for c in state.live_candles.get(security_id, []) if c.get("complete", True)]
+        current = state.current_1m.get(security_id)
+        if current is not None:
+            candles.append(dict(current))
         reference = dict(state.market_reference.get(security_id, {}))
     candles.sort(key=lambda c: int(c.get("epoch", c.get("timestamp", 0))))
     return {
