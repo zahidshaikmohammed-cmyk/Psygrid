@@ -16,4 +16,4 @@ jobs:
           python-version: '3.12'
       - run: pip install -r requirements.txt pytest
       - run: python -m compileall -q .
-      - run: PYTHONPATH=. pytest -q tests/test_core.py tests/test_state.py tests/test_1m_contract.py tests/test_live_safety.py tests/test_hardening.py
+      - run: PYTHONPATH=. pytest -q tests/test_core.py tests/test_state.py tests/test_1m_contract.py tests/test_live_safety.py tests/test_hardening.py tests/test_universe_contract.py
