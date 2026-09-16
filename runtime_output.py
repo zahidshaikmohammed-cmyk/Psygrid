@@ -31,6 +31,8 @@ def _stock_runtime_fixup(state, stock: dict) -> None:
     stock["freshness"] = freshness
     stock["ltp_source"] = freshness.get("source")
     stock["ltp_age_seconds"] = freshness.get("data_age_seconds")
+    if context.get("ltp") is not None:
+        stock["ltp"] = round(float(context["ltp"]), 4)
 
     received = None
     if freshness.get("source") == "DHAN_REST_QUOTE_RECOVERY":
