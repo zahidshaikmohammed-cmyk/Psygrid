@@ -35,6 +35,14 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Deploy to Oracle
         env:
           ORACLE_SSH_KEY: ${{ secrets.ORACLE_SSH_KEY }}
@@ -125,3 +133,6 @@ jobs:
             echo "Public Psygrid health check failed from deployment runner" >&2
             exit 1
           fi
+
+          echo "Running LIVE 450-stock endpoint universe integrity checkpoint..."
+          PSYGRID_BASE_URL=http://140.245.226.102:10000 python tools/check_live_universe.py
