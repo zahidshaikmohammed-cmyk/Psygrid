@@ -26,13 +26,38 @@ def startup() -> None:
         settings = load_settings()
         instruments = load_instruments()
         if len(instruments) != settings.max_instruments:
-            raise RuntimeError(f"Universe integrity failure: expected {settings.max_instruments}, got {len(instruments)}")
+            raise RuntimeError(
+                f"Universe integrity failure: expected {settings.max_instruments}, got {len(instruments)}"
+            )
+
+        # One canonical universe order is used everywhere.  Shards are fixed
+        # contiguous slices of that single order; no shard may sort/reorder
+        # independently or the A-J family can overlap.
+        ordered_instruments = dict(instruments)
+        symbols = [meta["symbol"] for meta in ordered_instruments.values()]
+        if len(symbols) != len(set(symbols)):
+            duplicates = sorted({s for s in symbols if symbols.count(s) > 1})
+            raise RuntimeError(
+                f"Universe integrity failure: duplicate symbols in canonical universe: {duplicates}"
+            )
+        if len(symbols) != settings.max_instruments:
+            raise RuntimeError(
+                f"Universe integrity failure: expected {settings.max_instruments} unique symbols, got {len(symbols)}"
+            )
+
         state = RuntimeFreshnessState(settings)
         dhan_api = DhanAPI(settings)
-        manager = SessionManager(settings, state, dhan_api, LiveFeed(settings, state, instruments), instruments)
+        manager = SessionManager(
+            settings,
+            state,
+            dhan_api,
+            LiveFeed(settings, state, ordered_instruments),
+            ordered_instruments,
+        )
         manager.start()
     except Exception as exc:
         config_error = str(exc)
+
 
 
 def shutdown() -> None:
@@ -65,6 +90,7 @@ def json_response(payload: dict, status_code: int = 200) -> Response:
             "Vary": "Accept-Encoding",
         },
     )
+
 
 
 def _error_response() -> Response | None:
@@ -123,22 +149,31 @@ def public_live() -> Response:
     return json_response(market_live_json(state))
 
 
-def _public_live_range(start: int, end: int, preserve_instrument_order: bool = False) -> Response:
+
+def _public_live_range(start: int, end: int) -> Response:
     error = _error_response()
     if error:
         return error
-    return json_response(market_live_json(state, (start, end), preserve_instrument_order))
+    return json_response(market_live_json(state, (start, end), True))
 
 
-for route, start, end, preserve in [
-    ("a", 0, 45, False), ("b", 45, 90, False), ("c", 90, 135, False),
-    ("d", 135, 180, False), ("e", 180, 225, False), ("f", 225, 270, False),
-    ("g", 270, 315, True), ("h", 315, 360, True), ("i", 360, 405, True),
-    ("j", 405, 450, True),
+# IMPORTANT: every shard uses the exact same canonical instrument order.
+# 10 shards x 45 instruments = 450 unique instruments, with no overlap.
+for route, start, end in [
+    ("a", 0, 45),
+    ("b", 45, 90),
+    ("c", 90, 135),
+    ("d", 135, 180),
+    ("e", 180, 225),
+    ("f", 225, 270),
+    ("g", 270, 315),
+    ("h", 315, 360),
+    ("i", 360, 405),
+    ("j", 405, 450),
 ]:
     globals()[f"public_live_{route}"] = app.get(
         f"/public/live-{route}.json", response_class=Response
-    )(lambda start=start, end=end, preserve=preserve: _public_live_range(start, end, preserve))
+    )(lambda start=start, end=end: _public_live_range(start, end))
 
 
 @app.get("/public/stock/{symbol}.json", response_class=Response)
