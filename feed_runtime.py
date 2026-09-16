@@ -11,7 +11,7 @@ from self_keepalive import SelfKeepAlive
 
 
 class LiveFeed(BaseLiveFeed):
-    """Runtime Dhan feed with bounded REST recovery, without owning the socket loop."""
+    """Runtime Dhan feed with bounded current-quote recovery."""
 
     REST_FALLBACK_AFTER_SECONDS = 5.0
     RESUBSCRIBE_COOLDOWN_SECONDS = 30.0
@@ -62,19 +62,15 @@ class LiveFeed(BaseLiveFeed):
             except Exception as exc:
                 self.state.mark_websocket_error(f"RESUBSCRIBE:{type(exc).__name__}:{exc}")
 
-        # Dhan Quote API is real data, not synthetic data. Use it only as bounded
-        # recovery for missing/stale quotes; the primary feed remains Full WebSocket.
+        # Quote API recovery is genuine current quote data. It never creates a
+        # candle and never stores market depth.
         if stale and now - self._last_rest_fallback >= self.REST_FALLBACK_AFTER_SECONDS:
             try:
                 snapshot = self.dhan_api.quote_snapshot(self.instruments)
                 self.state.apply_rest_snapshot(snapshot)
-                self._apply_rest_market_context(snapshot)
                 self._last_rest_fallback = time.time()
             except Exception as exc:
-                self.state.set_feed_status(
-                    self.state.feed_status,
-                    f"REST_RECOVERY:{type(exc).__name__}:{exc}",
-                )
+                self.state.set_feed_status(self.state.feed_status, f"REST_RECOVERY:{type(exc).__name__}:{exc}")
 
     def _health_loop(self, feed) -> None:
         while not self._stop_requested.is_set() and not self._health_stop.wait(1.0):
@@ -83,81 +79,7 @@ class LiveFeed(BaseLiveFeed):
             except Exception as exc:
                 self.state.mark_websocket_error(f"LIVE_HEALTH:{type(exc).__name__}:{exc}")
 
-    def _apply_rest_market_context(self, snapshot: dict) -> None:
-        context = getattr(self.state, "market_context", None)
-        if context is None:
-            context = {}
-            self.state.market_context = context
-        now = time.time()
-        for security_id, row in snapshot.items():
-            if not isinstance(row, dict) or str(security_id) not in self.state.instruments:
-                continue
-            existing = dict(context.get(str(security_id), {}))
-            mapping = {
-                "last_price": "ltp",
-                "open": "day_open",
-                "high": "day_high",
-                "low": "day_low",
-                "close": "prev_close",
-            }
-            for source, target in mapping.items():
-                value = row.get(source)
-                if value is None and isinstance(row.get("ohlc"), dict):
-                    value = row["ohlc"].get(source)
-                try:
-                    value = float(value)
-                except (TypeError, ValueError):
-                    continue
-                if value > 0:
-                    existing[target] = value
-            depth = row.get("depth")
-            if isinstance(depth, list) and depth:
-                normalized = []
-                for level in depth[:5]:
-                    if not isinstance(level, dict):
-                        continue
-                    def num(*keys):
-                        for key in keys:
-                            if key in level:
-                                try:
-                                    return float(level[key])
-                                except (TypeError, ValueError):
-                                    pass
-                        return None
-                    bid = num("bid_price", "bidPrice")
-                    ask = num("ask_price", "askPrice")
-                    bq = num("bid_quantity", "bidQty", "bid_qty")
-                    aq = num("ask_quantity", "askQty", "ask_qty")
-                    bo = num("bid_orders", "bidOrders")
-                    ao = num("ask_orders", "askOrders")
-                    normalized.append({
-                        "bid_price": bid if bid and bid > 0 else None,
-                        "ask_price": ask if ask and ask > 0 else None,
-                        "bid_qty": int(bq or 0),
-                        "ask_qty": int(aq or 0),
-                        "bid_orders": int(bo or 0),
-                        "ask_orders": int(ao or 0),
-                    })
-                if normalized:
-                    existing["depth"] = normalized
-                    existing["best_bid"] = normalized[0]["bid_price"]
-                    existing["best_ask"] = normalized[0]["ask_price"]
-                    existing["bid_qty"] = normalized[0]["bid_qty"]
-                    existing["ask_qty"] = normalized[0]["ask_qty"]
-                    existing["bid_orders"] = normalized[0]["bid_orders"]
-                    existing["ask_orders"] = normalized[0]["ask_orders"]
-            existing["received_epoch"] = now
-            existing["source"] = "DHAN_REST_QUOTE_RECOVERY"
-            context[str(security_id)] = existing
-            # REST recovery is a genuine current Quote API observation. Count
-            # its receipt as fresh quote coverage, but do not touch the WebSocket
-            # candle state or manufacture a 1m candle.
-            with self.state.lock:
-                self.state.last_tick_by_security[str(security_id)] = now
-
     def _run_connected_session(self, feed) -> None:
-        # The official SDK owns its event loop. Its websocket client handles
-        # Dhan server ping/pong; we never inject client-side ping traffic.
         self._health_stop.clear()
         self._health_thread = threading.Thread(
             target=self._health_loop,
@@ -180,7 +102,6 @@ class LiveFeed(BaseLiveFeed):
             return
         self._stop_requested.clear()
         self.self_keepalive.start()
-        self.state.market_context = {}
         self._thread = threading.Thread(target=self._run, daemon=True, name="psygrid-dhan-feed")
         self._thread.start()
 
