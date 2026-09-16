@@ -134,5 +134,20 @@ jobs:
             exit 1
           fi
 
+          echo "Inspecting live endpoint schemas before integrity checkpoint..."
+          python - <<'PY'
+          import json
+          from urllib.request import Request, urlopen
+
+          base = "http://140.245.226.102:10000"
+          for path in ["/", "/public/live-a.json", "/public/live.json"]:
+              request = Request(base + path, headers={"Cache-Control": "no-cache", "User-Agent": "psygrid-deploy-schema-check/1.0"})
+              with urlopen(request, timeout=15) as response:
+                  raw = response.read()
+                  payload = json.loads(raw.decode("utf-8"))
+              print(f"SCHEMA {path}: top_keys={sorted(payload.keys())}")
+              print(f"SCHEMA {path}: service={payload.get('service')!r} schema_version={payload.get('schema_version')!r} stock_count={payload.get('stock_count')!r} stocks_type={type(payload.get('stocks')).__name__!r}")
+          PY
+
           echo "Running LIVE 450-stock endpoint universe integrity checkpoint..."
           PSYGRID_BASE_URL=http://140.245.226.102:10000 python tools/check_live_universe.py
