@@ -7,9 +7,6 @@ from zoneinfo import ZoneInfo
 
 PUBLIC_TIMEZONE = ZoneInfo("Asia/Kolkata")
 PUBLIC_TIMEZONE_NAME = "Asia/Kolkata"
-# Compatibility constant used only by legacy standalone index modules.
-# The live 450-stock API never serializes these timeframes.
-LIVE_TIMEFRAMES = ("1m", "5m", "15m", "1h")
 
 
 def _price(value):
@@ -41,27 +38,36 @@ def _ist_timestamp(value) -> Optional[str]:
         return None
 
 
-def _normalize_ohlcv(row: dict) -> dict:
-    return {
-        "timestamp": _ist_timestamp(row.get("timestamp", row.get("epoch"))),
-        "open": _price(row.get("open")),
-        "high": _price(row.get("high")),
-        "low": _price(row.get("low")),
-        "close": _price(row.get("close")),
-        "volume": int(row.get("volume", 0) or 0),
-    }
+def _minute_key(row: dict) -> Optional[int]:
+    value = row.get("epoch")
+    if value is None:
+        value = row.get("timestamp")
+    try:
+        return int(value) // 60
+    except (TypeError, ValueError):
+        return None
 
 
-def _completed_rows(rows: list[dict]) -> list[dict]:
-    out = []
+def _prefer_candle(existing: dict, incoming: dict) -> dict:
+    existing_source = str(existing.get("source", ""))
+    incoming_source = str(incoming.get("source", ""))
+    if existing_source == "DHAN_HISTORICAL_API" and incoming_source != "DHAN_HISTORICAL_API":
+        return existing
+    return incoming
+
+
+def _dedupe_candles(rows: list[dict]) -> list[dict]:
+    by_minute: dict[int, dict] = {}
     for row in rows:
         if not isinstance(row, dict) or row.get("complete", True) is False:
             continue
         if any(row.get(key) is None for key in ("open", "high", "low", "close")):
             continue
-        out.append(row)
-    out.sort(key=lambda row: int(row.get("timestamp", row.get("epoch", 0))))
-    return out
+        key = _minute_key(row)
+        if key is None:
+            continue
+        by_minute[key] = _prefer_candle(by_minute[key], row) if key in by_minute else dict(row)
+    return [by_minute[key] for key in sorted(by_minute)]
 
 
 def _clean_candle(candle: dict) -> dict:
@@ -77,12 +83,12 @@ def _clean_candle(candle: dict) -> dict:
 
 def _stock_payload(state, security_id: str, meta: dict) -> dict:
     with state.lock:
-        candles = [dict(c) for c in state.live_candles.get(security_id, []) if c.get("complete", True)]
+        candles = [dict(c) for c in state.live_candles.get(security_id, [])]
         current = state.current_1m.get(security_id)
         if current is not None:
             candles.append(dict(current))
         reference = dict(state.market_reference.get(security_id, {}))
-    candles.sort(key=lambda c: int(c.get("epoch", c.get("timestamp", 0))))
+    candles = _dedupe_candles(candles)
     return {
         "symbol": meta["symbol"],
         "security_id": security_id,
