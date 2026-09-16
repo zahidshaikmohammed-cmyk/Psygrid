@@ -32,8 +32,7 @@ def startup() -> None:
 
         # Preserve the one canonical universe order returned by config.
         # Shards are fixed contiguous slices of this exact order.
-        ordered_instruments = dict(instruments)
-        symbols = [meta["symbol"] for meta in ordered_instruments.values()]
+        symbols = [item.symbol for item in instruments]
         if len(symbols) != len(set(symbols)):
             seen = set()
             duplicates = []
@@ -43,6 +42,11 @@ def startup() -> None:
                 seen.add(symbol)
             raise RuntimeError(
                 f"Universe integrity failure: duplicate symbols in canonical universe: {duplicates}"
+            )
+        security_ids = [str(item.security_id) for item in instruments]
+        if len(security_ids) != len(set(security_ids)):
+            raise RuntimeError(
+                "Universe integrity failure: duplicate security IDs in canonical universe"
             )
         if len(symbols) != settings.max_instruments:
             raise RuntimeError(
@@ -55,8 +59,8 @@ def startup() -> None:
             settings,
             state,
             dhan_api,
-            LiveFeed(settings, state, ordered_instruments),
-            ordered_instruments,
+            LiveFeed(settings, state, instruments),
+            instruments,
         )
         manager.start()
     except Exception as exc:
