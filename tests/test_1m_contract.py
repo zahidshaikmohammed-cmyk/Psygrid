@@ -83,7 +83,7 @@ def test_completed_minute_is_unique_when_history_and_websocket_overlap():
     payload = stock_json(state, "AAA")
     candles = payload["candles_1m"]
     assert len(candles) == 1
-    assert candles[0]["timestamp"] == "2026-05-16 16:05:00 IST" or candles[0]["timestamp"]
+    assert candles[0]["timestamp"] == "2026-05-17 09:15:00 IST"
     assert candles[0]["volume"] == 500
 
 
