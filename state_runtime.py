@@ -61,15 +61,25 @@ class RuntimeFreshnessState(PsygridState):
             valid = age <= self.settings.max_live_age_seconds
             return {"status": "LIVE" if valid else "STALE", "data_age_seconds": round(age, 3), "live_data_valid": valid, "source": source}
 
+    def all_live_stale(self, now_epoch: Optional[float] = None) -> bool:
+        with self.lock:
+            if self.session_status != "LIVE" or not self.instruments:
+                return False
+            now_epoch = now_epoch or time.time()
+            for security_id in self.instruments:
+                ws = self.last_tick_by_security.get(security_id, 0.0)
+                rest = self.rest_quote_received.get(security_id, 0.0)
+                if max(ws, rest) and now_epoch - max(ws, rest) <= self.settings.max_live_age_seconds:
+                    return False
+            return True
+
     def snapshot(self) -> dict:
         snap = super().snapshot()
         with self.lock:
             now = time.time()
             live_count = 0
             for security_id in self.instruments:
-                ws = self.last_tick_by_security.get(security_id, 0.0)
-                rest = self.rest_quote_received.get(security_id, 0.0)
-                received = max(ws, rest)
+                received = max(self.last_tick_by_security.get(security_id, 0.0), self.rest_quote_received.get(security_id, 0.0))
                 if received and now - received <= self.settings.max_live_age_seconds:
                     live_count += 1
             snap["live_stock_count"] = live_count
