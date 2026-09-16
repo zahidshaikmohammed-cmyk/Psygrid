@@ -7,6 +7,9 @@ from zoneinfo import ZoneInfo
 
 PUBLIC_TIMEZONE = ZoneInfo("Asia/Kolkata")
 PUBLIC_TIMEZONE_NAME = "Asia/Kolkata"
+# Compatibility constant used only by legacy standalone index modules.
+# The live 450-stock API never serializes these timeframes.
+LIVE_TIMEFRAMES = ("1m", "5m", "15m", "1h")
 
 
 def _price(value):
@@ -36,6 +39,29 @@ def _ist_timestamp(value) -> Optional[str]:
         return dt.strftime("%Y-%m-%d %H:%M:%S IST")
     except (TypeError, ValueError, OSError, OverflowError):
         return None
+
+
+def _normalize_ohlcv(row: dict) -> dict:
+    return {
+        "timestamp": _ist_timestamp(row.get("timestamp", row.get("epoch"))),
+        "open": _price(row.get("open")),
+        "high": _price(row.get("high")),
+        "low": _price(row.get("low")),
+        "close": _price(row.get("close")),
+        "volume": int(row.get("volume", 0) or 0),
+    }
+
+
+def _completed_rows(rows: list[dict]) -> list[dict]:
+    out = []
+    for row in rows:
+        if not isinstance(row, dict) or row.get("complete", True) is False:
+            continue
+        if any(row.get(key) is None for key in ("open", "high", "low", "close")):
+            continue
+        out.append(row)
+    out.sort(key=lambda row: int(row.get("timestamp", row.get("epoch", 0))))
+    return out
 
 
 def _clean_candle(candle: dict) -> dict:
@@ -96,12 +122,7 @@ def stock_json(state, symbol: str) -> dict:
     if found is None:
         return {"service": "PSYGRID", "symbol": symbol, "status": "NOT_FOUND"}
     security_id, meta = found
-    return {
-        "service": "PSYGRID",
-        "schema_version": "4.0",
-        "status": "OK",
-        **_stock_payload(state, security_id, meta),
-    }
+    return {"service": "PSYGRID", "schema_version": "4.0", "status": "OK", **_stock_payload(state, security_id, meta)}
 
 
 def dumps_json(payload: dict) -> str:
