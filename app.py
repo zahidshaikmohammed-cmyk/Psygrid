@@ -11,7 +11,7 @@ from starlette.middleware.gzip import GZipMiddleware
 from config import load_instruments, load_settings
 from dhan_api import DhanAPI
 from feed_runtime import LiveFeed
-from output_runtime import market_live_json, stock_json
+from output import market_live_json, stock_json
 from session import SessionManager
 from state_runtime import RuntimeFreshnessState
 
@@ -54,7 +54,17 @@ app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
 
 
 def json_response(payload: dict, status_code: int = 200) -> Response:
-    return Response(content=orjson.dumps(payload, option=orjson.OPT_APPEND_NEWLINE), media_type="application/json", status_code=status_code, headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0", "Pragma": "no-cache", "Expires": "0", "Vary": "Accept-Encoding"})
+    return Response(
+        content=orjson.dumps(payload, option=orjson.OPT_APPEND_NEWLINE),
+        media_type="application/json",
+        status_code=status_code,
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+            "Vary": "Accept-Encoding",
+        },
+    )
 
 
 def _error_response() -> Response | None:
@@ -67,7 +77,20 @@ def _error_response() -> Response | None:
 
 @app.get("/", response_class=Response)
 def root() -> Response:
-    return json_response({"service": "PSYGRID", "status": "ONLINE" if not config_error else "CONFIG_ERROR", "data_source": "DHAN", "output_policy": "1M_OHLCV_PLUS_PREVIOUS_CLOSE_AND_TODAY_OPEN", "synthetic_candles": False, "universe_size": 450, "live_endpoint": "/public/live.json", "canonical_shard_family": "live-a-through-live-j", "live_endpoints": ["/public/live.json"] + [f"/public/live-{x}.json" for x in "abcdefghij"], "live_timeframes": ["1m"]})
+    return json_response({
+        "service": "PSYGRID",
+        "status": "ONLINE" if not config_error else "CONFIG_ERROR",
+        "data_source": "DHAN",
+        "output_policy": "1M_OHLCV_PLUS_PREVIOUS_CLOSE_AND_TODAY_OPEN",
+        "synthetic_candles": False,
+        "universe_size": 450,
+        "live_endpoint": "/public/live.json",
+        "canonical_shard_family": "live-a-through-live-j",
+        "live_endpoints": ["/public/live.json"] + [f"/public/live-{x}.json" for x in "abcdefghij"],
+        "live_timeframes": ["1m"],
+        "depth_enabled": False,
+        "indicators_enabled": False,
+    })
 
 
 @app.get("/health", response_class=Response)
@@ -81,7 +104,14 @@ def ready() -> Response:
     if error:
         return error
     snap = state.snapshot()
-    ready_now = bool(snap.get("session_status") == "LIVE" and snap.get("feed_status") == "CONNECTED" and snap.get("stock_count") == 450 and snap.get("subscribed_count") == 450 and snap.get("live_stock_count") == 450 and snap.get("stream_health") == "FULL_LIVE")
+    ready_now = bool(
+        snap.get("session_status") == "LIVE"
+        and snap.get("feed_status") == "CONNECTED"
+        and snap.get("stock_count") == 450
+        and snap.get("subscribed_count") == 450
+        and snap.get("live_stock_count") == 450
+        and snap.get("stream_health") == "FULL_LIVE"
+    )
     return json_response({"service": "PSYGRID", "ready": ready_now, **snap}, 200 if ready_now else 503)
 
 
@@ -100,8 +130,15 @@ def _public_live_range(start: int, end: int, preserve_instrument_order: bool = F
     return json_response(market_live_json(state, (start, end), preserve_instrument_order))
 
 
-for route, start, end, preserve in [("a", 0, 45, False), ("b", 45, 90, False), ("c", 90, 135, False), ("d", 135, 180, False), ("e", 180, 225, False), ("f", 225, 270, False), ("g", 270, 315, True), ("h", 315, 360, True), ("i", 360, 405, True), ("j", 405, 450, True)]:
-    globals()[f"public_live_{route}"] = app.get(f"/public/live-{route}.json", response_class=Response)(lambda start=start, end=end, preserve=preserve: _public_live_range(start, end, preserve))
+for route, start, end, preserve in [
+    ("a", 0, 45, False), ("b", 45, 90, False), ("c", 90, 135, False),
+    ("d", 135, 180, False), ("e", 180, 225, False), ("f", 225, 270, False),
+    ("g", 270, 315, True), ("h", 315, 360, True), ("i", 360, 405, True),
+    ("j", 405, 450, True),
+]:
+    globals()[f"public_live_{route}"] = app.get(
+        f"/public/live-{route}.json", response_class=Response
+    )(lambda start=start, end=end, preserve=preserve: _public_live_range(start, end, preserve))
 
 
 @app.get("/public/stock/{symbol}.json", response_class=Response)
