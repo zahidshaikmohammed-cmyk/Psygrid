@@ -83,7 +83,8 @@ def test_public_output_contract_has_no_duplicate_minutes_or_extra_stock_fields()
         candles = stock["candles_1m"]
         assert len(candles) == 1
         assert set(candles[0]) == EXPECTED_CANDLE_KEYS
-        assert candles[0]["volume"] == 20
+        # Historical data is the canonical source on a same-minute collision.
+        assert candles[0]["volume"] == 10
         assert len({row["timestamp"] for row in candles}) == len(candles)
         assert "5m" not in stock
         assert "15m" not in stock
