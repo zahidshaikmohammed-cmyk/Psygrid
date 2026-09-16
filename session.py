@@ -16,6 +16,9 @@ from dhan_auth import DhanTokenRateLimited, generate_access_token
 class SessionManager:
     """Own the market session and bootstrap only the 1m OHLCV dataset."""
 
+    HISTORY_BOOTSTRAP_RETRIES = 3
+    HISTORY_RETRY_DELAYS = (0.5, 1.5, 3.0)
+
     def __init__(self, settings, state, dhan_api, feed, instruments):
         self.settings = settings
         self.state = state
@@ -178,34 +181,60 @@ class SessionManager:
             )
             self.history_thread.start()
 
-    def _load_1m_history(self, now: datetime) -> None:
-        def load_one(item):
+    def _load_one_1m_history(self, item) -> bool:
+        last_exc: Optional[Exception] = None
+        for attempt in range(self.HISTORY_BOOTSTRAP_RETRIES):
             if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
-                return
+                return False
             try:
                 rows = self.dhan_api.load_today_completed_intraday(item, 1)
-                self.state.merge_today_1m_history(item.security_id, rows)
+                if rows:
+                    self.state.merge_today_1m_history(item.security_id, rows)
+                    return True
+                last_exc = RuntimeError("no_completed_1m_rows_returned")
             except Exception as exc:
+                last_exc = exc
                 if self._looks_like_auth_failure(exc):
                     try:
                         self._refresh_auth_once()
                         rows = self.dhan_api.load_today_completed_intraday(item, 1)
-                        self.state.merge_today_1m_history(item.security_id, rows)
-                        return
+                        if rows:
+                            self.state.merge_today_1m_history(item.security_id, rows)
+                            return True
+                        last_exc = RuntimeError("no_completed_1m_rows_after_auth_refresh")
                     except Exception as retry_exc:
-                        exc = retry_exc
-                with self.state.lock:
-                    self.state.last_feed_error = f"live_candle_bootstrap:{item.symbol}:1m:{exc}"
+                        last_exc = retry_exc
+            if attempt < self.HISTORY_BOOTSTRAP_RETRIES - 1:
+                time.sleep(self.HISTORY_RETRY_DELAYS[attempt])
+        with self.state.lock:
+            self.state.last_feed_error = f"live_candle_bootstrap:{item.symbol}:1m:{last_exc}"
+        return False
 
+    def _load_1m_history(self, now: datetime) -> None:
+        # The API throttle is shared across workers, so the pool can remain
+        # concurrent without creating request bursts. Every instrument gets
+        # multiple attempts; a transient empty/error response is not final.
         with ThreadPoolExecutor(max_workers=8, thread_name_prefix="psygrid-live-1m") as pool:
-            futures = [pool.submit(load_one, item) for item in self.instruments]
-            for future in futures:
+            futures = {pool.submit(self._load_one_1m_history, item): item for item in self.instruments}
+            failed = []
+            for future, item in list(futures.items()):
                 if self.stop_event.is_set() or self.history_stop.is_set():
                     break
                 try:
-                    future.result()
-                except Exception:
-                    pass
+                    if not future.result():
+                        failed.append(item)
+                except Exception as exc:
+                    failed.append(item)
+                    with self.state.lock:
+                        self.state.last_feed_error = f"live_candle_bootstrap:{item.symbol}:1m:{exc}"
+
+        # A second bounded pass catches instruments that failed because of a
+        # transient provider response while the first 450-request sweep ran.
+        if failed and not self.stop_event.is_set() and not self.history_stop.is_set() and self.in_market():
+            for item in failed:
+                if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
+                    break
+                self._load_one_1m_history(item)
 
     def _end_session(self) -> None:
         with self._lock:
