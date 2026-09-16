@@ -9,7 +9,7 @@ from fastapi import FastAPI, Response
 from starlette.middleware.gzip import GZipMiddleware
 
 from config import load_instruments, load_settings
-from dhan_api import DhanAPI
+from dhan_api_runtime import DhanAPI
 from feed_runtime import LiveFeed
 from output import LIVE_TIMEFRAMES, stock_json
 from runtime_output import market_live_json
