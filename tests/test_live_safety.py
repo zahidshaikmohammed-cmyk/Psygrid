@@ -25,9 +25,6 @@ def _instruments():
 def test_runtime_freshness_uses_packet_receipt_not_ltt():
     state = RuntimeFreshnessState(_settings())
     state.begin("2026-09-01", _instruments())
-
-    # Deliberately use an old market-trade timestamp. Receipt time must still
-    # make the accepted quote fresh immediately after it is received.
     old_ltt = int(time.time()) - 3600
     state.record_live_quote("1", old_ltt)
 
@@ -40,8 +37,8 @@ def test_runtime_freshness_blocks_old_packet_receipt():
     state.begin("2026-09-01", _instruments())
     state.record_live_quote("1", int(time.time()))
 
-    state.last_tick_received_by_security["1"] = time.time() - 61
-    state.last_tick_received_epoch = time.time() - 61
+    # Freshness is based on local packet receipt time, not exchange LTT.
+    state.last_tick_by_security["1"] = time.time() - 61
 
     assert state.freshness("1")["status"] == "STALE"
     assert state.freshness("1")["live_data_valid"] is False
