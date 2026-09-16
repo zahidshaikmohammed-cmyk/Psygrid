@@ -117,6 +117,25 @@ jobs:
           sudo ss -lntp | grep ':10000' || true
           echo "--- firewall ---"
           sudo iptables -L INPUT -n --line-numbers | grep 10000 || true
+
+          echo "Inspecting Oracle-local service identity and local endpoint responses..."
+          echo "--- systemctl show ---"
+          sudo systemctl show psygrid -p MainPID -p ExecStart -p WorkingDirectory --no-pager
+          pid="$(sudo systemctl show psygrid -p MainPID --value)"
+          if [ -n "$pid" ] && [ "$pid" != "0" ]; then
+            echo "--- process command line ---"
+            sudo tr '\0' ' ' < "/proc/$pid/cmdline"; echo
+            echo "--- process cwd ---"
+            sudo readlink "/proc/$pid/cwd"
+          fi
+          echo "--- local root ---"
+          curl -fsS --max-time 15 -H 'Cache-Control: no-cache' http://127.0.0.1:10000/
+          echo
+          echo "--- local live-a ---"
+          curl -fsS --max-time 15 -H 'Cache-Control: no-cache' http://127.0.0.1:10000/public/live-a.json | /home/ubuntu/Psygrid/.venv/bin/python -c 'import json,sys; p=json.load(sys.stdin); print(json.dumps({"top_keys":sorted(p),"status":p.get("status"),"error":p.get("error"),"schema_version":p.get("schema_version"),"stock_count":p.get("stock_count"),"stocks_type":type(p.get("stocks")).__name__}, separators=(",",":")))'
+          echo
+          echo "--- local full ---"
+          curl -fsS --max-time 15 -H 'Cache-Control: no-cache' http://127.0.0.1:10000/public/live.json | /home/ubuntu/Psygrid/.venv/bin/python -c 'import json,sys; p=json.load(sys.stdin); print(json.dumps({"top_keys":sorted(p),"status":p.get("status"),"error":p.get("error"),"schema_version":p.get("schema_version"),"stock_count":p.get("stock_count"),"stocks_type":type(p.get("stocks")).__name__}, separators=(",",":")))'
           REMOTE
 
           echo "Checking public Psygrid health from the deployment runner..."
@@ -134,7 +153,7 @@ jobs:
             exit 1
           fi
 
-          echo "Inspecting live endpoint schemas before integrity checkpoint..."
+          echo "Inspecting public endpoint schemas before integrity checkpoint..."
           python - <<'PY'
           import json
           from urllib.request import Request, urlopen
@@ -146,7 +165,7 @@ jobs:
                   raw = response.read()
                   payload = json.loads(raw.decode("utf-8"))
               print(f"SCHEMA {path}: top_keys={sorted(payload.keys())}")
-              print(f"SCHEMA {path}: service={payload.get('service')!r} schema_version={payload.get('schema_version')!r} stock_count={payload.get('stock_count')!r} stocks_type={type(payload.get('stocks')).__name__!r}")
+              print(f"SCHEMA {path}: service={payload.get('service')!r} status={payload.get('status')!r} error={payload.get('error')!r} schema_version={payload.get('schema_version')!r} stock_count={payload.get('stock_count')!r} stocks_type={type(payload.get('stocks')).__name__!r}")
           PY
 
           echo "Running LIVE 450-stock endpoint universe integrity checkpoint..."
