@@ -8,12 +8,7 @@ from zoneinfo import ZoneInfo
 
 
 class PsygridState:
-    """RAM-only market state for the canonical 1-minute OHLCV feed.
-
-    Runtime stores no higher timeframes, depth, indicators, signals, or
-    execution metadata. WebSocket quotes build native 1m candles; the Dhan
-    Quote API supplies current reference values and recovery.
-    """
+    """RAM-only market state for the canonical 1-minute OHLCV feed."""
 
     def __init__(self, settings):
         self.settings = settings
@@ -172,7 +167,6 @@ class PsygridState:
             self.market_reference[security_id] = row
 
     def apply_quote_snapshot(self, snapshot: dict) -> None:
-        """Persist only previous-close, today's-open and current LTP."""
         with self.lock:
             for security_id, row in snapshot.items():
                 security_id = str(security_id)
@@ -203,28 +197,61 @@ class PsygridState:
             self.last_tick_by_security[security_id] = received_now
             self.last_ltt_by_security[security_id] = int(ltt_epoch)
 
+    @staticmethod
+    def _minute_key(candle: dict) -> Optional[int]:
+        try:
+            return int(candle.get("epoch", candle["timestamp"])) // 60
+        except (KeyError, TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _prefer_existing(existing: dict, incoming: dict) -> dict:
+        existing_source = str(existing.get("source", ""))
+        incoming_source = str(incoming.get("source", ""))
+        if existing_source == "DHAN_HISTORICAL_API" and incoming_source != "DHAN_HISTORICAL_API":
+            return dict(existing)
+        return dict(incoming)
+
+    def _append_completed_1m_locked(self, security_id: str, candle: dict) -> None:
+        key = self._minute_key(candle)
+        if key is None:
+            return
+        rows = self.live_candles.setdefault(security_id, [])
+        replaced = False
+        for index, existing in enumerate(rows):
+            if self._minute_key(existing) == key:
+                rows[index] = self._prefer_existing(existing, candle)
+                replaced = True
+                break
+        if not replaced:
+            rows.append(dict(candle))
+        rows.sort(key=lambda row: self._minute_key(row) or 0)
+
     def merge_today_1m_history(self, security_id: str, candles: List[dict]) -> None:
         security_id = str(security_id)
         with self.lock:
-            existing = {}
+            existing: Dict[int, dict] = {}
             for candle in self.live_candles.get(security_id, []):
-                if candle.get("complete", True):
-                    item = dict(candle)
-                    epoch = int(item.get("epoch", item["timestamp"]))
-                    item["epoch"] = epoch
-                    existing[epoch // 60] = item
+                if not isinstance(candle, dict) or not candle.get("complete", True):
+                    continue
+                key = self._minute_key(candle)
+                if key is not None:
+                    existing[key] = dict(candle)
             for candle in candles:
                 if not isinstance(candle, dict) or not candle.get("complete", True):
                     continue
-                try:
-                    item = dict(candle)
-                    epoch = int(item.get("epoch", item["timestamp"]))
-                except (KeyError, TypeError, ValueError):
+                key = self._minute_key(candle)
+                if key is None:
                     continue
-                item["epoch"] = epoch
-                item["complete"] = True
-                existing[epoch // 60] = item
+                existing[key] = self._prefer_existing(existing[key], candle) if key in existing else dict(candle)
+                existing[key]["complete"] = True
             self.live_candles[security_id] = [existing[k] for k in sorted(existing)]
+
+            current = self.current_1m.get(security_id)
+            current_key = self._minute_key(current) if current is not None else None
+            if current_key is not None and current_key in existing:
+                # Historical API is authoritative for a completed minute.
+                self.current_1m[security_id] = None
 
     def seed_cumulative_volume(self, security_id: str, cumulative_volume: int) -> None:
         with self.lock:
@@ -256,8 +283,9 @@ class PsygridState:
                 if minute_key < current_minute:
                     return
                 if minute_key > current_minute:
-                    current["complete"] = True
-                    self.live_candles[security_id].append(dict(current))
+                    completed = dict(current)
+                    completed["complete"] = True
+                    self._append_completed_1m_locked(security_id, completed)
                     self.current_1m[security_id] = None
 
             previous_volume = self.prev_cumulative_volume.get(security_id)
@@ -295,7 +323,7 @@ class PsygridState:
                 if candle is not None:
                     item = dict(candle)
                     item["complete"] = True
-                    self.live_candles[security_id].append(item)
+                    self._append_completed_1m_locked(security_id, item)
                     self.current_1m[security_id] = None
 
     def freshness(self, security_id: str, now_epoch: Optional[float] = None) -> dict:
@@ -311,11 +339,7 @@ class PsygridState:
     def snapshot(self) -> dict:
         with self.lock:
             now_epoch = datetime.now(timezone.utc).timestamp()
-            live_count = sum(
-                1 for security_id in self.instruments
-                if security_id in self.last_tick_by_security
-                and now_epoch - self.last_tick_by_security[security_id] <= self.settings.max_live_age_seconds
-            )
+            live_count = sum(1 for security_id in self.instruments if security_id in self.last_tick_by_security and now_epoch - self.last_tick_by_security[security_id] <= self.settings.max_live_age_seconds)
             if self.session_status == "LIVE" and live_count == 0:
                 stream_health = "CONNECTED_NO_LIVE_QUOTES" if self.feed_status == "CONNECTED" else self.feed_status
             elif self.session_status == "LIVE" and live_count == len(self.instruments) and self.instruments:
