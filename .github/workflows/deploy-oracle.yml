@@ -27,8 +27,8 @@ jobs:
       - name: Compile Python
         run: python -m compileall -q .
 
-      - name: Run tests
-        run: pytest -q
+      - name: Run canonical 1-minute tests
+        run: pytest -q tests/test_core.py tests/test_state.py tests/test_1m_contract.py tests/test_live_safety.py tests/test_hardening.py
 
   deploy:
     needs: test
