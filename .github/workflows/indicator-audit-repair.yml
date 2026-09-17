@@ -1,0 +1,37 @@
+name: Indicator Audit Repair
+
+on:
+  push:
+    branches: [audit-indicators-2026-09-17]
+
+permissions:
+  contents: write
+
+jobs:
+  repair-and-test:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -r requirements.txt pytest
+      - name: Apply narrow indicator repairs
+        run: python tools/apply_indicator_audit_repairs.py
+      - name: Run indicator audit tests
+        run: python -m pytest -q tests/test_indicator_audit_repairs.py tests/test_master_indicator.py
+      - name: Commit repaired engine
+        run: |
+          if git diff --quiet; then
+            echo "No source changes required."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add psygrid_master_indicator.py
+          git commit -m "Repair canonical ADX and CMF math"
+          git push origin HEAD:audit-indicators-2026-09-17
