@@ -4,6 +4,7 @@ import os
 from contextlib import asynccontextmanager
 
 import orjson
+import requests
 import uvicorn
 from fastapi import FastAPI, Response
 from starlette.middleware.gzip import GZipMiddleware
@@ -21,10 +22,14 @@ config_error = ""
 indicator_error = ""
 
 
-def indicator_source_payload(source_state):
-    # Same live OHLCV payload as /public/live.json, preserving canonical
-    # universe order for indicator shards. No second feed or HTTP hop.
-    return market_live_json(source_state, None, True)
+def indicator_source_payload(_source_state):
+    url = os.getenv("PSYGRID_INDICATOR_SOURCE_URL", "http://127.0.0.1:10000/public/live.json")
+    response = requests.get(url, timeout=10, headers={"Cache-Control": "no-cache"})
+    response.raise_for_status()
+    payload = response.json()
+    if not isinstance(payload, dict):
+        raise ValueError("Psygrid indicator source endpoint did not return an object")
+    return payload
 
 
 def startup() -> None:
@@ -77,7 +82,7 @@ def startup() -> None:
         # PSYGRID live payload builder used by /public/live.json, so the core
         # OHLCV endpoints remain untouched and remain the source of truth.
         try:
-            indicator_runtime = IndicatorRuntime(state, indicator_source_payload)
+            indicator_runtime = IndicatorRuntime(state, indicator_source_payload, interval_seconds=1.0)
             indicator_runtime.start()
         except Exception as exc:
             indicator_runtime = None
