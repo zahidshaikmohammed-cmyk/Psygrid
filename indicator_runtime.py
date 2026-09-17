@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import threading
-import time
 from typing import Any, Optional
 
-from psygrid_master_indicator import IndicatorConfig, PsygridMasterIndicatorEngine
+from psygrid_master_indicator import (
+    IndicatorConfig,
+    PsygridMasterIndicatorEngine,
+    _freshness,
+    _parse_ist_timestamp,
+)
 
 
 class IndicatorRuntime:
@@ -62,6 +66,15 @@ class IndicatorRuntime:
         for symbol, stock in stocks.items():
             fingerprint = self._fingerprint(stock)
             if fingerprint == fingerprints.get(symbol) and symbol in results:
+                existing = dict(results[symbol])
+                as_of = existing.get("as_of")
+                if as_of:
+                    freshness = _freshness(endpoint_now, _parse_ist_timestamp(as_of), self.engine.config)
+                    existing["freshness"] = freshness
+                    if freshness["status"] != "FRESH":
+                        existing["indicators"] = {k: None for k in existing.get("indicators", {})}
+                    results[symbol] = existing
+                fingerprints[symbol] = fingerprint
                 continue
             try:
                 results[symbol] = self.engine.compute_stock(stock, endpoint_now)
@@ -89,7 +102,15 @@ class IndicatorRuntime:
     def _run(self) -> None:
         while not self._stop.is_set():
             try:
-                if self.state.session_status == "LIVE":
+                snap = self.state.snapshot() if hasattr(self.state, "snapshot") else {}
+                if (
+                    snap.get("session_status", getattr(self.state, "session_status", None)) == "LIVE"
+                    and snap.get("feed_status") == "CONNECTED"
+                    and snap.get("stock_count") == 450
+                    and snap.get("subscribed_count") == 450
+                    and snap.get("live_stock_count") == 450
+                    and snap.get("stream_health") == "FULL_LIVE"
+                ):
                     self._sync_once()
             except Exception as exc:
                 with self._lock:
@@ -105,27 +126,29 @@ class IndicatorRuntime:
             last_error = self._last_error
         source = self.source_builder(self.state)
         ordered_symbols = list(source.get("stocks", {}).keys())
+        expected_count = 450 if stock_range is None else (stock_range[1] - stock_range[0])
         if stock_range is not None:
             ordered_symbols = ordered_symbols[stock_range[0]:stock_range[1]]
         selected = {symbol: results[symbol] for symbol in ordered_symbols if symbol in results}
+        selected_errors = {symbol: errors[symbol] for symbol in ordered_symbols if symbol in errors}
         fresh_count = sum(v.get("freshness", {}).get("status") == "FRESH" for v in selected.values())
         stale_count = sum(v.get("freshness", {}).get("status") == "STALE" for v in selected.values())
         time_error_count = sum(v.get("freshness", {}).get("status") == "TIME_ERROR" for v in selected.values())
         return {
             "service": "PSYGRID_MASTER_INDICATOR",
             "engine_version": "1.0.0",
-            "status": "OK" if selected else "STARTING",
+            "status": "OK" if len(selected) == expected_count else ("STARTING" if not selected else "PARTIAL"),
             "source": meta,
             "timeframe": "1m",
             "universe_size": 450,
             "stock_count": len(selected),
             "processed_count": len(selected),
-            "error_count": len(errors),
+            "error_count": len(selected_errors),
             "fresh_count": fresh_count,
             "stale_count": stale_count,
             "time_error_count": time_error_count,
             "sync_count": sync_count,
-            "errors": errors,
+            "errors": selected_errors,
             "results": selected,
             "runtime_error": last_error,
         }

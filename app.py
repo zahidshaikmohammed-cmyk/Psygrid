@@ -21,6 +21,12 @@ config_error = ""
 indicator_error = ""
 
 
+def indicator_source_payload(source_state):
+    # Same live OHLCV payload as /public/live.json, preserving canonical
+    # universe order for indicator shards. No second feed or HTTP hop.
+    return market_live_json(source_state, None, True)
+
+
 def startup() -> None:
     global settings, state, manager, indicator_runtime, config_error, indicator_error
     config_error = ""
@@ -71,7 +77,7 @@ def startup() -> None:
         # PSYGRID live payload builder used by /public/live.json, so the core
         # OHLCV endpoints remain untouched and remain the source of truth.
         try:
-            indicator_runtime = IndicatorRuntime(state, market_live_json)
+            indicator_runtime = IndicatorRuntime(state, indicator_source_payload)
             indicator_runtime.start()
         except Exception as exc:
             indicator_runtime = None
