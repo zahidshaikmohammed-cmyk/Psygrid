@@ -28,7 +28,7 @@ jobs:
         run: python -m compileall -q .
 
       - name: Run canonical 1-minute tests
-        run: PYTHONPATH=. pytest -q tests/test_core.py tests/test_state.py tests/test_1m_contract.py tests/test_live_safety.py tests/test_hardening.py tests/test_universe_contract.py tests/test_master_indicator.py
+        run: PYTHONPATH=. pytest -q tests/test_core.py tests/test_state.py tests/test_1m_contract.py tests/test_live_safety.py tests/test_hardening.py tests/test_universe_contract.py tests/test_master_indicator.py tests/test_indicator_runtime.py
 
   deploy:
     needs: test
@@ -134,5 +134,47 @@ jobs:
             exit 1
           fi
 
+          echo "Waiting for Psygrid to become LIVE before the market-hours checkpoint..."
+          live_ok=0
+          for attempt in $(seq 1 60); do
+            if curl -fsS --max-time 5 http://140.245.226.102:10000/ready >/tmp/psygrid-ready.json; then
+              echo
+              live_ok=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$live_ok" -ne 1 ]; then
+            echo "Psygrid did not reach LIVE readiness within 120 seconds" >&2
+            cat /tmp/psygrid-ready.json 2>/dev/null || true
+            exit 1
+          fi
+
           echo "Running LIVE 450-stock endpoint universe integrity checkpoint..."
           PSYGRID_BASE_URL=http://140.245.226.102:10000 python tools/check_live_universe.py
+
+          echo "Waiting for Master Indicator layer to reach full 450-stock synchronization..."
+          indicator_ok=0
+          for attempt in $(seq 1 90); do
+            if curl -fsS --max-time 10 http://140.245.226.102:10000/public/indicators.json >/tmp/psygrid-indicators.json; then
+              if python - <<'PY'
+import json
+with open('/tmp/psygrid-indicators.json', encoding='utf-8') as f:
+    p = json.load(f)
+raise SystemExit(0 if p.get('status') == 'OK' and p.get('stock_count') == 450 else 1)
+PY
+              then
+                echo "Master Indicator: 450/450 synchronized."
+                indicator_ok=1
+                break
+              fi
+            fi
+            sleep 2
+          done
+          if [ "$indicator_ok" -ne 1 ]; then
+            echo "Master Indicator layer did not reach 450/450 within 180 seconds" >&2
+            cat /tmp/psygrid-indicators.json 2>/dev/null || true
+            exit 1
+          fi
+
+          echo "Master Indicator production checkpoint passed."
