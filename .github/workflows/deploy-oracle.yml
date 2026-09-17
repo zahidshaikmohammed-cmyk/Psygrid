@@ -28,7 +28,7 @@ jobs:
         run: python -m compileall -q .
 
       - name: Run canonical 1-minute tests
-        run: PYTHONPATH=. pytest -q tests/test_core.py tests/test_state.py tests/test_1m_contract.py tests/test_live_safety.py tests/test_hardening.py tests/test_universe_contract.py
+        run: PYTHONPATH=. pytest -q tests/test_core.py tests/test_state.py tests/test_1m_contract.py tests/test_live_safety.py tests/test_hardening.py tests/test_universe_contract.py tests/test_master_indicator.py
 
   deploy:
     needs: test
