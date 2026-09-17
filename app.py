@@ -14,14 +14,17 @@ from feed_runtime import LiveFeed
 from output import market_live_json, stock_json
 from session import SessionManager
 from state_runtime import RuntimeFreshnessState
+from indicator_runtime import IndicatorRuntime
 
-settings = state = manager = None
+settings = state = manager = indicator_runtime = None
 config_error = ""
+indicator_error = ""
 
 
 def startup() -> None:
-    global settings, state, manager, config_error
+    global settings, state, manager, indicator_runtime, config_error, indicator_error
     config_error = ""
+    indicator_error = ""
     try:
         settings = load_settings()
         instruments = load_instruments()
@@ -63,13 +66,26 @@ def startup() -> None:
             instruments,
         )
         manager.start()
+
+        # Additive derived-data layer. It consumes the exact same canonical
+        # PSYGRID live payload builder used by /public/live.json, so the core
+        # OHLCV endpoints remain untouched and remain the source of truth.
+        try:
+            indicator_runtime = IndicatorRuntime(state, market_live_json)
+            indicator_runtime.start()
+        except Exception as exc:
+            indicator_runtime = None
+            indicator_error = str(exc)
     except Exception as exc:
         config_error = str(exc)
 
 
 
 def shutdown() -> None:
-    global manager
+    global manager, indicator_runtime
+    if indicator_runtime is not None:
+        indicator_runtime.stop()
+        indicator_runtime = None
     if manager is not None:
         manager.stop()
         manager = None
@@ -193,6 +209,62 @@ def public_stock(symbol: str) -> Response:
     if error:
         return error
     return json_response(stock_json(state, symbol))
+
+
+# ---------------------------------------------------------------------------
+# Additive Master Indicator endpoints. These do not modify or wrap the
+# existing live OHLCV endpoints above.
+# ---------------------------------------------------------------------------
+
+
+def _indicator_error_response() -> Response | None:
+    error = _error_response()
+    if error:
+        return error
+    if indicator_error:
+        return json_response({
+            "service": "PSYGRID_MASTER_INDICATOR",
+            "engine_version": "1.0.0",
+            "status": "UNAVAILABLE",
+            "error": indicator_error,
+        }, 503)
+    if indicator_runtime is None:
+        return json_response({
+            "service": "PSYGRID_MASTER_INDICATOR",
+            "engine_version": "1.0.0",
+            "status": "STARTING",
+        }, 503)
+    return None
+
+
+@app.get("/public/indicators.json", response_class=Response)
+def public_indicators() -> Response:
+    error = _indicator_error_response()
+    if error:
+        return error
+    return json_response(indicator_runtime.snapshot())
+
+
+@app.get("/public/indicators/{symbol}.json", response_class=Response)
+def public_indicator_stock(symbol: str) -> Response:
+    error = _indicator_error_response()
+    if error:
+        return error
+    return json_response(indicator_runtime.stock(symbol))
+
+
+
+def _public_indicator_range(start: int, end: int) -> Response:
+    error = _indicator_error_response()
+    if error:
+        return error
+    return json_response(indicator_runtime.snapshot((start, end)))
+
+
+for route, start, end in SHARD_RANGES:
+    globals()[f"public_indicators_{route}"] = app.get(
+        f"/public/indicators-{route}.json", response_class=Response
+    )(lambda start=start, end=end: _public_indicator_range(start, end))
 
 
 if __name__ == "__main__":
