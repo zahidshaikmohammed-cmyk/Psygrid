@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from typing import Optional
-from zoneinfo import ZoneInfo\n\nfrom config import UNIVERSE_SIZE
+from zoneinfo import ZoneInfo
+
+from config import UNIVERSE_SIZE
 
 PUBLIC_TIMEZONE = ZoneInfo("Asia/Kolkata")
 PUBLIC_TIMEZONE_NAME = "Asia/Kolkata"
