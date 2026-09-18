@@ -12,7 +12,7 @@ EXPECTED_KEYS = {"symbol", "security_id", "previous_close", "today_open", "candl
 EXPECTED_CANDLE_KEYS = {"timestamp", "open", "high", "low", "close", "volume"}
 
 
-def test_canonical_stock_universe_is_exactly_450_and_unique():
+def test_canonical_stock_universe_is_exactly_990_and_unique():
     payload = json.loads(Path("stocks.json").read_text(encoding="utf-8"))
     symbols = payload["symbols"]
     assert payload["universe"] == "PSYGRID_990"
@@ -22,7 +22,7 @@ def test_canonical_stock_universe_is_exactly_450_and_unique():
     assert len(set(symbols)) == EXPECTED
 
 
-def test_shards_are_exactly_10_disjoint_blocks_of_45():
+def test_shards_are_exactly_22_disjoint_blocks_of_45():
     assert tuple(end - start for _, start, end in SHARD_RANGES) == (45,) * 22
     assert SHARD_RANGES[0][1:] == (0, 45)
     assert SHARD_RANGES[-1][1:] == (945, 990)
