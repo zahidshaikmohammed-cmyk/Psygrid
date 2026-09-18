@@ -8,8 +8,8 @@ from itertools import combinations
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
-EXPECTED = 450
-SHARDS = tuple("abcdefghij")
+EXPECTED = 990
+SHARDS = tuple("abcdefghijklmnopqrstuv")
 IST = ZoneInfo("Asia/Kolkata")
 MARKET_START = time(9, 15)
 MARKET_END = time(15, 15)
@@ -96,7 +96,7 @@ def main() -> int:
     expected_shard_count = 45 if not off_market else 0
     print(f"MARKET STATE: {'OPEN' if in_market else 'CLOSED'} ({now_ist.strftime('%Y-%m-%d %H:%M:%S IST')})")
     print(f"ENDPOINT STATE: {endpoint_status}")
-    print(f"CHECK MODE: {'LIVE 450-STOCK' if not off_market else 'OFF-MARKET SCHEMA'}")
+    print(f"CHECK MODE: {'LIVE 990-STOCK' if not off_market else 'OFF-MARKET SCHEMA'}")
 
     if off_market:
         if root_status not in {"ONLINE", "CONFIG_ERROR"}:
@@ -145,7 +145,7 @@ def main() -> int:
         if len(full_symbols) != len(set(full_symbols)):
             failures.append("FULL ENDPOINT: duplicate symbol references")
         if set(full_symbols) != unique:
-            failures.append("FULL ENDPOINT != UNION(A..J)")
+            failures.append("FULL ENDPOINT != UNION(A..V)")
         if not off_market:
             try:
                 validate_payload_contract(full_payload, "FULL ENDPOINT", EXPECTED)

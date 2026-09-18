@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from typing import Optional
 from zoneinfo import ZoneInfo
 
+from config import UNIVERSE_SIZE
+
 PUBLIC_TIMEZONE = ZoneInfo("Asia/Kolkata")
 PUBLIC_TIMEZONE_NAME = "Asia/Kolkata"
 
@@ -116,7 +118,7 @@ def market_live_json(state, stock_range: Optional[tuple[int, int]] = None, prese
             "timezone": PUBLIC_TIMEZONE_NAME,
             "current_time_ist": datetime.now(PUBLIC_TIMEZONE).strftime("%Y-%m-%d %H:%M:%S IST"),
         },
-        "universe_size": 450,
+        "universe_size": UNIVERSE_SIZE,
         "stock_count": len(stocks),
         "data_policy": "1M_OHLCV_PLUS_PREVIOUS_CLOSE_AND_TODAY_OPEN",
         "synthetic_candles": False,

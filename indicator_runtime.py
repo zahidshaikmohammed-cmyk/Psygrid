@@ -3,6 +3,7 @@ from __future__ import annotations
 import threading
 from typing import Any, Optional
 
+from config import UNIVERSE_SIZE
 from psygrid_master_indicator import (
     IndicatorConfig,
     PsygridMasterIndicatorEngine,
@@ -71,8 +72,6 @@ class IndicatorRuntime:
                 if as_of:
                     freshness = _freshness(endpoint_now, _parse_ist_timestamp(as_of), self.engine.config)
                     existing["freshness"] = freshness
-                    if freshness["status"] != "FRESH":
-                        existing["indicators"] = {k: None for k in existing.get("indicators", {})}
                     results[symbol] = existing
                 fingerprints[symbol] = fingerprint
                 continue
@@ -106,9 +105,9 @@ class IndicatorRuntime:
                 if (
                     snap.get("session_status", getattr(self.state, "session_status", None)) == "LIVE"
                     and snap.get("feed_status") == "CONNECTED"
-                    and snap.get("stock_count") == 450
-                    and snap.get("subscribed_count") == 450
-                    and snap.get("live_stock_count") == 450
+                    and snap.get("stock_count") == UNIVERSE_SIZE
+                    and snap.get("subscribed_count") == UNIVERSE_SIZE
+                    and snap.get("live_stock_count") == UNIVERSE_SIZE
                     and snap.get("stream_health") == "FULL_LIVE"
                 ):
                     self._sync_once()
@@ -126,7 +125,7 @@ class IndicatorRuntime:
             last_error = self._last_error
         source = self.source_builder(self.state)
         ordered_symbols = list(source.get("stocks", {}).keys())
-        expected_count = 450 if stock_range is None else (stock_range[1] - stock_range[0])
+        expected_count = UNIVERSE_SIZE if stock_range is None else (stock_range[1] - stock_range[0])
         if stock_range is not None:
             ordered_symbols = ordered_symbols[stock_range[0]:stock_range[1]]
         selected = {symbol: results[symbol] for symbol in ordered_symbols if symbol in results}
@@ -140,7 +139,7 @@ class IndicatorRuntime:
             "status": "OK" if len(selected) == expected_count else ("STARTING" if not selected else "PARTIAL"),
             "source": meta,
             "timeframe": "1m",
-            "universe_size": 450,
+            "universe_size": UNIVERSE_SIZE,
             "stock_count": len(selected),
             "processed_count": len(selected),
             "error_count": len(selected_errors),
