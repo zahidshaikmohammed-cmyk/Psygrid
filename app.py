@@ -9,7 +9,7 @@ import uvicorn
 from fastapi import FastAPI, Response
 from starlette.middleware.gzip import GZipMiddleware
 
-from config import load_instruments, load_settings
+from config import UNIVERSE_SIZE, load_instruments, load_settings
 from dhan_api import DhanAPI
 from feed_runtime import LiveFeed
 from output import market_live_json, stock_json
@@ -144,10 +144,10 @@ def root() -> Response:
         "data_source": "DHAN",
         "output_policy": "1M_OHLCV_PLUS_PREVIOUS_CLOSE_AND_TODAY_OPEN",
         "synthetic_candles": False,
-        "universe_size": 450,
+        "universe_size": UNIVERSE_SIZE,
         "live_endpoint": "/public/live.json",
-        "canonical_shard_family": "live-a-through-live-j",
-        "live_endpoints": ["/public/live.json"] + [f"/public/live-{x}.json" for x in "abcdefghij"],
+        "canonical_shard_family": "live-a-through-live-v",
+        "live_endpoints": ["/public/live.json"] + [f"/public/live-{x}.json" for x in "abcdefghijklmnopqrstuv"],
         "live_timeframes": ["1m"],
         "depth_enabled": False,
         "indicators_enabled": False,
@@ -168,9 +168,9 @@ def ready() -> Response:
     ready_now = bool(
         snap.get("session_status") == "LIVE"
         and snap.get("feed_status") == "CONNECTED"
-        and snap.get("stock_count") == 450
-        and snap.get("subscribed_count") == 450
-        and snap.get("live_stock_count") == 450
+        and snap.get("stock_count") == UNIVERSE_SIZE
+        and snap.get("subscribed_count") == UNIVERSE_SIZE
+        and snap.get("live_stock_count") == UNIVERSE_SIZE
         and snap.get("stream_health") == "FULL_LIVE"
     )
     return json_response({"service": "PSYGRID", "ready": ready_now, **snap}, 200 if ready_now else 503)
@@ -195,18 +195,7 @@ def _public_live_range(start: int, end: int) -> Response:
 
 
 # Canonical 450-stock universe: exactly 10 disjoint shards of 45.
-SHARD_RANGES = (
-    ("a", 0, 45),
-    ("b", 45, 90),
-    ("c", 90, 135),
-    ("d", 135, 180),
-    ("e", 180, 225),
-    ("f", 225, 270),
-    ("g", 270, 315),
-    ("h", 315, 360),
-    ("i", 360, 405),
-    ("j", 405, 450),
-)
+SHARD_RANGES = tuple((name, index * 45, (index + 1) * 45) for index, name in enumerate("abcdefghijklmnopqrstuv"))
 
 for route, start, end in SHARD_RANGES:
     globals()[f"public_live_{route}"] = app.get(
