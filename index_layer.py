@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 import requests
 from dhanhq import DhanContext, MarketFeed
 
-from output import _completed_rows, _ist_timestamp, _normalize_ohlcv, _price
+from output import _clean_candle, _ist_timestamp, _price
 
 MASTER_URL = "https://images.dhan.co/api-data/api-scrip-master.csv"
 INDEX_SEGMENT = "IDX_I"
@@ -415,9 +415,9 @@ class IndexLayerManager:
     def snapshot(self, key: str) -> dict:
         state = self.states[key]
         with state.lock:
-            candles_1m = _completed_rows([dict(c) for c in state.live_candles])
+            candles_1m = [dict(c) for c in state.live_candles if c.get("complete", True)]
             historical = {
-                tf: _completed_rows([dict(c) for c in state.historical.get(tf, [])])
+                tf: [dict(c) for c in state.historical.get(tf, []) if c.get("complete", True)]
                 for tf in ("5m", "15m", "1h")
             }
             return {
@@ -450,7 +450,7 @@ class IndexLayerManager:
                     "1h": "DHAN_HISTORICAL_API",
                 },
                 "synthetic_candles": False,
-                "1m": [_normalize_ohlcv(x) for x in candles_1m],
+                "1m": [_clean_candle(x) for x in candles_1m],
                 "5m": [_normalize_ohlcv(x) for x in historical["5m"]],
                 "15m": [_normalize_ohlcv(x) for x in historical["15m"]],
                 "1h": [_normalize_ohlcv(x) for x in historical["1h"]],
