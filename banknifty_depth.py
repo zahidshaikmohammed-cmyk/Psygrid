@@ -93,7 +93,14 @@ class BankNiftyDepthState:
             market_open = _is_market_open(now)
             rows = []
             for row in self.contracts.values():
-                rows.append({key: (list(value) if key in ("bid", "ask") else dict(value) if key == "ohlc" and isinstance(value, dict) else value) for key, value in row.items()})
+                cleaned = {key: (list(value) if key in ("bid", "ask") else dict(value) if key == "ohlc" and isinstance(value, dict) else value) for key, value in row.items()}
+                bid_levels = cleaned.get("bid") or []
+                ask_levels = cleaned.get("ask") or []
+                cleaned["crossed_book"] = bool(
+                    bid_levels and ask_levels and bid_levels[0].get("price") is not None
+                    and ask_levels[0].get("price") is not None and bid_levels[0]["price"] > ask_levels[0]["price"]
+                )
+                rows.append(cleaned)
             rows.sort(key=lambda row: (row.get("strike", 0.0), row.get("option_type", "")))
             return {"service": "PSYGRID", "symbol": BANKNIFTY_DEPTH_SYMBOL, "status": self.status, "market_status": "OPEN" if market_open else "CLOSED", "market_open": market_open, "data_source": "DHAN_FULL_MARKET_DEPTH_WEBSOCKET", "underlying_security_id": BANKNIFTY_DEPTH_SECURITY_ID, "exchange_segment": BANKNIFTY_DEPTH_EXCHANGE_SEGMENT, "instrument": BANKNIFTY_DEPTH_INSTRUMENT, "depth_levels": BANKNIFTY_DEPTH_LEVELS, "underlying_ltp": self.underlying_ltp, "expiry": self.expiry, "contract_count": len(rows), "contracts": rows, "updated_at": self.updated_at, "connection_count": self.connection_count, "packet_count": self.packet_count, "synthetic_data": False, "storage": "RAM_ONLY", "quote_refresh_seconds": BANKNIFTY_DEPTH_QUOTE_REFRESH_SECONDS, **({"error": self.last_error} if self.last_error else {})}
 
