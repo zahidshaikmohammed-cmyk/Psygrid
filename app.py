@@ -23,11 +23,15 @@ from banknifty_options import BankNiftyOptionsManager, banknifty_options_json
 from banknifty_depth import BankNiftyDepthManager, banknifty_depth_json
 from midcpnifty_options import MidcapNiftyOptionsManager, midcpnifty_options_json
 from midcpnifty_depth import MidcapNiftyDepthManager, midcpnifty_depth_json
+from midcpnifty_underlying import MidcapNiftyUnderlyingManager
+from underlying_indicators import UnderlyingIndicatorRuntime
 
 settings = state = manager = indicator_runtime = index_manager = None
 nifty_options_manager = nifty_depth_manager = None
 banknifty_options_manager = banknifty_depth_manager = None
 midcpnifty_options_manager = midcpnifty_depth_manager = None
+midcpnifty_underlying_manager = None
+nifty_underlying_indicators = banknifty_underlying_indicators = midcpnifty_underlying_indicators = None
 config_error = ""
 indicator_error = ""
 index_error = ""
@@ -43,9 +47,30 @@ def indicator_source_payload(_source_state):
     return payload
 
 
+def _nifty_underlying_candles():
+    if index_manager is None:
+        return None
+    snap = index_manager.snapshot("nifty")
+    return snap.get("1m") if isinstance(snap, dict) else None
+
+
+def _banknifty_underlying_candles():
+    if index_manager is None:
+        return None
+    snap = index_manager.snapshot("banknifty")
+    return snap.get("1m") if isinstance(snap, dict) else None
+
+
+def _midcpnifty_underlying_candles():
+    if midcpnifty_underlying_manager is None:
+        return None
+    return midcpnifty_underlying_manager.state.snapshot().get("candles_1m")
+
+
 def startup() -> None:
     global settings, state, manager, indicator_runtime, index_manager, config_error, indicator_error, index_error
     global nifty_options_manager, nifty_depth_manager, banknifty_options_manager, banknifty_depth_manager, midcpnifty_options_manager, midcpnifty_depth_manager
+    global midcpnifty_underlying_manager, nifty_underlying_indicators, banknifty_underlying_indicators, midcpnifty_underlying_indicators
     config_error = ""
     indicator_error = ""
     index_error = ""
@@ -149,6 +174,35 @@ def startup() -> None:
                 midcpnifty_depth_manager.start()
             except Exception:
                 midcpnifty_depth_manager = None
+
+        # MIDCPNIFTY has no WebSocket tick feed (it is not one of the sealed
+        # 16 index-layer symbols); source its own real 1m candles from
+        # Dhan's historical intraday API instead.
+        try:
+            midcpnifty_underlying_manager = MidcapNiftyUnderlyingManager(settings, dhan_api)
+            midcpnifty_underlying_manager.start()
+        except Exception:
+            midcpnifty_underlying_manager = None
+
+        # Real technical-indicator suite per underlying (EMA/SMA/RSI/MACD/
+        # Bollinger/Supertrend/ADX/Stochastic/ATR/CCI/MFI/ROC/Momentum/
+        # RVOL/CMF/Donchian), reusing the exact engine that powers the
+        # 990-equity /public/indicators.json layer.
+        try:
+            nifty_underlying_indicators = UnderlyingIndicatorRuntime("NIFTY", _nifty_underlying_candles, settings)
+            nifty_underlying_indicators.start()
+        except Exception:
+            nifty_underlying_indicators = None
+        try:
+            banknifty_underlying_indicators = UnderlyingIndicatorRuntime("BANKNIFTY", _banknifty_underlying_candles, settings)
+            banknifty_underlying_indicators.start()
+        except Exception:
+            banknifty_underlying_indicators = None
+        try:
+            midcpnifty_underlying_indicators = UnderlyingIndicatorRuntime("MIDCPNIFTY", _midcpnifty_underlying_candles, settings)
+            midcpnifty_underlying_indicators.start()
+        except Exception:
+            midcpnifty_underlying_indicators = None
     except Exception as exc:
         config_error = str(exc)
 
@@ -163,7 +217,11 @@ def shutdown() -> None:
     if index_manager is not None:
         index_manager.stop()
         index_manager = None
-    for name in ("midcpnifty_depth_manager", "midcpnifty_options_manager", "banknifty_depth_manager", "banknifty_options_manager", "nifty_depth_manager", "nifty_options_manager"):
+    for name in (
+        "midcpnifty_underlying_indicators", "banknifty_underlying_indicators", "nifty_underlying_indicators",
+        "midcpnifty_underlying_manager",
+        "midcpnifty_depth_manager", "midcpnifty_options_manager", "banknifty_depth_manager", "banknifty_options_manager", "nifty_depth_manager", "nifty_options_manager",
+    ):
         obj = globals().get(name)
         if obj is not None:
             obj.stop()
@@ -227,6 +285,9 @@ def root() -> Response:
             "/public/nifty-options.json", "/public/nifty-depth.json",
             "/public/banknifty-options.json", "/public/banknifty-depth.json",
             "/public/midcpnifty-options.json", "/public/midcpnifty-depth.json",
+        ],
+        "underlying_indicator_endpoints": [
+            "/public/nifty-indicators.json", "/public/banknifty-indicators.json", "/public/midcpnifty-indicators.json",
         ],
     })
 
@@ -403,6 +464,37 @@ for _path, _manager_name, _to_json, _symbol, _unavailable in _DERIVATIVES_ROUTES
     globals()[f"public_{_path.replace('-', '_')}"] = app.get(
         f"/public/{_path}.json", response_class=Response
     )(lambda manager_name=_manager_name, to_json=_to_json, symbol=_symbol, unavailable=_unavailable: _derivatives_endpoint(manager_name, to_json, symbol, unavailable))
+
+
+# ---------------------------------------------------------------------------
+# Real technical-indicator suite per derivatives underlying (NIFTY,
+# BANKNIFTY, MIDCPNIFTY), reusing the same engine that computes indicators
+# for the 990-equity universe. Isolated: each runtime only reads an
+# already-public 1m candle snapshot.
+# ---------------------------------------------------------------------------
+
+_UNDERLYING_INDICATOR_ROUTES = (
+    ("nifty-indicators", "nifty_underlying_indicators", "NIFTY"),
+    ("banknifty-indicators", "banknifty_underlying_indicators", "BANKNIFTY"),
+    ("midcpnifty-indicators", "midcpnifty_underlying_indicators", "MIDCPNIFTY"),
+)
+
+
+def _underlying_indicator_endpoint(runtime_name: str, symbol: str) -> Response:
+    error = _error_response()
+    if error:
+        return error
+    runtime = globals().get(runtime_name)
+    if runtime is None:
+        return json_response({"service": "PSYGRID_MASTER_INDICATOR", "symbol": symbol, "status": f"{symbol}_INDICATORS_UNAVAILABLE"}, 503)
+    payload = runtime.snapshot()
+    return json_response(payload, 200 if payload.get("status") == "OK" else 503)
+
+
+for _path, _runtime_name, _symbol in _UNDERLYING_INDICATOR_ROUTES:
+    globals()[f"public_{_path.replace('-', '_')}"] = app.get(
+        f"/public/{_path}.json", response_class=Response
+    )(lambda runtime_name=_runtime_name, symbol=_symbol: _underlying_indicator_endpoint(runtime_name, symbol))
 
 
 if __name__ == "__main__":

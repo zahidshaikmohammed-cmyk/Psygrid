@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 from config import refresh_access_token
 from dhan_auth import DhanTokenRateLimited
+from option_analytics import ChainAnalyticsTracker
 
 
 NIFTY_OPTIONS_SYMBOL = "NIFTY"
@@ -42,14 +43,17 @@ class NiftyOptionsState:
         self.expiry: str | None = None
         self.rows: list[dict] = []
         self.fetch_count = 0
+        self.analytics: dict = {}
 
-    def set_snapshot(self, payload: dict, expiry_list: list[str], expiry: str) -> None:
+    def set_snapshot(self, payload: dict, expiry_list: list[str], expiry: str, analytics: dict | None = None) -> None:
         with self.lock:
             self.underlying_ltp = payload.get("last_price")
             self.expiry_list = list(expiry_list)
             self.expiry = expiry
             chain = payload.get("oc", [])
             self.rows = list(chain) if isinstance(chain, list) else _normalize_chain(payload)
+            if analytics is not None:
+                self.analytics = analytics
             self.updated_at = datetime.now(self.tz).isoformat()
             self.fetch_count += 1
             self.status = "LIVE"
@@ -83,6 +87,7 @@ class NiftyOptionsState:
                 "synthetic_data": False,
                 "storage": "RAM_ONLY",
                 "refresh_seconds": OPTION_CHAIN_REFRESH_SECONDS,
+                "analytics": dict(self.analytics),
                 **({"error": self.last_error} if self.last_error else {}),
             }
 
@@ -124,6 +129,7 @@ class NiftyOptionsManager:
         self._expiry_loaded_at = 0.0
         self._auth_retry_at = 0.0
         self._auth_lock = threading.Lock()
+        self._analytics_tracker = ChainAnalyticsTracker()
 
     def start(self) -> None:
         if self.thread and self.thread.is_alive():
@@ -196,7 +202,8 @@ class NiftyOptionsManager:
                     raise RuntimeError("DHAN_NIFTY_OPTIONS_EMPTY_CHAIN")
                 payload = dict(payload)
                 payload["oc"] = rows
-                self.state.set_snapshot(payload, expiries, expiry)
+                analytics = self._analytics_tracker.update(rows, payload.get("last_price"))
+                self.state.set_snapshot(payload, expiries, expiry, analytics)
                 self.stop_event.wait(OPTION_CHAIN_REFRESH_SECONDS)
             except Exception as exc:
                 self.state.set_error(f"{type(exc).__name__}: {exc}")
