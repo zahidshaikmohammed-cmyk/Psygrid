@@ -21,6 +21,7 @@ from index_layer import IndexLayerManager
 settings = state = manager = indicator_runtime = index_manager = None
 config_error = ""
 indicator_error = ""
+index_error = ""
 
 
 def indicator_source_payload(_source_state):
@@ -34,9 +35,10 @@ def indicator_source_payload(_source_state):
 
 
 def startup() -> None:
-    global settings, state, manager, indicator_runtime, index_manager, config_error, indicator_error
+    global settings, state, manager, indicator_runtime, index_manager, config_error, indicator_error, index_error
     config_error = ""
     indicator_error = ""
+    index_error = ""
     try:
         settings = load_settings()
         instruments = load_instruments()
@@ -84,8 +86,9 @@ def startup() -> None:
         try:
             index_manager = IndexLayerManager(settings, dhan_api)
             index_manager.start()
-        except Exception:
+        except Exception as exc:
             index_manager = None
+            index_error = f"{type(exc).__name__}: {exc}"
 
         # Additive derived-data layer. It consumes the exact same canonical
         # PSYGRID live payload builder used by /public/live.json, so the core
@@ -260,7 +263,12 @@ def _index_endpoint(route: str) -> Response:
     if error:
         return error
     if index_manager is None:
-        return json_response({"service": "PSYGRID", "route": route, "status": "INDEX_LAYER_UNAVAILABLE"}, 503)
+        return json_response({
+            "service": "PSYGRID",
+            "route": route,
+            "status": "INDEX_LAYER_UNAVAILABLE",
+            "error": index_error or "index layer failed during startup",
+        }, 503)
     try:
         return json_response(index_manager.snapshot(route))
     except Exception as exc:
