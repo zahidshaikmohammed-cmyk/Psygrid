@@ -75,7 +75,7 @@ jobs:
         run: |
           set -euo pipefail
           for endpoint in nifty banknifty sensex nifty500 niftymidcap100 niftysmallcap100 finnifty indiavix niftyit niftyauto niftypharma niftymetal niftyfmcg niftyrealty niftyenergy niftyinfra; do
-            payload="$(curl -fsS --max-time 10 "${PSYGRID_BASE_URL}/public/${endpoint}.json")"
+            payload="$(curl -sS --max-time 10 "${PSYGRID_BASE_URL}/public/${endpoint}.json")"
             echo "${endpoint}: ${payload:0:180}"
             case "${payload}" in
               *'"status":"INDEX_LAYER_UNAVAILABLE"'*|*'"status":"INDEX_DATA_UNAVAILABLE"'*)
