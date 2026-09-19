@@ -1,0 +1,98 @@
+from __future__ import annotations
+
+"""Static NSE-equity sector taxonomy: symbol -> sector name only.
+
+This is neutral reference data (which industry a company belongs to), not
+an interpretation of price action. No breadth/return computation lives
+here — see market_breadth.py for that.
+"""
+
+_SECTOR_RULES: dict[str, set[str]] = {
+    "BANKING": {
+        "HDFCBANK", "ICICIBANK", "SBIN", "AXISBANK", "KOTAKBANK", "INDUSINDBK",
+        "BANKBARODA", "PNB", "CANBK", "BANDHANBNK", "BANKINDIA", "MAHABANK",
+        "FEDERALBNK", "IDFCFIRSTB", "KARURVYSYA", "RBLBANK", "AUBANK", "INDIANB",
+    },
+    "FINANCIAL_SERVICES": {
+        "BAJFINANCE", "BAJAJFINSV", "CANFINHOME", "CHOLAFIN", "CAMS", "CRISIL",
+        "HDFCAMC", "HDFCLIFE", "ICICIGI", "ICICIPRULI", "LICHSGFIN", "M&MFIN",
+        "MANAPPURAM", "MFSL", "MUTHOOTFIN", "POONAWALLA", "PNBHOUSING", "ABCAPITAL",
+        "AAVAS", "CREDITACC", "IIFL", "LTF", "BAJAJHLDNG", "GICRE",
+        "POLICYBZR", "BSE", "CDSL", "MCX", "KFINTECH", "LALPATHLAB",
+    },
+    "INFORMATION_TECHNOLOGY": {
+        "TCS", "INFY", "HCLTECH", "WIPRO", "TECHM", "LTM", "MPHASIS", "PERSISTENT",
+        "COFORGE", "LTTS", "BSOFT", "CYIENT", "KPITTECH", "OFSS", "TATAELXSI", "ZENSARTECH",
+    },
+    "TELECOM": {"BHARTIARTL", "INDUSTOWER", "HFCL", "RAILTEL", "TATACOMM"},
+    "AUTOMOBILE": {
+        "MARUTI", "M&M", "TMPV", "EICHERMOT", "BAJAJ-AUTO", "HEROMOTOCO", "TVSMOTOR",
+        "ASHOKLEY", "BOSCHLTD", "BHARATFORG", "MOTHERSON", "BALKRISIND", "CEATLTD",
+        "APOLLOTYRE", "ESCORTS", "MRF", "JKTYRE", "SONACOMS", "TIINDIA",
+    },
+    "PHARMA_HEALTHCARE": {
+        "SUNPHARMA", "DRREDDY", "CIPLA", "DIVISLAB", "APOLLOHOSP", "LUPIN", "AUROPHARMA",
+        "ZYDUSLIFE", "TORNTPHARM", "MAXHEALTH", "BIOCON", "CAPLIPOINT", "IPCALAB",
+        "KIMS", "LAURUSLABS", "AJANTPHARM", "ALKEM", "ABBOTINDIA", "GLAND", "GRANULES",
+        "NATCOPHARM", "PPLPHARMA", "FDC", "MEDANTA", "SUPRIYA",
+    },
+    "METALS_MINING": {
+        "TATASTEEL", "JSWSTEEL", "HINDALCO", "VEDL", "COALINDIA", "JINDALSTEL", "NMDC",
+        "SAIL", "NATIONALUM", "HINDZINC", "HINDCOPPER", "JINDALSAW", "NAVA", "GRAPHITE",
+    },
+    "ENERGY": {
+        "RELIANCE", "ONGC", "IOC", "BPCL", "GAIL", "HINDPETRO", "OIL", "IGL", "MGL",
+        "PETRONET", "ATGL", "ADANIGREEN", "ADANIENSOL", "TATAPOWER", "JSWENERGY",
+        "TORNTPOWER", "CESC", "GUJENERGY", "INOXWIND", "NHPC", "NTPC", "POWERGRID",
+        "RECLTD", "PFC", "IREDA", "SJVN",
+    },
+    "DEFENCE_AEROSPACE": {"BEL", "HAL", "BDL", "MAZDOCK", "COCHINSHIP"},
+    "CAPITAL_GOODS_ENGINEERING": {
+        "LT", "SIEMENS", "ABB", "CUMMINSIND", "AIAENG", "APLAPOLLO", "CGPOWER", "POWERINDIA",
+        "KEC", "KEI", "ELECON", "ELGIEQUIP", "HAVELLS", "HBLENGINE", "HONAUT", "ACE",
+        "TRITURBINE", "BHEL", "3MINDIA", "APARINDS", "FINCABLES", "FINPIPE", "KAYNES",
+        "KPIL", "NCC", "NBCC", "RVNL", "RITES", "IRCON", "OLECTRA",
+    },
+    "CEMENT": {"ULTRACEMCO", "GRASIM", "SHREECEM", "AMBUJACEM", "BIRLACORPN", "DALBHARAT", "JKCEMENT"},
+    "CONSUMER_FMCG": {
+        "ITC", "HINDUNILVR", "NESTLEIND", "BRITANNIA", "TATACONSUM", "COLPAL", "DABUR",
+        "GODREJCP", "MARICO", "VBL", "AWL", "JUBLFOOD", "EMAMILTD", "PIDILITIND",
+        "BATAINDIA", "KALYANKJIL", "DEVYANI", "DMART", "ABFRL", "TRENT",
+    },
+    "CHEMICALS": {
+        "ASIANPAINT", "SRF", "TATACHEM", "PIIND", "UPL", "AARTIIND", "ATUL", "DEEPAKNTR",
+        "FLUOROCHEM", "CHAMBLFERT", "COROMANDEL", "EIDPARRY", "DCMSHRIRAM", "JUBLINGREA",
+    },
+    "REALTY": {"DLF", "LODHA", "OBEROIRLTY", "PRESTIGE", "GODREJPROP", "BRIGADE", "PHOENIXLTD", "ABREL"},
+    "LOGISTICS_TRANSPORT": {
+        "ADANIPORTS", "CONCOR", "DELHIVERY", "BLUEDART", "GESHIP", "IRCTC", "RVNL", "RAILTEL",
+    },
+    "MEDIA_INTERNET": {"ETERNAL", "NAUKRI", "INDIAMART", "PAYTM", "ZEEL"},
+    "TRAVEL_LEISURE": {"INDIGO", "PVRINOX", "LEMONTREE"},
+    "TEXTILES_APPAREL": {"ABFRL", "TRENT"},
+}
+
+_OVERRIDES = {
+    "ADANIENT": "DIVERSIFIED",
+    "ADANIPOWER": "ENERGY",
+    "ADANIPORTS": "LOGISTICS_TRANSPORT",
+    "M&M": "AUTOMOBILE",
+    "TMPV": "AUTOMOBILE",
+    "BSE": "FINANCIAL_SERVICES",
+    "CDSL": "FINANCIAL_SERVICES",
+    "MCX": "FINANCIAL_SERVICES",
+    "CRISIL": "FINANCIAL_SERVICES",
+    "LALPATHLAB": "PHARMA_HEALTHCARE",
+    "PIDILITIND": "CHEMICALS",
+    "COLPAL": "CONSUMER_FMCG",
+}
+
+
+def sector_for_symbol(symbol: str) -> str:
+    symbol = str(symbol).strip().upper()
+    if symbol in _OVERRIDES:
+        return _OVERRIDES[symbol]
+    for sector, symbols in _SECTOR_RULES.items():
+        if symbol in symbols:
+            return sector
+    return "OTHER"

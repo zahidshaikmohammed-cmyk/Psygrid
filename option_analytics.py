@@ -53,6 +53,12 @@ def compute_chain_analytics(
     contracts: list[dict] = []
     next_previous: dict[str, dict] = {}
 
+    contracts_total = 0
+    contracts_missing_security_id = 0
+    crossed_markets = 0
+    seen_security_ids: set = set()
+    duplicate_security_ids = 0
+
     for row in rows:
         strike = row.get("strike")
         if not isinstance(strike, (int, float)):
@@ -61,7 +67,18 @@ def compute_chain_analytics(
             contract = row.get(key)
             if not isinstance(contract, dict):
                 continue
+            contracts_total += 1
             security_id = contract.get("security_id")
+            if security_id in (None, ""):
+                contracts_missing_security_id += 1
+            elif str(security_id) in seen_security_ids:
+                duplicate_security_ids += 1
+            elif security_id is not None:
+                seen_security_ids.add(str(security_id))
+            bid = _num(contract.get("top_bid_price"))
+            ask = _num(contract.get("top_ask_price"))
+            if bid is not None and ask is not None and bid > ask:
+                crossed_markets += 1
             oi = _num(contract.get("oi")) or 0.0
             volume = _num(contract.get("volume")) or 0.0
             ltp = _num(contract.get("last_price"))
@@ -153,6 +170,12 @@ def compute_chain_analytics(
         "avg_put_iv": avg_put_iv,
         "iv_skew": iv_skew,
         "contracts": contracts,
+        "data_quality": {
+            "contracts_total": contracts_total,
+            "contracts_missing_security_id": contracts_missing_security_id,
+            "duplicate_security_ids": duplicate_security_ids,
+            "crossed_markets_detected": crossed_markets,
+        },
     }
     return analytics, next_previous
 

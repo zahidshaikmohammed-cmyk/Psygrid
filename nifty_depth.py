@@ -104,7 +104,14 @@ class NiftyDepthState:
             market_open = _is_market_open(now)
             rows = []
             for row in self.contracts.values():
-                rows.append({key: (list(value) if key in ("bid", "ask") else dict(value) if key == "ohlc" and isinstance(value, dict) else value) for key, value in row.items()})
+                cleaned = {key: (list(value) if key in ("bid", "ask") else dict(value) if key == "ohlc" and isinstance(value, dict) else value) for key, value in row.items()}
+                bid_levels = cleaned.get("bid") or []
+                ask_levels = cleaned.get("ask") or []
+                cleaned["crossed_book"] = bool(
+                    bid_levels and ask_levels and bid_levels[0].get("price") is not None
+                    and ask_levels[0].get("price") is not None and bid_levels[0]["price"] > ask_levels[0]["price"]
+                )
+                rows.append(cleaned)
             rows.sort(key=lambda row: (row.get("strike", 0.0), row.get("option_type", "")))
             return {
                 "service": "PSYGRID",

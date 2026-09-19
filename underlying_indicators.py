@@ -88,6 +88,10 @@ class UnderlyingIndicatorRuntime:
                     self._error = {"error_type": type(exc).__name__, "message": str(exc)}
             self._stop.wait(self.interval_seconds)
 
+    def last_updated_at(self) -> Optional[str]:
+        with self._lock:
+            return self._result.get("as_of") if self._result else None
+
     def snapshot(self) -> dict:
         with self._lock:
             result = self._result

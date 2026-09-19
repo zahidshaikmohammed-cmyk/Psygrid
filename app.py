@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import orjson
 import requests
@@ -25,6 +27,11 @@ from midcpnifty_options import MidcapNiftyOptionsManager, midcpnifty_options_jso
 from midcpnifty_depth import MidcapNiftyDepthManager, midcpnifty_depth_json
 from midcpnifty_underlying import MidcapNiftyUnderlyingManager
 from underlying_indicators import UnderlyingIndicatorRuntime
+from futures_layer import FuturesManager, futures_json
+from market_breadth import build_market_breadth, build_sector_breadth
+from global_context import GlobalContextManager, global_context_json
+from rbi_news import RbiNewsManager, rbi_news_json
+from health_monitor import component_health, build_health
 
 settings = state = manager = indicator_runtime = index_manager = None
 nifty_options_manager = nifty_depth_manager = None
@@ -32,6 +39,8 @@ banknifty_options_manager = banknifty_depth_manager = None
 midcpnifty_options_manager = midcpnifty_depth_manager = None
 midcpnifty_underlying_manager = None
 nifty_underlying_indicators = banknifty_underlying_indicators = midcpnifty_underlying_indicators = None
+nifty_futures_manager = banknifty_futures_manager = None
+global_context_manager = rbi_news_manager = None
 config_error = ""
 indicator_error = ""
 index_error = ""
@@ -71,6 +80,7 @@ def startup() -> None:
     global settings, state, manager, indicator_runtime, index_manager, config_error, indicator_error, index_error
     global nifty_options_manager, nifty_depth_manager, banknifty_options_manager, banknifty_depth_manager, midcpnifty_options_manager, midcpnifty_depth_manager
     global midcpnifty_underlying_manager, nifty_underlying_indicators, banknifty_underlying_indicators, midcpnifty_underlying_indicators
+    global nifty_futures_manager, banknifty_futures_manager, global_context_manager, rbi_news_manager
     config_error = ""
     indicator_error = ""
     index_error = ""
@@ -203,6 +213,32 @@ def startup() -> None:
             midcpnifty_underlying_indicators.start()
         except Exception:
             midcpnifty_underlying_indicators = None
+
+        # Real NIFTY/BANKNIFTY front-month futures, resolved from Dhan's own
+        # instrument master and polled via Dhan's market-quote API.
+        try:
+            nifty_futures_manager = FuturesManager("NIFTY", settings, dhan_api)
+            nifty_futures_manager.start()
+        except Exception:
+            nifty_futures_manager = None
+        try:
+            banknifty_futures_manager = FuturesManager("BANKNIFTY", settings, dhan_api)
+            banknifty_futures_manager.start()
+        except Exception:
+            banknifty_futures_manager = None
+
+        # Tier 2: delayed official reference data (FRED) and RBI's own
+        # official RSS feeds. Never presented as live; see market_data_status.
+        try:
+            global_context_manager = GlobalContextManager(settings)
+            global_context_manager.start()
+        except Exception:
+            global_context_manager = None
+        try:
+            rbi_news_manager = RbiNewsManager(settings)
+            rbi_news_manager.start()
+        except Exception:
+            rbi_news_manager = None
     except Exception as exc:
         config_error = str(exc)
 
@@ -218,6 +254,8 @@ def shutdown() -> None:
         index_manager.stop()
         index_manager = None
     for name in (
+        "rbi_news_manager", "global_context_manager",
+        "nifty_futures_manager", "banknifty_futures_manager",
         "midcpnifty_underlying_indicators", "banknifty_underlying_indicators", "nifty_underlying_indicators",
         "midcpnifty_underlying_manager",
         "midcpnifty_depth_manager", "midcpnifty_options_manager", "banknifty_depth_manager", "banknifty_options_manager", "nifty_depth_manager", "nifty_options_manager",
@@ -289,6 +327,17 @@ def root() -> Response:
         "underlying_indicator_endpoints": [
             "/public/nifty-indicators.json", "/public/banknifty-indicators.json", "/public/midcpnifty-indicators.json",
         ],
+        "futures_endpoints": ["/public/nifty-futures.json", "/public/banknifty-futures.json"],
+        "breadth_endpoints": ["/public/market-breadth.json", "/public/sectors.json"],
+        "context_endpoints": {
+            "global_context": {"endpoint": "/public/global-context.json", "market_data_status": "DELAYED", "source": "FRED"},
+            "rbi_news": {"endpoint": "/public/rbi-news.json", "market_data_status": "NEAR_LIVE", "source": "RBI_OFFICIAL_RSS"},
+        },
+        "not_available": [
+            "gift_nifty", "nasdaq", "dow_jones", "nikkei", "hang_seng", "shanghai", "kospi", "dxy", "gold",
+            "general_global_market_news", "general_financial_news", "full_economic_calendar_with_forecast_actual_importance",
+        ],
+        "health_endpoint": "/public/health.json",
     })
 
 
@@ -328,11 +377,11 @@ def _public_live_range(start: int, end: int) -> Response:
     if error:
         return error
     # Never sort a shard independently. Every shard is a slice of the same
-    # canonical 450-instrument order used by the feed and configuration.
+    # canonical 990-instrument order used by the feed and configuration.
     return json_response(market_live_json(state, (start, end), True))
 
 
-# Canonical 450-stock universe: exactly 10 disjoint shards of 45.
+# Canonical 990-stock universe: exactly 22 disjoint shards of 45.
 SHARD_RANGES = tuple((name, index * 45, (index + 1) * 45) for index, name in enumerate("abcdefghijklmnopqrstuv"))
 
 for route, start, end in SHARD_RANGES:
@@ -446,6 +495,8 @@ _DERIVATIVES_ROUTES = (
     ("banknifty-depth", "banknifty_depth_manager", banknifty_depth_json, "BANKNIFTY", "BANKNIFTY_DEPTH_UNAVAILABLE"),
     ("midcpnifty-options", "midcpnifty_options_manager", midcpnifty_options_json, "MIDCPNIFTY", "MIDCPNIFTY_OPTIONS_UNAVAILABLE"),
     ("midcpnifty-depth", "midcpnifty_depth_manager", midcpnifty_depth_json, "MIDCPNIFTY", "MIDCPNIFTY_DEPTH_UNAVAILABLE"),
+    ("nifty-futures", "nifty_futures_manager", futures_json, "NIFTY", "NIFTY_FUTURES_UNAVAILABLE"),
+    ("banknifty-futures", "banknifty_futures_manager", futures_json, "BANKNIFTY", "BANKNIFTY_FUTURES_UNAVAILABLE"),
 )
 
 
@@ -495,6 +546,140 @@ for _path, _runtime_name, _symbol in _UNDERLYING_INDICATOR_ROUTES:
     globals()[f"public_{_path.replace('-', '_')}"] = app.get(
         f"/public/{_path}.json", response_class=Response
     )(lambda runtime_name=_runtime_name, symbol=_symbol: _underlying_indicator_endpoint(runtime_name, symbol))
+
+
+# ---------------------------------------------------------------------------
+# Raw market breadth and sector aggregates, computed directly from the
+# already-live 990-equity RAM state. No new data source, no labels.
+# ---------------------------------------------------------------------------
+
+@app.get("/public/market-breadth.json", response_class=Response)
+def public_market_breadth() -> Response:
+    error = _error_response()
+    if error:
+        return error
+    return json_response(build_market_breadth(state))
+
+
+@app.get("/public/sectors.json", response_class=Response)
+def public_sectors() -> Response:
+    error = _error_response()
+    if error:
+        return error
+    return json_response(build_sector_breadth(state))
+
+
+# ---------------------------------------------------------------------------
+# Tier 2: delayed official reference data (FRED) and RBI's own official RSS
+# feeds. Both are clearly marked with their true market_data_status.
+# ---------------------------------------------------------------------------
+
+@app.get("/public/global-context.json", response_class=Response)
+def public_global_context() -> Response:
+    error = _error_response()
+    if error:
+        return error
+    if global_context_manager is None:
+        return json_response({"service": "PSYGRID", "status": "GLOBAL_CONTEXT_UNAVAILABLE"}, 503)
+    payload = global_context_json(global_context_manager.state)
+    return json_response(payload, 200 if payload.get("status") == "LIVE" else 503)
+
+
+@app.get("/public/rbi-news.json", response_class=Response)
+def public_rbi_news() -> Response:
+    error = _error_response()
+    if error:
+        return error
+    if rbi_news_manager is None:
+        return json_response({"service": "PSYGRID", "status": "RBI_NEWS_UNAVAILABLE"}, 503)
+    payload = rbi_news_json(rbi_news_manager.state)
+    return json_response(payload, 200 if payload.get("status") == "LIVE" else 503)
+
+
+# ---------------------------------------------------------------------------
+# Comprehensive, lightweight health aggregation across every live feed.
+# Reads only what each manager already knows about itself; never refetches
+# or recomputes upstream data.
+# ---------------------------------------------------------------------------
+
+def _build_health_payload() -> dict:
+    now_ist = datetime.now(ZoneInfo("Asia/Kolkata"))
+    components: list[dict] = []
+
+    if state is not None:
+        components.append(component_health(
+            name="equity_990",
+            status="LIVE" if state.session_status == "LIVE" and state.feed_status == "CONNECTED" else state.feed_status,
+            updated_at=state.last_message_at,
+            expected_refresh_seconds=2.0,
+            now=now_ist,
+            last_error=state.last_feed_error,
+            record_count=state.subscribed_count,
+            expected_record_count=UNIVERSE_SIZE,
+            extra={"session_status": state.session_status, "feed_status": state.feed_status, "websocket_reconnects": state.websocket_reconnects},
+        ))
+    else:
+        components.append(component_health(name="equity_990", status=None, updated_at=None, expected_refresh_seconds=2.0, now=now_ist))
+
+    if index_manager is not None:
+        for route in INDEX_ROUTES:
+            idx_state = index_manager.states.get(route)
+            if idx_state is None:
+                components.append(component_health(name=f"index_{route}", status=None, updated_at=None, expected_refresh_seconds=2.0, now=now_ist, last_error=index_manager.resolution_errors.get(route, "unresolved")))
+                continue
+            components.append(component_health(
+                name=f"index_{route}",
+                status="LIVE" if idx_state.feed_status == "CONNECTED" else idx_state.feed_status,
+                updated_at=idx_state.last_tick_received_epoch,
+                expected_refresh_seconds=2.0,
+                now=now_ist,
+                last_error=idx_state.last_feed_error,
+            ))
+    else:
+        components.append(component_health(name="index_layer", status=None, updated_at=None, expected_refresh_seconds=2.0, now=now_ist, last_error=index_error))
+
+    for name, mgr, refresh in (
+        ("nifty_options", nifty_options_manager, 3.2), ("nifty_depth", nifty_depth_manager, 1.0),
+        ("banknifty_options", banknifty_options_manager, 3.2), ("banknifty_depth", banknifty_depth_manager, 1.0),
+        ("midcpnifty_options", midcpnifty_options_manager, 3.2), ("midcpnifty_depth", midcpnifty_depth_manager, 1.0),
+        ("nifty_futures", nifty_futures_manager, 2.0), ("banknifty_futures", banknifty_futures_manager, 2.0),
+        ("midcpnifty_underlying", midcpnifty_underlying_manager, 20.0),
+        ("global_context", global_context_manager, 3600.0), ("rbi_news", rbi_news_manager, 300.0),
+    ):
+        if mgr is None:
+            components.append(component_health(name=name, status=None, updated_at=None, expected_refresh_seconds=refresh, now=now_ist))
+            continue
+        st = mgr.state
+        components.append(component_health(
+            name=name, status=st.status, updated_at=st.updated_at, expected_refresh_seconds=refresh,
+            now=now_ist, last_error=getattr(st, "last_error", ""),
+        ))
+
+    for name, runtime in (
+        ("nifty_indicators", nifty_underlying_indicators), ("banknifty_indicators", banknifty_underlying_indicators),
+        ("midcpnifty_indicators", midcpnifty_underlying_indicators),
+    ):
+        if runtime is None:
+            components.append(component_health(name=name, status=None, updated_at=None, expected_refresh_seconds=5.0, now=now_ist))
+            continue
+        snap = runtime.snapshot()
+        components.append(component_health(
+            name=name, status=snap.get("status"), updated_at=runtime.last_updated_at(), expected_refresh_seconds=5.0, now=now_ist,
+            last_error=(snap.get("error") or {}).get("message", "") if isinstance(snap.get("error"), dict) else "",
+        ))
+
+    components.append(component_health(
+        name="equity_indicators", status="LIVE" if indicator_runtime is not None else None,
+        updated_at=None, expected_refresh_seconds=1.0, now=now_ist, last_error=indicator_error,
+    ))
+
+    market_status = "OPEN" if (state is not None and state.session_status == "LIVE") else "CLOSED"
+    return build_health(components, market_status)
+
+
+@app.get("/public/health.json", response_class=Response)
+def public_health() -> Response:
+    return json_response(_build_health_payload())
 
 
 if __name__ == "__main__":
