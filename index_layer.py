@@ -17,6 +17,16 @@ from output import _clean_candle, _ist_timestamp, _price
 MASTER_URL = "https://images.dhan.co/api-data/api-scrip-master.csv"
 INDEX_SEGMENT = "IDX_I"
 INDEX_INSTRUMENT = "INDEX"
+INDEX_FALLBACK_IDS = {
+    "nifty": "13",
+    "banknifty": "25",
+    "sensex": "51",
+    "nifty500": "17",
+    "finnifty": "27",
+    "indiavix": "26",
+    "niftyit": "29",
+}
+
 INDEX_SPECS = {
     "nifty": ("NIFTY", ("NIFTY", "NIFTY 50")),
     "banknifty": ("BANKNIFTY", ("BANKNIFTY", "NIFTY BANK", "NIFTY BANK 50")),
@@ -39,50 +49,51 @@ INDEX_SPECS = {
 def _norm(value: object) -> str:
     return "".join(ch for ch in str(value or "").upper() if ch.isalnum())
 
-def _resolve_all() -> dict[str, "IndexInstrument"]:
-    response = requests.get(MASTER_URL, timeout=30)
-    response.raise_for_status()
-    rows = csv.DictReader(io.StringIO(response.text))
-    wanted = {key: {_norm(v) for v in aliases} for key, (_symbol, aliases) in INDEX_SPECS.items()}
-    matches: dict[str, list[IndexInstrument]] = {key: [] for key in INDEX_SPECS}
-    for row in rows:
-        if str(row.get("SEM_INSTRUMENT_NAME", "")).strip().upper() != INDEX_INSTRUMENT:
-            continue
-        segment = str(row.get("SEM_SEGMENT", "")).strip().upper()
-        if segment not in {"I", "IDX_I", "INDEX"}:
-            continue
-        security_id = str(row.get("SEM_SMST_SECURITY_ID", "")).strip()
-        if not security_id:
-            continue
-        values = (
-            row.get("SEM_TRADING_SYMBOL", ""),
-            row.get("SEM_CUSTOM_SYMBOL", ""),
-            row.get("SM_SYMBOL_NAME", ""),
-        )
-        normalized = {_norm(v) for v in values}
-        for key, candidates in wanted.items():
-            if normalized & candidates:
-                exchange = str(row.get("SEM_EXM_EXCH_ID", "")).strip().upper()
-                matches[key].append(IndexInstrument(security_id, exchange or "NSE", INDEX_INSTRUMENT))
+def _resolve_one(key: str) -> tuple["IndexInstrument | None", str]:
+    _symbol, aliases = INDEX_SPECS[key]
+    fallback = INDEX_FALLBACK_IDS.get(key)
+    if fallback:
+        return IndexInstrument(fallback, "IDX_I", INDEX_INSTRUMENT), ""
 
+    try:
+        response = requests.get(MASTER_URL, timeout=30)
+        response.raise_for_status()
+        rows = csv.DictReader(io.StringIO(response.text))
+        wanted = {_norm(v) for v in aliases}
+        matches: dict[tuple[str, str, str], IndexInstrument] = {}
+        for row in rows:
+            if str(row.get("SEM_INSTRUMENT_NAME", "")).strip().upper() != INDEX_INSTRUMENT:
+                continue
+            if str(row.get("SEM_SEGMENT", "")).strip().upper() not in {"I", "IDX_I", "INDEX"}:
+                continue
+            security_id = str(row.get("SEM_SMST_SECURITY_ID", "")).strip()
+            if not security_id:
+                continue
+            values = (row.get("SEM_TRADING_SYMBOL", ""), row.get("SEM_CUSTOM_SYMBOL", ""), row.get("SM_SYMBOL_NAME", ""))
+            if {_norm(v) for v in values} & wanted:
+                exchange = str(row.get("SEM_EXM_EXCH_ID", "")).strip().upper()
+                matches[(security_id, exchange, INDEX_INSTRUMENT)] = IndexInstrument(
+                    security_id, exchange or "NSE", INDEX_INSTRUMENT
+                )
+        if len(matches) == 1:
+            return next(iter(matches.values())), ""
+        if not matches:
+            return None, "not found in Dhan instrument master"
+        return None, f"ambiguous instrument master matches: {sorted(matches)}"
+    except Exception as exc:
+        return None, f"{type(exc).__name__}: {exc}"
+
+
+def _resolve_all() -> tuple[dict[str, "IndexInstrument"], dict[str, str]]:
     resolved: dict[str, IndexInstrument] = {}
-    missing = []
-    ambiguous = []
-    for key, candidates in matches.items():
-        unique = {(x.security_id, x.exchange_segment, x.instrument): x for x in candidates}
-        if len(unique) == 1:
-            resolved[key] = next(iter(unique.values()))
-        elif not unique:
-            missing.append(key)
+    errors: dict[str, str] = {}
+    for key in INDEX_SPECS:
+        instrument, error = _resolve_one(key)
+        if instrument is not None:
+            resolved[key] = instrument
         else:
-            ambiguous.append(f"{key}:{sorted(unique)}")
-    if missing or ambiguous:
-        raise RuntimeError(
-            "INDEX_INSTRUMENT_RESOLUTION_FAILED"
-            + (f" missing={missing}" if missing else "")
-            + (f" ambiguous={ambiguous}" if ambiguous else "")
-        )
-    return resolved
+            errors[key] = error
+    return resolved, errors
 
 @dataclass(frozen=True)
 class IndexInstrument:
@@ -348,10 +359,10 @@ class IndexLayerManager:
     def __init__(self, settings, dhan_api):
         self.settings = settings
         self.dhan_api = dhan_api
-        self.instruments = _resolve_all()
+        self.instruments, self.resolution_errors = _resolve_all()
         self.states = {
-            key: IndexState(settings, symbol, self.instruments[key])
-            for key, (symbol, _aliases) in INDEX_SPECS.items()
+            key: IndexState(settings, INDEX_SPECS[key][0], instrument)
+            for key, instrument in self.instruments.items()
         }
         self.feed = IndexLayerFeed(settings, self.states)
         self.stop_event = threading.Event()
@@ -413,6 +424,15 @@ class IndexLayerManager:
             state.reset()
 
     def snapshot(self, key: str) -> dict:
+        if key not in self.states:
+            return {
+                "service": "PSYGRID",
+                "schema_version": "3.0",
+                "route": key,
+                "symbol": INDEX_SPECS[key][0],
+                "status": "INDEX_DATA_UNAVAILABLE",
+                "resolution_error": self.resolution_errors.get(key, "unknown"),
+            }
         state = self.states[key]
         with state.lock:
             candles_1m = [dict(c) for c in state.live_candles if c.get("complete", True)]
