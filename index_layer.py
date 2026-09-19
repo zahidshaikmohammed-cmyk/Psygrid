@@ -361,8 +361,8 @@ class IndexLayerManager:
         self.dhan_api = dhan_api
         self.instruments, self.resolution_errors = _resolve_all()
         self.states = {
-            key: IndexState(settings, symbol, self.instruments[key])
-            for key, (symbol, _aliases) in INDEX_SPECS.items()
+            key: IndexState(settings, INDEX_SPECS[key][0], instrument)
+            for key, instrument in self.instruments.items()
         }
         self.feed = IndexLayerFeed(settings, self.states)
         self.stop_event = threading.Event()
