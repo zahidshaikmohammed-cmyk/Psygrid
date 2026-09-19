@@ -2,8 +2,6 @@ name: Psygrid Deploy to Oracle
 
 # Master Indicator deployment checkpoint enabled.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 concurrency:
