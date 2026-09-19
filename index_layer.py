@@ -361,7 +361,7 @@ class IndexLayerManager:
         self.dhan_api = dhan_api
         self.instruments, self.resolution_errors = _resolve_all()
         self.states = {
-            key: IndexState(settings, INDEX_SPECS[key][0], instrument)
+            key: IndexState(settings, key, INDEX_SPECS[key][0], instrument)
             for key, instrument in self.instruments.items()
         }
         self.feed = IndexLayerFeed(settings, self.states)
