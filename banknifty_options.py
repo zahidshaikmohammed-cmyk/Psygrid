@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 from config import refresh_access_token
 from dhan_auth import DhanTokenRateLimited
+from option_analytics import ChainAnalyticsTracker
 
 BANKNIFTY_OPTIONS_SYMBOL = "BANKNIFTY"
 BANKNIFTY_OPTIONS_SECURITY_ID = "25"
@@ -26,16 +27,18 @@ class BankNiftyOptionsInstrument:
 
 class BankNiftyOptionsState:
     def __init__(self, settings):
-        self.settings = settings; self.tz = ZoneInfo(settings.timezone); self.lock = threading.RLock(); self.status = "STARTING"; self.last_error = ""; self.updated_at = None; self.underlying_ltp = None; self.expiry_list = []; self.expiry = None; self.rows = []; self.fetch_count = 0
-    def set_snapshot(self, payload, expiry_list, expiry):
+        self.settings = settings; self.tz = ZoneInfo(settings.timezone); self.lock = threading.RLock(); self.status = "STARTING"; self.last_error = ""; self.updated_at = None; self.underlying_ltp = None; self.expiry_list = []; self.expiry = None; self.rows = []; self.fetch_count = 0; self.analytics = {}
+    def set_snapshot(self, payload, expiry_list, expiry, analytics=None):
         with self.lock:
-            self.underlying_ltp = payload.get("last_price"); self.expiry_list = list(expiry_list); self.expiry = expiry; self.rows = _normalize_chain(payload); self.updated_at = datetime.now(self.tz).isoformat(); self.fetch_count += 1; self.status = "LIVE"; self.last_error = ""
+            self.underlying_ltp = payload.get("last_price"); self.expiry_list = list(expiry_list); self.expiry = expiry; self.rows = _normalize_chain(payload)
+            if analytics is not None: self.analytics = analytics
+            self.updated_at = datetime.now(self.tz).isoformat(); self.fetch_count += 1; self.status = "LIVE"; self.last_error = ""
     def set_error(self, error):
         with self.lock: self.status = "ERROR"; self.last_error = error
     def snapshot(self):
         with self.lock:
             now = datetime.now(self.tz); market_open = _is_market_open(now)
-            return {"service":"PSYGRID","symbol":BANKNIFTY_OPTIONS_SYMBOL,"status":self.status,"market_status":"OPEN" if market_open else "CLOSED","market_open":market_open,"data_source":"DHAN_OPTION_CHAIN_API","security_id":BANKNIFTY_OPTIONS_SECURITY_ID,"exchange_segment":BANKNIFTY_OPTIONS_EXCHANGE_SEGMENT,"instrument":BANKNIFTY_OPTIONS_INSTRUMENT,"underlying_ltp":self.underlying_ltp,"expiry":self.expiry,"expiry_list":list(self.expiry_list),"strikes":[dict(row) for row in self.rows],"updated_at":self.updated_at,"fetch_count":self.fetch_count,"synthetic_data":False,"storage":"RAM_ONLY","refresh_seconds":OPTION_CHAIN_REFRESH_SECONDS,**({"error":self.last_error} if self.last_error else {})}
+            return {"service":"PSYGRID","symbol":BANKNIFTY_OPTIONS_SYMBOL,"status":self.status,"market_status":"OPEN" if market_open else "CLOSED","market_open":market_open,"data_source":"DHAN_OPTION_CHAIN_API","security_id":BANKNIFTY_OPTIONS_SECURITY_ID,"exchange_segment":BANKNIFTY_OPTIONS_EXCHANGE_SEGMENT,"instrument":BANKNIFTY_OPTIONS_INSTRUMENT,"underlying_ltp":self.underlying_ltp,"expiry":self.expiry,"expiry_list":list(self.expiry_list),"strikes":[dict(row) for row in self.rows],"updated_at":self.updated_at,"fetch_count":self.fetch_count,"synthetic_data":False,"storage":"RAM_ONLY","refresh_seconds":OPTION_CHAIN_REFRESH_SECONDS,"analytics":dict(self.analytics),**({"error":self.last_error} if self.last_error else {})}
 
 def _is_market_open(now): return now.weekday() < 5 and BANKNIFTY_MARKET_OPEN <= now.time() < BANKNIFTY_MARKET_CLOSE
 
@@ -53,7 +56,7 @@ def _normalize_chain(raw):
 
 class BankNiftyOptionsManager:
     def __init__(self, settings, dhan_api):
-        self.settings=settings; self.dhan_api=dhan_api; self.instrument=BankNiftyOptionsInstrument(); self.state=BankNiftyOptionsState(settings); self.stop_event=threading.Event(); self.thread=None; self._expiry_loaded_at=0.0; self._auth_retry_at=0.0; self._auth_lock=threading.Lock()
+        self.settings=settings; self.dhan_api=dhan_api; self.instrument=BankNiftyOptionsInstrument(); self.state=BankNiftyOptionsState(settings); self.stop_event=threading.Event(); self.thread=None; self._expiry_loaded_at=0.0; self._auth_retry_at=0.0; self._auth_lock=threading.Lock(); self._analytics_tracker=ChainAnalyticsTracker()
     def start(self):
         if self.thread and self.thread.is_alive(): return
         self.stop_event.clear(); self.thread=threading.Thread(target=self._loop,daemon=True,name="psygrid-banknifty-options"); self.thread.start()
@@ -89,8 +92,10 @@ class BankNiftyOptionsManager:
                 elif expiry not in expiries: expiry=expiries[0]
                 raw=self._call_with_auth_retry(lambda:self.dhan_api.option_chain(self.instrument,expiry)); payload=raw.get("data") if isinstance(raw,dict) else None
                 if not isinstance(payload,dict): raise RuntimeError("DHAN_BANKNIFTY_OPTIONS_INVALID_RESPONSE")
-                if not _normalize_chain(payload): raise RuntimeError("DHAN_BANKNIFTY_OPTIONS_EMPTY_CHAIN")
-                self.state.set_snapshot(payload,expiries,expiry); self.stop_event.wait(OPTION_CHAIN_REFRESH_SECONDS)
+                rows=_normalize_chain(payload)
+                if not rows: raise RuntimeError("DHAN_BANKNIFTY_OPTIONS_EMPTY_CHAIN")
+                analytics=self._analytics_tracker.update(rows,payload.get("last_price"))
+                self.state.set_snapshot(payload,expiries,expiry,analytics); self.stop_event.wait(OPTION_CHAIN_REFRESH_SECONDS)
             except Exception as exc: self.state.set_error(f"{type(exc).__name__}: {exc}"); self.stop_event.wait(OPTION_CHAIN_REFRESH_SECONDS)
 
 def banknifty_options_json(state): return state.snapshot()
