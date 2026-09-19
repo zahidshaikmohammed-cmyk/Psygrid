@@ -17,8 +17,17 @@ from session import SessionManager
 from state_runtime import RuntimeFreshnessState
 from indicator_runtime import IndicatorRuntime
 from index_layer import IndexLayerManager
+from nifty_options import NiftyOptionsManager, nifty_options_json
+from nifty_depth import NiftyDepthManager, nifty_depth_json
+from banknifty_options import BankNiftyOptionsManager, banknifty_options_json
+from banknifty_depth import BankNiftyDepthManager, banknifty_depth_json
+from midcpnifty_options import MidcapNiftyOptionsManager, midcpnifty_options_json
+from midcpnifty_depth import MidcapNiftyDepthManager, midcpnifty_depth_json
 
 settings = state = manager = indicator_runtime = index_manager = None
+nifty_options_manager = nifty_depth_manager = None
+banknifty_options_manager = banknifty_depth_manager = None
+midcpnifty_options_manager = midcpnifty_depth_manager = None
 config_error = ""
 indicator_error = ""
 index_error = ""
@@ -36,6 +45,7 @@ def indicator_source_payload(_source_state):
 
 def startup() -> None:
     global settings, state, manager, indicator_runtime, index_manager, config_error, indicator_error, index_error
+    global nifty_options_manager, nifty_depth_manager, banknifty_options_manager, banknifty_depth_manager, midcpnifty_options_manager, midcpnifty_depth_manager
     config_error = ""
     indicator_error = ""
     index_error = ""
@@ -99,6 +109,46 @@ def startup() -> None:
         except Exception as exc:
             indicator_runtime = None
             indicator_error = str(exc)
+
+        # Independent derivatives domain: NIFTY, BANKNIFTY and MIDCPNIFTY
+        # option-chain (Dhan REST) and 20-level market depth (Dhan
+        # WebSocket). Entirely separate from the 990-equity universe and
+        # the 16-index layer above; a failure here never affects either.
+        try:
+            nifty_options_manager = NiftyOptionsManager(settings, dhan_api)
+            nifty_options_manager.start()
+        except Exception:
+            nifty_options_manager = None
+        if nifty_options_manager is not None:
+            try:
+                nifty_depth_manager = NiftyDepthManager(settings, dhan_api, nifty_options_manager)
+                nifty_depth_manager.start()
+            except Exception:
+                nifty_depth_manager = None
+
+        try:
+            banknifty_options_manager = BankNiftyOptionsManager(settings, dhan_api)
+            banknifty_options_manager.start()
+        except Exception:
+            banknifty_options_manager = None
+        if banknifty_options_manager is not None:
+            try:
+                banknifty_depth_manager = BankNiftyDepthManager(settings, dhan_api, banknifty_options_manager)
+                banknifty_depth_manager.start()
+            except Exception:
+                banknifty_depth_manager = None
+
+        try:
+            midcpnifty_options_manager = MidcapNiftyOptionsManager(settings, dhan_api)
+            midcpnifty_options_manager.start()
+        except Exception:
+            midcpnifty_options_manager = None
+        if midcpnifty_options_manager is not None:
+            try:
+                midcpnifty_depth_manager = MidcapNiftyDepthManager(settings, dhan_api, midcpnifty_options_manager)
+                midcpnifty_depth_manager.start()
+            except Exception:
+                midcpnifty_depth_manager = None
     except Exception as exc:
         config_error = str(exc)
 
@@ -106,12 +156,18 @@ def startup() -> None:
 
 def shutdown() -> None:
     global manager, indicator_runtime, index_manager
+    global nifty_options_manager, nifty_depth_manager, banknifty_options_manager, banknifty_depth_manager, midcpnifty_options_manager, midcpnifty_depth_manager
     if indicator_runtime is not None:
         indicator_runtime.stop()
         indicator_runtime = None
     if index_manager is not None:
         index_manager.stop()
         index_manager = None
+    for name in ("midcpnifty_depth_manager", "midcpnifty_options_manager", "banknifty_depth_manager", "banknifty_options_manager", "nifty_depth_manager", "nifty_options_manager"):
+        obj = globals().get(name)
+        if obj is not None:
+            obj.stop()
+            globals()[name] = None
     if manager is not None:
         manager.stop()
         manager = None
@@ -166,6 +222,12 @@ def root() -> Response:
         "live_timeframes": ["1m"],
         "depth_enabled": False,
         "indicators_enabled": False,
+        "derivatives_symbols": ["NIFTY", "BANKNIFTY", "MIDCPNIFTY"],
+        "derivatives_endpoints": [
+            "/public/nifty-options.json", "/public/nifty-depth.json",
+            "/public/banknifty-options.json", "/public/banknifty-depth.json",
+            "/public/midcpnifty-options.json", "/public/midcpnifty-depth.json",
+        ],
     })
 
 
@@ -308,6 +370,39 @@ for route, start, end in SHARD_RANGES:
     globals()[f"public_indicators_{route}"] = app.get(
         f"/public/indicators-{route}.json", response_class=Response
     )(lambda start=start, end=end: _public_indicator_range(start, end))
+
+
+# ---------------------------------------------------------------------------
+# Independent derivatives domain: NIFTY, BANKNIFTY, MIDCPNIFTY option chain
+# (Dhan REST) and 20-level market depth (Dhan WebSocket). Isolated from the
+# 990-equity universe and the 16-index layer above.
+# ---------------------------------------------------------------------------
+
+_DERIVATIVES_ROUTES = (
+    ("nifty-options", "nifty_options_manager", nifty_options_json, "NIFTY", "NIFTY_OPTIONS_UNAVAILABLE"),
+    ("nifty-depth", "nifty_depth_manager", nifty_depth_json, "NIFTY", "NIFTY_DEPTH_UNAVAILABLE"),
+    ("banknifty-options", "banknifty_options_manager", banknifty_options_json, "BANKNIFTY", "BANKNIFTY_OPTIONS_UNAVAILABLE"),
+    ("banknifty-depth", "banknifty_depth_manager", banknifty_depth_json, "BANKNIFTY", "BANKNIFTY_DEPTH_UNAVAILABLE"),
+    ("midcpnifty-options", "midcpnifty_options_manager", midcpnifty_options_json, "MIDCPNIFTY", "MIDCPNIFTY_OPTIONS_UNAVAILABLE"),
+    ("midcpnifty-depth", "midcpnifty_depth_manager", midcpnifty_depth_json, "MIDCPNIFTY", "MIDCPNIFTY_DEPTH_UNAVAILABLE"),
+)
+
+
+def _derivatives_endpoint(manager_name: str, to_json, symbol: str, unavailable_status: str) -> Response:
+    error = _error_response()
+    if error:
+        return error
+    manager = globals().get(manager_name)
+    if manager is None:
+        return json_response({"service": "PSYGRID", "symbol": symbol, "status": unavailable_status}, 503)
+    payload = to_json(manager.state)
+    return json_response(payload, 200 if payload.get("status") == "LIVE" else 503)
+
+
+for _path, _manager_name, _to_json, _symbol, _unavailable in _DERIVATIVES_ROUTES:
+    globals()[f"public_{_path.replace('-', '_')}"] = app.get(
+        f"/public/{_path}.json", response_class=Response
+    )(lambda manager_name=_manager_name, to_json=_to_json, symbol=_symbol, unavailable=_unavailable: _derivatives_endpoint(manager_name, to_json, symbol, unavailable))
 
 
 if __name__ == "__main__":
