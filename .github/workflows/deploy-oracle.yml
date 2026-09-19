@@ -151,10 +151,10 @@ jobs:
             exit 1
           fi
 
-          echo "Running LIVE 450-stock endpoint universe integrity checkpoint..."
+          echo "Running LIVE 990-stock endpoint universe integrity checkpoint..."
           PSYGRID_BASE_URL=http://140.245.226.102:10000 python tools/check_live_universe.py
 
-          echo "Waiting for Master Indicator layer to reach full 450-stock synchronization..."
+          echo "Waiting for Master Indicator layer to reach full 990-stock synchronization..."
           indicator_ok=0
           for attempt in $(seq 1 90); do
             if curl -fsS --max-time 10 http://140.245.226.102:10000/public/indicators.json >/tmp/psygrid-indicators.json; then
@@ -162,10 +162,10 @@ jobs:
 import json
 with open('/tmp/psygrid-indicators.json', encoding='utf-8') as f:
     p = json.load(f)
-raise SystemExit(0 if p.get('status') == 'OK' and p.get('stock_count') == 450 else 1)
+raise SystemExit(0 if p.get('status') == 'OK' and p.get('stock_count') == 990 else 1)
 PY
               then
-                echo "Master Indicator: 450/450 synchronized."
+                echo "Master Indicator: 990/990 synchronized."
                 indicator_ok=1
                 break
               fi
@@ -173,7 +173,7 @@ PY
             sleep 2
           done
           if [ "$indicator_ok" -ne 1 ]; then
-            echo "Master Indicator layer did not reach 450/450 within 180 seconds" >&2
+            echo "Master Indicator layer did not reach 990/990 within 180 seconds" >&2
             cat /tmp/psygrid-indicators.json 2>/dev/null || true
             exit 1
           fi
