@@ -179,3 +179,5 @@ PY
           fi
 
           echo "Master Indicator production checkpoint passed."
+
+# Retrigger deployment workflow after the pre-job failure on run 35427911027.
