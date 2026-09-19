@@ -16,8 +16,9 @@ from output import market_live_json, stock_json
 from session import SessionManager
 from state_runtime import RuntimeFreshnessState
 from indicator_runtime import IndicatorRuntime
+from index_layer import IndexLayerManager
 
-settings = state = manager = indicator_runtime = None
+settings = state = manager = indicator_runtime = index_manager = None
 config_error = ""
 indicator_error = ""
 
@@ -33,7 +34,7 @@ def indicator_source_payload(_source_state):
 
 
 def startup() -> None:
-    global settings, state, manager, indicator_runtime, config_error, indicator_error
+    global settings, state, manager, indicator_runtime, index_manager, config_error, indicator_error
     config_error = ""
     indicator_error = ""
     try:
@@ -78,6 +79,14 @@ def startup() -> None:
         )
         manager.start()
 
+        # Completely separate index-data layer. It does not alter the 990-equity
+        # universe, subscriptions, state, shards, or readiness contract.
+        try:
+            index_manager = IndexLayerManager(settings, dhan_api)
+            index_manager.start()
+        except Exception:
+            index_manager = None
+
         # Additive derived-data layer. It consumes the exact same canonical
         # PSYGRID live payload builder used by /public/live.json, so the core
         # OHLCV endpoints remain untouched and remain the source of truth.
@@ -93,10 +102,13 @@ def startup() -> None:
 
 
 def shutdown() -> None:
-    global manager, indicator_runtime
+    global manager, indicator_runtime, index_manager
     if indicator_runtime is not None:
         indicator_runtime.stop()
         indicator_runtime = None
+    if index_manager is not None:
+        index_manager.stop()
+        index_manager = None
     if manager is not None:
         manager.stop()
         manager = None
@@ -235,6 +247,29 @@ def _indicator_error_response() -> Response | None:
             "status": "STARTING",
         }, 503)
     return None
+
+
+INDEX_ROUTES = (
+    "nifty", "banknifty", "sensex", "nifty500", "niftymidcap100",
+    "niftysmallcap100", "finnifty", "indiavix", "niftyit", "niftyauto",
+    "niftypharma", "niftymetal", "niftyfmcg", "niftyrealty", "niftyenergy", "niftyinfra",
+)
+
+def _index_endpoint(route: str) -> Response:
+    error = _error_response()
+    if error:
+        return error
+    if index_manager is None:
+        return json_response({"service": "PSYGRID", "route": route, "status": "INDEX_LAYER_UNAVAILABLE"}, 503)
+    try:
+        return json_response(index_manager.snapshot(route))
+    except Exception as exc:
+        return json_response({"service": "PSYGRID", "route": route, "status": "INDEX_ENDPOINT_ERROR", "error": str(exc)}, 503)
+
+for _route in INDEX_ROUTES:
+    globals()[f"public_{_route}"] = app.get(
+        f"/public/{_route}.json", response_class=Response
+    )(lambda route=_route: _index_endpoint(route))
 
 
 @app.get("/public/indicators.json", response_class=Response)
