@@ -69,6 +69,33 @@ jobs:
       - name: Verify public health
         run: curl -fsS --max-time 10 http://140.245.226.102:10000/health
 
+      - name: Verify 16 index endpoints
+        env:
+          PSYGRID_BASE_URL: http://140.245.226.102:10000
+        run: |
+          set -euo pipefail
+          endpoints=(
+            nifty banknifty sensex nifty500 niftymidcap100 niftysmallcap100
+            finnifty indiavix niftyit niftyauto niftypharma niftymetal
+            niftyfmcg niftyrealty niftyenergy niftyinfra
+          )
+          for endpoint in "${endpoints[@]}"; do
+            payload="$(curl -fsS --max-time 10 "${PSYGRID_BASE_URL}/public/${endpoint}.json")"
+            python - "$endpoint" "$payload" <<'PY'
+import json
+import sys
+
+endpoint, payload = sys.argv[1], sys.argv[2]
+data = json.loads(payload)
+status = data.get("status")
+if status in {"INDEX_LAYER_UNAVAILABLE", "INDEX_DATA_UNAVAILABLE"}:
+    raise SystemExit(f"{endpoint}: {status}: {data.get('error') or data.get('resolution_error')}")
+if not data.get("symbol"):
+    raise SystemExit(f"{endpoint}: missing symbol")
+print(f"{endpoint}: OK ({data['symbol']})")
+PY
+          done
+
       - name: Verify 990-stock universe
         env:
           PSYGRID_BASE_URL: http://140.245.226.102:10000
