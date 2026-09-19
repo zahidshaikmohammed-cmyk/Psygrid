@@ -377,11 +377,11 @@ def _public_live_range(start: int, end: int) -> Response:
     if error:
         return error
     # Never sort a shard independently. Every shard is a slice of the same
-    # canonical 450-instrument order used by the feed and configuration.
+    # canonical 990-instrument order used by the feed and configuration.
     return json_response(market_live_json(state, (start, end), True))
 
 
-# Canonical 450-stock universe: exactly 10 disjoint shards of 45.
+# Canonical 990-stock universe: exactly 22 disjoint shards of 45.
 SHARD_RANGES = tuple((name, index * 45, (index + 1) * 45) for index, name in enumerate("abcdefghijklmnopqrstuv"))
 
 for route, start, end in SHARD_RANGES:
