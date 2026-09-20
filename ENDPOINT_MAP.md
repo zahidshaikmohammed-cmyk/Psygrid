@@ -28,14 +28,16 @@ Base URL (production): `http://140.245.226.102:10000`
 |---|---|---|---|
 | `/public/{nifty,banknifty,sensex,nifty500,niftymidcap100,niftysmallcap100,finnifty,indiavix,niftyit,niftyauto,niftypharma,niftymetal,niftyfmcg,niftyrealty,niftyenergy,niftyinfra}.json` | 1m/5m/15m/1h OHLCV per index | Tick-driven (1m), on-demand historical (5m/15m/1h) | Dhan WebSocket Full feed + Dhan historical API |
 
-## NIFTY / BANKNIFTY / MIDCPNIFTY derivatives
+## NIFTY / BANKNIFTY / MIDCPNIFTY / SENSEX derivatives
 
 | Endpoint | Purpose | Refresh | Data source |
 |---|---|---|---|
-| `/public/{nifty,banknifty,midcpnifty}-options.json` | Option chain + chain analytics | 3.2s | Dhan Option Chain REST API |
-| `/public/{nifty,banknifty,midcpnifty}-depth.json` | 20-level market depth, nearest 25 strikes × CE/PE | WebSocket push (depth), 1s (quotes) | Dhan 20-level Depth WebSocket + Market Quote REST |
-| `/public/{nifty,banknifty,midcpnifty}-indicators.json` | Technical-indicator suite on the underlying's own 1m candles | 5s | NIFTY/BANKNIFTY: sealed index layer's candles. MIDCPNIFTY: Dhan historical intraday API (new poller, no WS feed exists for this symbol) |
-| `/public/{nifty,banknifty}-futures.json` | Front-month index-futures quote | 2s quote / 30min contract resolution | Dhan instrument master (contract identity) + Dhan Market Quote API |
+| `/public/{nifty,banknifty,midcpnifty,sensex}-options.json` | Option chain + chain analytics | 3.2s | Dhan Option Chain REST API |
+| `/public/{nifty,banknifty,midcpnifty,sensex}-depth.json` | 20-level market depth, nearest 25 strikes × CE/PE | WebSocket push (depth), 1s (quotes) | Dhan 20-level Depth WebSocket + Market Quote REST |
+| `/public/{nifty,banknifty,midcpnifty,sensex}-indicators.json` | Technical-indicator suite on the underlying's own 1m candles | 5s | NIFTY/BANKNIFTY/SENSEX: sealed index layer's candles. MIDCPNIFTY: Dhan historical intraday API (new poller, no WS feed exists for this symbol) |
+| `/public/{nifty,banknifty,sensex}-futures.json` | Front-month index-futures quote | 2s quote / 30min contract resolution | Dhan instrument master (contract identity) + Dhan Market Quote API |
+
+**SENSEX trades on BSE, not NSE** — its option-chain underlying identity (`security_id=51`, `IDX_I`) matches the sealed index layer, but its actual option/futures contracts trade on Dhan's `BSE_FNO` segment (vs. `NSE_FNO` for NIFTY/BANKNIFTY). `futures_layer.py`/`derivatives_instruments.py` take an `exchange` parameter for this; MIDCPNIFTY has no futures endpoint (no listed MIDCPNIFTY futures contract exists).
 
 ## Market-wide aggregates (Tier 1, new)
 

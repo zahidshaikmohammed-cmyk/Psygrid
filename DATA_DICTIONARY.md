@@ -36,7 +36,7 @@ Field-level reference for every live endpoint. `storage: RAM_ONLY` and `syntheti
 | `1m`/`5m`/`15m`/`1h` | array of §1 | Multi-timeframe OHLCV | 1m from WebSocket; higher timeframes from Dhan historical API |
 | `candle_source.{tf}` | string | Which upstream produced that timeframe | Static per timeframe |
 
-## 4. Option-chain endpoints (`/public/{nifty,banknifty,midcpnifty}-options.json`)
+## 4. Option-chain endpoints (`/public/{nifty,banknifty,midcpnifty,sensex}-options.json`)
 
 | Field | Type | Example | Meaning | Source | Units |
 |---|---|---|---|---|---|
@@ -65,7 +65,9 @@ Field-level reference for every live endpoint. `storage: RAM_ONLY` and `syntheti
 | `data_quality.duplicate_security_ids` | int | Same `security_id` appearing twice in one chain | Validation |
 | `data_quality.crossed_markets_detected` | int | Contracts where `top_bid_price > top_ask_price` | Validation |
 
-## 5. Market-depth endpoints (`/public/{nifty,banknifty,midcpnifty}-depth.json`)
+## 5. Market-depth endpoints (`/public/{nifty,banknifty,midcpnifty,sensex}-depth.json`)
+
+SENSEX's contracts trade on Dhan's `BSE_FNO` segment (not `NSE_FNO` like the other three) — everything else about the payload shape is identical.
 
 | Field | Type | Meaning | Source |
 |---|---|---|---|
@@ -90,7 +92,9 @@ Field-level reference for every live endpoint. `storage: RAM_ONLY` and `syntheti
 
 All 37 fields are raw indicator *values* — none of them are trading decisions. No field here is ever `BUY`/`SELL`/a confidence score.
 
-## 7. Futures endpoints (`/public/{nifty,banknifty}-futures.json`)
+## 7. Futures endpoints (`/public/{nifty,banknifty,sensex}-futures.json`)
+
+SENSEX futures resolve against Dhan's `BSE` instrument-master rows (`exchange_segment: "BSE_FNO"`); NIFTY/BANKNIFTY resolve against `NSE`. No MIDCPNIFTY futures endpoint exists — no listed MIDCPNIFTY futures contract exists on the exchange.
 
 | Field | Type | Example | Meaning | Source |
 |---|---|---|---|---|

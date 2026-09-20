@@ -42,7 +42,8 @@ def _setup_all_healthy(monkeypatch):
     monkeypatch.setattr(app_module, "index_error", "")
 
     for name in ("nifty_options_manager", "nifty_depth_manager", "banknifty_options_manager", "banknifty_depth_manager",
-                 "midcpnifty_options_manager", "midcpnifty_depth_manager", "midcpnifty_underlying_manager"):
+                 "midcpnifty_options_manager", "midcpnifty_depth_manager", "midcpnifty_underlying_manager",
+                 "sensex_options_manager", "sensex_depth_manager"):
         monkeypatch.setattr(app_module, name, _fresh_manager_state_only())
 
     contract = FuturesContract(symbol="NIFTY", security_id="49081", exchange_segment="NSE_FNO", instrument="FUTIDX", trading_symbol="NIFTY-FUT", expiry_date="2026-09-26", lot_size=75, tick_size=0.05)
@@ -51,6 +52,7 @@ def _setup_all_healthy(monkeypatch):
     nifty_futures_state.set_quote({"last_price": 25100.0, "volume": 1000, "oi": 500000, "ohlc": {"open": 25000.0, "high": 25200.0, "low": 24950.0, "close": 25050.0}})
     monkeypatch.setattr(app_module, "nifty_futures_manager", SimpleNamespace(state=nifty_futures_state))
     monkeypatch.setattr(app_module, "banknifty_futures_manager", _fresh_manager_state_only())
+    monkeypatch.setattr(app_module, "sensex_futures_manager", _fresh_manager_state_only())
 
     healthy_context = GlobalContextState(SimpleNamespace(timezone="Asia/Kolkata"))
     healthy_context.set_series({"sp500": {"series_id": "SP500", "value": 6500.0, "source_date": "2026-09-18", "source": "FRED"}})
@@ -61,7 +63,7 @@ def _setup_all_healthy(monkeypatch):
     healthy_rbi.set_items([{"id": "1", "headline": "x"}], {})
     monkeypatch.setattr(app_module, "rbi_news_manager", SimpleNamespace(state=healthy_rbi))
 
-    for name in ("nifty_underlying_indicators", "banknifty_underlying_indicators", "midcpnifty_underlying_indicators"):
+    for name in ("nifty_underlying_indicators", "banknifty_underlying_indicators", "midcpnifty_underlying_indicators", "sensex_underlying_indicators"):
         monkeypatch.setattr(app_module, name, SimpleNamespace(
             snapshot=lambda: {"status": "OK"},
             last_updated_at=lambda: datetime.now(timezone.utc).isoformat(),
@@ -83,6 +85,8 @@ def test_health_reports_everything_fresh_when_all_managers_healthy(monkeypatch):
     assert payload["components"]["equity_990"]["status"] == "FRESH"
     assert payload["components"]["index_nifty"]["status"] == "FRESH"
     assert payload["components"]["nifty_futures"]["status"] == "FRESH"
+    assert payload["components"]["sensex_options"]["status"] == "FRESH"
+    assert payload["components"]["sensex_futures"]["status"] == "FRESH"
 
 
 def test_one_broken_secondary_feed_does_not_take_down_core_dhan_infrastructure(monkeypatch):
