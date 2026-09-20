@@ -136,10 +136,11 @@ class FuturesState:
 class FuturesManager:
     """Resolves the front-month contract and polls its live quote."""
 
-    def __init__(self, symbol: str, settings, dhan_api):
+    def __init__(self, symbol: str, settings, dhan_api, exchange: str = "NSE"):
         self.symbol = symbol
         self.settings = settings
         self.dhan_api = dhan_api
+        self.exchange = exchange
         self.state = FuturesState(symbol, settings)
         self.stop_event = threading.Event()
         self.thread: threading.Thread | None = None
@@ -159,7 +160,7 @@ class FuturesManager:
         self.thread = None
 
     def _resolve_contract(self) -> None:
-        contracts = fetch_front_month_index_futures((self.symbol,))
+        contracts = fetch_front_month_index_futures((self.symbol,), exchange=self.exchange)
         contract = contracts.get(self.symbol)
         if contract is None:
             raise RuntimeError(f"DHAN_{self.symbol}_FUTURES_NOT_RESOLVED")

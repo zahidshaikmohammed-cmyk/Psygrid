@@ -63,15 +63,17 @@ def _float_or_none(value) -> Optional[float]:
         return None
 
 
-def fetch_front_month_index_futures(underlying_symbols: tuple[str, ...], timeout: int = 30) -> dict[str, FuturesContract]:
-    """Resolve the nearest-expiry NSE index-futures contract for each of the
-    given underlying symbols (e.g. "NIFTY", "BANKNIFTY"). Never fabricates a
-    contract: a symbol with no matching, unexpired row is simply absent from
-    the returned dict rather than guessed.
+def fetch_front_month_index_futures(underlying_symbols: tuple[str, ...], timeout: int = 30, exchange: str = "NSE") -> dict[str, FuturesContract]:
+    """Resolve the nearest-expiry index-futures contract for each of the
+    given underlying symbols (e.g. "NIFTY", "BANKNIFTY" on NSE, "SENSEX" on
+    BSE). Never fabricates a contract: a symbol with no matching, unexpired
+    row is simply absent from the returned dict rather than guessed.
     """
     wanted = {s.strip().upper() for s in underlying_symbols if s.strip()}
     if not wanted:
         return {}
+    exchange = exchange.strip().upper()
+    exchange_segment = f"{exchange}_FNO"
 
     response = requests.get(DHAN_INSTRUMENT_MASTER_URL, timeout=timeout)
     response.raise_for_status()
@@ -82,7 +84,7 @@ def fetch_front_month_index_futures(underlying_symbols: tuple[str, ...], timeout
     candidates: dict[str, list[tuple[date, dict]]] = {symbol: [] for symbol in wanted}
 
     for row in reader:
-        if row.get("SEM_EXM_EXCH_ID", "").strip().upper() != "NSE":
+        if row.get("SEM_EXM_EXCH_ID", "").strip().upper() != exchange:
             continue
         if row.get("SEM_INSTRUMENT_NAME", "").strip().upper() not in FUTURES_INSTRUMENT_NAMES:
             continue
@@ -115,7 +117,7 @@ def fetch_front_month_index_futures(underlying_symbols: tuple[str, ...], timeout
         result[symbol] = FuturesContract(
             symbol=symbol,
             security_id=security_id,
-            exchange_segment="NSE_FNO",
+            exchange_segment=exchange_segment,
             instrument="FUTIDX",
             trading_symbol=row.get("SEM_TRADING_SYMBOL", "").strip(),
             expiry_date=expiry.isoformat(),

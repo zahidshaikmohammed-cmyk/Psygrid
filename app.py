@@ -32,14 +32,18 @@ from market_breadth import build_market_breadth, build_sector_breadth
 from global_context import GlobalContextManager, global_context_json
 from rbi_news import RbiNewsManager, rbi_news_json
 from health_monitor import component_health, build_health
+from sensex_options import SensexOptionsManager, sensex_options_json
+from sensex_depth import SensexDepthManager, sensex_depth_json
 
 settings = state = manager = indicator_runtime = index_manager = None
 nifty_options_manager = nifty_depth_manager = None
 banknifty_options_manager = banknifty_depth_manager = None
 midcpnifty_options_manager = midcpnifty_depth_manager = None
+sensex_options_manager = sensex_depth_manager = None
 midcpnifty_underlying_manager = None
 nifty_underlying_indicators = banknifty_underlying_indicators = midcpnifty_underlying_indicators = None
-nifty_futures_manager = banknifty_futures_manager = None
+sensex_underlying_indicators = None
+nifty_futures_manager = banknifty_futures_manager = sensex_futures_manager = None
 global_context_manager = rbi_news_manager = None
 config_error = ""
 indicator_error = ""
@@ -76,9 +80,17 @@ def _midcpnifty_underlying_candles():
     return midcpnifty_underlying_manager.state.snapshot().get("candles_1m")
 
 
+def _sensex_underlying_candles():
+    if index_manager is None:
+        return None
+    snap = index_manager.snapshot("sensex")
+    return snap.get("1m") if isinstance(snap, dict) else None
+
+
 def startup() -> None:
     global settings, state, manager, indicator_runtime, index_manager, config_error, indicator_error, index_error
     global nifty_options_manager, nifty_depth_manager, banknifty_options_manager, banknifty_depth_manager, midcpnifty_options_manager, midcpnifty_depth_manager
+    global sensex_options_manager, sensex_depth_manager, sensex_underlying_indicators, sensex_futures_manager
     global midcpnifty_underlying_manager, nifty_underlying_indicators, banknifty_underlying_indicators, midcpnifty_underlying_indicators
     global nifty_futures_manager, banknifty_futures_manager, global_context_manager, rbi_news_manager
     config_error = ""
@@ -185,6 +197,20 @@ def startup() -> None:
             except Exception:
                 midcpnifty_depth_manager = None
 
+        # SENSEX options/depth trade on BSE rather than NSE; identity and
+        # rate limits otherwise mirror NIFTY/BANKNIFTY exactly.
+        try:
+            sensex_options_manager = SensexOptionsManager(settings, dhan_api)
+            sensex_options_manager.start()
+        except Exception:
+            sensex_options_manager = None
+        if sensex_options_manager is not None:
+            try:
+                sensex_depth_manager = SensexDepthManager(settings, dhan_api, sensex_options_manager)
+                sensex_depth_manager.start()
+            except Exception:
+                sensex_depth_manager = None
+
         # MIDCPNIFTY has no WebSocket tick feed (it is not one of the sealed
         # 16 index-layer symbols); source its own real 1m candles from
         # Dhan's historical intraday API instead.
@@ -213,9 +239,15 @@ def startup() -> None:
             midcpnifty_underlying_indicators.start()
         except Exception:
             midcpnifty_underlying_indicators = None
+        try:
+            sensex_underlying_indicators = UnderlyingIndicatorRuntime("SENSEX", _sensex_underlying_candles, settings)
+            sensex_underlying_indicators.start()
+        except Exception:
+            sensex_underlying_indicators = None
 
-        # Real NIFTY/BANKNIFTY front-month futures, resolved from Dhan's own
-        # instrument master and polled via Dhan's market-quote API.
+        # Real NIFTY/BANKNIFTY/SENSEX front-month futures, resolved from
+        # Dhan's own instrument master and polled via Dhan's market-quote
+        # API. SENSEX futures trade on BSE rather than NSE.
         try:
             nifty_futures_manager = FuturesManager("NIFTY", settings, dhan_api)
             nifty_futures_manager.start()
@@ -226,6 +258,11 @@ def startup() -> None:
             banknifty_futures_manager.start()
         except Exception:
             banknifty_futures_manager = None
+        try:
+            sensex_futures_manager = FuturesManager("SENSEX", settings, dhan_api, exchange="BSE")
+            sensex_futures_manager.start()
+        except Exception:
+            sensex_futures_manager = None
 
         # Tier 2: delayed official reference data (FRED) and RBI's own
         # official RSS feeds. Never presented as live; see market_data_status.
@@ -255,9 +292,10 @@ def shutdown() -> None:
         index_manager = None
     for name in (
         "rbi_news_manager", "global_context_manager",
-        "nifty_futures_manager", "banknifty_futures_manager",
-        "midcpnifty_underlying_indicators", "banknifty_underlying_indicators", "nifty_underlying_indicators",
+        "nifty_futures_manager", "banknifty_futures_manager", "sensex_futures_manager",
+        "midcpnifty_underlying_indicators", "banknifty_underlying_indicators", "nifty_underlying_indicators", "sensex_underlying_indicators",
         "midcpnifty_underlying_manager",
+        "sensex_depth_manager", "sensex_options_manager",
         "midcpnifty_depth_manager", "midcpnifty_options_manager", "banknifty_depth_manager", "banknifty_options_manager", "nifty_depth_manager", "nifty_options_manager",
     ):
         obj = globals().get(name)
@@ -318,16 +356,18 @@ def root() -> Response:
         "live_timeframes": ["1m"],
         "depth_enabled": False,
         "indicators_enabled": False,
-        "derivatives_symbols": ["NIFTY", "BANKNIFTY", "MIDCPNIFTY"],
+        "derivatives_symbols": ["NIFTY", "BANKNIFTY", "MIDCPNIFTY", "SENSEX"],
         "derivatives_endpoints": [
             "/public/nifty-options.json", "/public/nifty-depth.json",
             "/public/banknifty-options.json", "/public/banknifty-depth.json",
             "/public/midcpnifty-options.json", "/public/midcpnifty-depth.json",
+            "/public/sensex-options.json", "/public/sensex-depth.json",
         ],
         "underlying_indicator_endpoints": [
-            "/public/nifty-indicators.json", "/public/banknifty-indicators.json", "/public/midcpnifty-indicators.json",
+            "/public/nifty-indicators.json", "/public/banknifty-indicators.json",
+            "/public/midcpnifty-indicators.json", "/public/sensex-indicators.json",
         ],
-        "futures_endpoints": ["/public/nifty-futures.json", "/public/banknifty-futures.json"],
+        "futures_endpoints": ["/public/nifty-futures.json", "/public/banknifty-futures.json", "/public/sensex-futures.json"],
         "breadth_endpoints": ["/public/market-breadth.json", "/public/sectors.json"],
         "context_endpoints": {
             "global_context": {"endpoint": "/public/global-context.json", "market_data_status": "DELAYED", "source": "FRED"},
@@ -495,8 +535,11 @@ _DERIVATIVES_ROUTES = (
     ("banknifty-depth", "banknifty_depth_manager", banknifty_depth_json, "BANKNIFTY", "BANKNIFTY_DEPTH_UNAVAILABLE"),
     ("midcpnifty-options", "midcpnifty_options_manager", midcpnifty_options_json, "MIDCPNIFTY", "MIDCPNIFTY_OPTIONS_UNAVAILABLE"),
     ("midcpnifty-depth", "midcpnifty_depth_manager", midcpnifty_depth_json, "MIDCPNIFTY", "MIDCPNIFTY_DEPTH_UNAVAILABLE"),
+    ("sensex-options", "sensex_options_manager", sensex_options_json, "SENSEX", "SENSEX_OPTIONS_UNAVAILABLE"),
+    ("sensex-depth", "sensex_depth_manager", sensex_depth_json, "SENSEX", "SENSEX_DEPTH_UNAVAILABLE"),
     ("nifty-futures", "nifty_futures_manager", futures_json, "NIFTY", "NIFTY_FUTURES_UNAVAILABLE"),
     ("banknifty-futures", "banknifty_futures_manager", futures_json, "BANKNIFTY", "BANKNIFTY_FUTURES_UNAVAILABLE"),
+    ("sensex-futures", "sensex_futures_manager", futures_json, "SENSEX", "SENSEX_FUTURES_UNAVAILABLE"),
 )
 
 
@@ -528,6 +571,7 @@ _UNDERLYING_INDICATOR_ROUTES = (
     ("nifty-indicators", "nifty_underlying_indicators", "NIFTY"),
     ("banknifty-indicators", "banknifty_underlying_indicators", "BANKNIFTY"),
     ("midcpnifty-indicators", "midcpnifty_underlying_indicators", "MIDCPNIFTY"),
+    ("sensex-indicators", "sensex_underlying_indicators", "SENSEX"),
 )
 
 
@@ -642,7 +686,8 @@ def _build_health_payload() -> dict:
         ("nifty_options", nifty_options_manager, 3.2), ("nifty_depth", nifty_depth_manager, 1.0),
         ("banknifty_options", banknifty_options_manager, 3.2), ("banknifty_depth", banknifty_depth_manager, 1.0),
         ("midcpnifty_options", midcpnifty_options_manager, 3.2), ("midcpnifty_depth", midcpnifty_depth_manager, 1.0),
-        ("nifty_futures", nifty_futures_manager, 2.0), ("banknifty_futures", banknifty_futures_manager, 2.0),
+        ("sensex_options", sensex_options_manager, 3.2), ("sensex_depth", sensex_depth_manager, 1.0),
+        ("nifty_futures", nifty_futures_manager, 2.0), ("banknifty_futures", banknifty_futures_manager, 2.0), ("sensex_futures", sensex_futures_manager, 2.0),
         ("midcpnifty_underlying", midcpnifty_underlying_manager, 20.0),
         ("global_context", global_context_manager, 3600.0), ("rbi_news", rbi_news_manager, 300.0),
     ):
@@ -657,7 +702,7 @@ def _build_health_payload() -> dict:
 
     for name, runtime in (
         ("nifty_indicators", nifty_underlying_indicators), ("banknifty_indicators", banknifty_underlying_indicators),
-        ("midcpnifty_indicators", midcpnifty_underlying_indicators),
+        ("midcpnifty_indicators", midcpnifty_underlying_indicators), ("sensex_indicators", sensex_underlying_indicators),
     ):
         if runtime is None:
             components.append(component_health(name=name, status=None, updated_at=None, expected_refresh_seconds=5.0, now=now_ist))
