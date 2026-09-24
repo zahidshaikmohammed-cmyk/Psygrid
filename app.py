@@ -421,8 +421,13 @@ def _public_live_range(start: int, end: int) -> Response:
     return json_response(market_live_json(state, (start, end), True))
 
 
-# Canonical 990-stock universe: exactly 22 disjoint shards of 45.
-SHARD_RANGES = tuple((name, index * 45, (index + 1) * 45) for index, name in enumerate("abcdefghijklmnopqrstuv"))
+# Canonical equity universe: 22 disjoint shards of 45, except the last shard
+# absorbs whatever remains if UNIVERSE_SIZE isn't an exact multiple of 45
+# (e.g. a symbol was removed after a Dhan instrument-master resolution failure).
+SHARD_RANGES = tuple(
+    (name, index * 45, min((index + 1) * 45, UNIVERSE_SIZE))
+    for index, name in enumerate("abcdefghijklmnopqrstuv")
+)
 
 for route, start, end in SHARD_RANGES:
     globals()[f"public_live_{route}"] = app.get(

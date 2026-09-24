@@ -31,7 +31,7 @@ def _setup_all_healthy(monkeypatch):
     equity_state = SimpleNamespace(
         session_status="LIVE", feed_status="CONNECTED",
         last_message_at=datetime.now(timezone.utc).isoformat(),
-        last_feed_error="", subscribed_count=990, websocket_reconnects=0,
+        last_feed_error="", subscribed_count=989, websocket_reconnects=0,
     )
     monkeypatch.setattr(app_module, "config_error", "")
     monkeypatch.setattr(app_module, "state", equity_state)

@@ -3,19 +3,22 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED = 990
+EXPECTED = 989
 SHARD_NAMES = "abcdefghijklmnopqrstuv"
 
 class ShardContractTests(unittest.TestCase):
     def setUp(self):
         payload = json.loads((ROOT / "stocks.json").read_text(encoding="utf-8"))
         self.symbols = payload["symbols"]
-        self.ranges = [(name, i * 45, (i + 1) * 45) for i, name in enumerate(SHARD_NAMES)]
+        self.ranges = [(name, i * 45, min((i + 1) * 45, EXPECTED)) for i, name in enumerate(SHARD_NAMES)]
 
-    def test_a_to_v_are_exactly_22_disjoint_45_stock_slices(self):
+    def test_a_to_v_are_22_disjoint_slices_covering_the_full_universe(self):
         shards = {name: self.symbols[start:end] for name, start, end in self.ranges}
         self.assertEqual(len(shards), 22)
-        self.assertTrue(all(len(symbols) == 45 for symbols in shards.values()))
+        # 21 full 45-stock shards, plus a final shard with whatever remains.
+        sizes = [len(symbols) for symbols in shards.values()]
+        self.assertEqual(sizes[:-1], [45] * 21)
+        self.assertEqual(sizes[-1], EXPECTED - 21 * 45)
         flattened = [symbol for symbols in shards.values() for symbol in symbols]
         self.assertEqual(len(flattened), EXPECTED)
         self.assertEqual(len(set(flattened)), EXPECTED)

@@ -7,7 +7,7 @@ from app import SHARD_RANGES
 from state import PsygridState
 
 
-EXPECTED = 990
+EXPECTED = 989
 EXPECTED_KEYS = {"symbol", "security_id", "previous_close", "today_open", "candles_1m"}
 EXPECTED_CANDLE_KEYS = {"timestamp", "open", "high", "low", "close", "volume"}
 
@@ -15,17 +15,19 @@ EXPECTED_CANDLE_KEYS = {"timestamp", "open", "high", "low", "close", "volume"}
 def test_canonical_stock_universe_is_exactly_990_and_unique():
     payload = json.loads(Path("stocks.json").read_text(encoding="utf-8"))
     symbols = payload["symbols"]
-    assert payload["universe"] == "PSYGRID_990"
+    assert payload["universe"] == "PSYGRID_989"
     assert payload["exchange"] == "NSE"
     assert payload["instrument"] == "EQUITY"
     assert len(symbols) == EXPECTED
     assert len(set(symbols)) == EXPECTED
 
 
-def test_shards_are_exactly_22_disjoint_blocks_of_45():
-    assert tuple(end - start for _, start, end in SHARD_RANGES) == (45,) * 22
+def test_shards_are_exactly_22_disjoint_blocks_covering_the_full_universe():
+    # 21 full shards of 45, plus a final shard that absorbs whatever remains
+    # (44, since UNIVERSE_SIZE=989 isn't an exact multiple of 45).
+    assert tuple(end - start for _, start, end in SHARD_RANGES) == (45,) * 21 + (44,)
     assert SHARD_RANGES[0][1:] == (0, 45)
-    assert SHARD_RANGES[-1][1:] == (945, 990)
+    assert SHARD_RANGES[-1][1:] == (945, 989)
     for left, right in zip(SHARD_RANGES, SHARD_RANGES[1:]):
         assert left[2] == right[1]
     ranges = [(start, end) for _, start, end in SHARD_RANGES]
