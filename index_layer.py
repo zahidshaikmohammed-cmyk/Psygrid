@@ -567,9 +567,9 @@ class IndexLayerManager:
                 },
                 "synthetic_candles": False,
                 "1m": [_clean_candle(x) for x in candles_1m],
-                "5m": [_normalize_ohlcv(x) for x in historical["5m"]],
-                "15m": [_normalize_ohlcv(x) for x in historical["15m"]],
-                "1h": [_normalize_ohlcv(x) for x in historical["1h"]],
+                "5m": [_clean_candle(x) for x in historical["5m"]],
+                "15m": [_clean_candle(x) for x in historical["15m"]],
+                "1h": [_clean_candle(x) for x in historical["1h"]],
             }
 
     def status(self, key: str) -> dict:
