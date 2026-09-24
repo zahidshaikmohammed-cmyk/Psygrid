@@ -220,6 +220,9 @@ class IndexState:
 
 class IndexLayerFeed:
     NO_MESSAGE_WATCHDOG_SECONDS = 25.0
+    NORMAL_INITIAL_BACKOFF = 5.0
+    NORMAL_MAX_BACKOFF = 120.0
+    RATE_LIMIT_COOLDOWN = 300.0
 
     def __init__(self, settings, states: dict[str, IndexState]):
         self.settings = settings
@@ -230,7 +233,7 @@ class IndexLayerFeed:
         self._stop = threading.Event()
         self._connection_stop = threading.Event()
         self._connected_event = threading.Event()
-        self._backoff = 5.0
+        self._backoff = self.NORMAL_INITIAL_BACKOFF
         self._connection_started_epoch = 0.0
         self._connection_quote_baseline = 0
 
@@ -318,7 +321,7 @@ class IndexLayerFeed:
             return None
 
     def _on_connect(self, _feed):
-        self._backoff = 5.0
+        self._backoff = self.NORMAL_INITIAL_BACKOFF
         self._connection_started_epoch = time.time()
         self._connection_quote_baseline = self._total_quote_packets()
         self._connection_stop.clear()
@@ -339,11 +342,38 @@ class IndexLayerFeed:
             for state in self.states.values():
                 state.set_feed_status("ERROR", f"index websocket:{type(error).__name__}:{error}")
 
-    def _on_message(self, _feed, data):
+    @staticmethod
+    def _is_rate_limited_error(error) -> bool:
+        text = str(error).lower()
+        return (
+            "429" in text or "805" in text or "too many requests" in text
+            or ("too many" in text and "connection" in text)
+            or "connection limit" in text
+        )
+
+    def _on_message(self, feed, data):
         if not isinstance(data, dict):
             return
         packet_type = str(data.get("type", data.get("Type", ""))).strip().lower()
         if packet_type in {"previous close", "prev close", "previous day"}:
+            return
+        if packet_type == "error":
+            # A single shared feed serves all 16 indices - a rate/connection
+            # limit rejection here means the same thing feed.py already
+            # handles for equity: back off for RATE_LIMIT_COOLDOWN instead
+            # of retrying at normal speed and getting rejected again.
+            code = data.get("error_code", data.get("code"))
+            message = str(data.get("message", data.get("error_message", "feed error")))
+            description = f"Dhan index feed error code={code}: {message}"
+            if self._is_rate_limited_error(f"{code} {message}"):
+                self._backoff = self.RATE_LIMIT_COOLDOWN
+                description = f"Dhan rate/connection limit; {description}"
+            for state in self.states.values():
+                state.set_feed_status("ERROR", description)
+            try:
+                feed.close_connection()
+            except Exception:
+                pass
             return
         try:
             security_id = str(data.get("security_id", data.get("securityId", ""))).strip()
@@ -429,8 +459,14 @@ class IndexLayerFeed:
                     for state in self.states.values():
                         state.set_feed_status("RECONNECTING", "index feed loop ended")
             except Exception as exc:
-                for state in self.states.values():
-                    state.set_feed_status("RECONNECTING", f"index websocket:{type(exc).__name__}:{exc}")
+                message = f"{type(exc).__name__}:{exc}"
+                if self._is_rate_limited_error(message):
+                    self._backoff = self.RATE_LIMIT_COOLDOWN
+                    for state in self.states.values():
+                        state.set_feed_status("RECONNECTING", f"Dhan rate/connection limit; retrying in {int(self.RATE_LIMIT_COOLDOWN)}s; cause={message}")
+                else:
+                    for state in self.states.values():
+                        state.set_feed_status("RECONNECTING", f"index websocket:{message}")
             finally:
                 self._connection_stop.set()
                 try:
@@ -441,7 +477,10 @@ class IndexLayerFeed:
                 self._feed = None
             if self._stop.wait(self._backoff):
                 break
-            self._backoff = min(self._backoff * 2.0, 120.0)
+            if self._backoff >= self.RATE_LIMIT_COOLDOWN:
+                self._backoff = self.NORMAL_INITIAL_BACKOFF
+            else:
+                self._backoff = min(self._backoff * 2.0, self.NORMAL_MAX_BACKOFF)
 
     def start(self):
         if self._thread and self._thread.is_alive():
