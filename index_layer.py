@@ -238,8 +238,12 @@ class IndexLayerFeed:
 
     def _build_feed(self):
         context = DhanContext(self.settings.client_id, self.settings.access_token)
+        # Dhan's WebSocket only streams Ticker packets (LTP + LTT) for IDX_I
+        # instruments - Quote/Full packets require order-book/volume/OI
+        # fields that don't exist for an index, and the server sends nothing
+        # at all for a Full-mode subscription on this segment.
         instruments = [
-            (MarketFeed.IDX, state.instrument.security_id, MarketFeed.Full)
+            (MarketFeed.IDX, state.instrument.security_id, MarketFeed.Ticker)
             for state in self.states.values()
         ]
         return MarketFeed(
@@ -316,7 +320,9 @@ class IndexLayerFeed:
         for state in self.states.values():
             if state.instrument.security_id == security_id:
                 state.feed_messages += 1
-                if packet_type in {"quote data", "quote", "full data", "full"}:
+                # Ticker is the only packet type Dhan sends for IDX_I; Quote/Full
+                # are accepted too in case that ever changes for this segment.
+                if packet_type in {"ticker data", "ticker", "quote data", "quote", "full data", "full"}:
                     state.quote_packets += 1
                     state.update_quote(ltp, ltt, volume, ltq)
                 return
