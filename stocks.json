@@ -1,5 +1,5 @@
 {
-  "universe": "PSYGRID_990",
+  "universe": "PSYGRID_989",
   "exchange": "NSE",
   "instrument": "EQUITY",
   "symbols": [
@@ -327,7 +327,6 @@
     "GNFC",
     "GPPL",
     "GSFC",
-    "HEG",
     "HAPPSTMNDS",
     "HATHWAY",
     "HATSUN",

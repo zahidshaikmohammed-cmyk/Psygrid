@@ -8,7 +8,7 @@ from itertools import combinations
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
-EXPECTED = 990
+EXPECTED = 989
 SHARDS = tuple("abcdefghijklmnopqrstuv")
 IST = ZoneInfo("Asia/Kolkata")
 MARKET_START = time(9, 15)
