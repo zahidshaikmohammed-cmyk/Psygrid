@@ -93,10 +93,9 @@ def main() -> int:
     full_probe = fetch_json(base_url, "/public/live.json")
     endpoint_status = str(full_probe.get("status", ""))
     off_market = endpoint_status == "CLOSED" and not in_market
-    expected_shard_count = 45 if not off_market else 0
     print(f"MARKET STATE: {'OPEN' if in_market else 'CLOSED'} ({now_ist.strftime('%Y-%m-%d %H:%M:%S IST')})")
     print(f"ENDPOINT STATE: {endpoint_status}")
-    print(f"CHECK MODE: {'LIVE 990-STOCK' if not off_market else 'OFF-MARKET SCHEMA'}")
+    print(f"CHECK MODE: {f'LIVE {EXPECTED}-STOCK' if not off_market else 'OFF-MARKET SCHEMA'}")
 
     if off_market:
         if root_status not in {"ONLINE", "CONFIG_ERROR"}:
@@ -110,7 +109,11 @@ def main() -> int:
         raise AssertionError(f"FULL ENDPOINT: expected OK during market hours, got {endpoint_status!r}")
 
     shard_symbols: dict[str, list[str]] = {}
-    for shard in SHARDS:
+    for index, shard in enumerate(SHARDS):
+        # 21 full 45-stock shards, plus a final shard that absorbs whatever
+        # remains if EXPECTED isn't an exact multiple of 45.
+        shard_size = min((index + 1) * 45, EXPECTED) - index * 45
+        expected_shard_count = shard_size if not off_market else 0
         payload = fetch_json(base_url, f"/public/live-{shard}.json")
         shard_status = str(payload.get("status", ""))
         if off_market and shard_status != "CLOSED":
