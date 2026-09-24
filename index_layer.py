@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 import requests
 from dhanhq import DhanContext, MarketFeed
 
+from config import refresh_access_token
 from output import _clean_candle, _ist_timestamp, _price
 
 MASTER_URL = "https://images.dhan.co/api-data/api-scrip-master.csv"
@@ -475,9 +476,26 @@ class IndexLayerManager:
                 started_for_date = None
             self.stop_event.wait(2.0)
 
+    @staticmethod
+    def _looks_like_auth_failure(exc: Exception) -> bool:
+        text = str(exc).lower()
+        return any(token in text for token in ("401", "807", "808", "809", "expired", "invalid token", "authentication failed", "unauthorized"))
+
     def _start_session(self, now: datetime):
         for state in self.states.values():
             state.begin(now.date().isoformat())
+        # This runs in its own loop, independent of the sealed equity
+        # SessionManager, and shares the same Settings/DhanAPI instances.
+        # Proactively refresh here too rather than assuming equity's loop
+        # wins the race to refresh it first - otherwise a stale token at
+        # this exact moment gets baked into the WebSocket connection built
+        # by feed.start() below, with nothing to recover it until tomorrow.
+        try:
+            refresh_access_token(self.settings)
+        except Exception as exc:
+            for state in self.states.values():
+                state.set_feed_status("STARTING", f"token refresh: {exc}")
+        auth_retried = False
         for key, state in self.states.items():
             try:
                 snap = self.dhan_api.quote_snapshot([state.instrument])
@@ -486,6 +504,12 @@ class IndexLayerManager:
                 for interval, tf in ((5, "5m"), (15, "15m"), (60, "1h")):
                     state.merge_history(self.dhan_api.load_today_completed_intraday(state.instrument, interval), tf)
             except Exception as exc:
+                if not auth_retried and self._looks_like_auth_failure(exc):
+                    auth_retried = True
+                    try:
+                        refresh_access_token(self.settings, force=True)
+                    except Exception:
+                        pass
                 state.set_feed_status("STARTING", f"history bootstrap: {exc}")
         self.feed.start()
 
