@@ -228,6 +228,7 @@ class IndexLayerFeed:
         self._watchdog: Optional[threading.Thread] = None
         self._stop = threading.Event()
         self._connection_stop = threading.Event()
+        self._connected_event = threading.Event()
         self._backoff = 5.0
         self._connection_started_epoch = 0.0
         self._connection_quote_baseline = 0
@@ -281,6 +282,10 @@ class IndexLayerFeed:
         self._connection_stop.clear()
         for state in self.states.values():
             state.set_feed_status("CONNECTED")
+        # Signal last: the watchdog thread only reads the two fields above
+        # once this fires, so it can never observe a stale snapshot left
+        # over from a previous connection cycle.
+        self._connected_event.set()
 
     def _on_close(self, _feed):
         if not self._stop.is_set():
@@ -317,6 +322,15 @@ class IndexLayerFeed:
                 return
 
     def _watch_connection(self, feed) -> None:
+        # Wait for THIS connection's own on_connect before reading the
+        # started/baseline fields, so a stale snapshot from a previous
+        # connection cycle can never be used. A bounded wait keeps this
+        # thread from lingering forever if the connection never completes
+        # its handshake and never triggers close either.
+        if not self._connected_event.wait(self.NO_MESSAGE_WATCHDOG_SECONDS + 5.0):
+            return
+        if self._stop.is_set() or self._connection_stop.is_set():
+            return
         started = self._connection_started_epoch
         baseline = self._connection_quote_baseline
         while not self._stop.is_set() and not self._connection_stop.wait(2.0):
@@ -337,6 +351,7 @@ class IndexLayerFeed:
 
     def _run_connected_session(self, feed) -> None:
         self._connection_stop.clear()
+        self._connected_event.clear()
         self._watchdog = threading.Thread(
             target=self._watch_connection,
             args=(feed,),
@@ -348,6 +363,10 @@ class IndexLayerFeed:
             feed.run()
         finally:
             self._connection_stop.set()
+            # Unblock the watchdog immediately if this session ended before
+            # on_connect ever fired (e.g. handshake failure) - otherwise it
+            # would sit waiting on _connected_event for no reason.
+            self._connected_event.set()
             watchdog = self._watchdog
             self._watchdog = None
             if watchdog is not None and watchdog is not threading.current_thread():
