@@ -5,7 +5,7 @@ import io
 import threading
 import time
 from dataclasses import dataclass
-from datetime import datetime, time as dt_time
+from datetime import datetime, time as dt_time, timedelta, timezone
 from typing import Optional
 from zoneinfo import ZoneInfo
 
@@ -253,30 +253,67 @@ class IndexLayerFeed:
             on_close=self._on_close, on_error=self._on_error,
         )
 
+    FUTURE_TIMESTAMP_TOLERANCE_SECONDS = 5
+
     @staticmethod
-    def _parse_ltt(value) -> Optional[int]:
+    def _timezone_offset_seconds(timezone_name: str, now_epoch: float) -> int:
+        try:
+            tz = ZoneInfo(timezone_name)
+            offset = datetime.fromtimestamp(now_epoch, timezone.utc).astimezone(tz).utcoffset()
+            return int(offset.total_seconds()) if offset is not None else 0
+        except Exception:
+            return 0
+
+    @classmethod
+    def _normalize_future_epoch(cls, epoch: int, timezone_name: str, now_epoch: float) -> Optional[int]:
+        if epoch <= int(now_epoch) + cls.FUTURE_TIMESTAMP_TOLERANCE_SECONDS:
+            return epoch
+        offset = cls._timezone_offset_seconds(timezone_name, now_epoch)
+        if offset <= 0:
+            return None
+        if abs((epoch - now_epoch) - offset) <= cls.FUTURE_TIMESTAMP_TOLERANCE_SECONDS:
+            corrected = epoch - offset
+            return corrected if corrected <= int(now_epoch) + cls.FUTURE_TIMESTAMP_TOLERANCE_SECONDS else None
+        return None
+
+    def _parse_ltt(self, value) -> Optional[int]:
+        # Dhan reports LTT as a bare HH:MM:SS wall-clock string in the feed's
+        # own timezone (Asia/Kolkata) - NOT UTC. Mislabeling it as UTC here
+        # previously added a spurious +5:30 to every tick, which is exactly
+        # what the sealed equity feed.py._parse_ltt already correctly avoids.
+        timezone_name = getattr(self.settings, "timezone", "Asia/Kolkata")
         if value in (None, ""):
             return None
+        now_epoch = time.time()
         try:
-            if isinstance(value, (int, float)) or str(value).strip().isdigit():
-                return int(value)
+            if isinstance(value, (int, float)):
+                epoch = int(value)
+                return self._normalize_future_epoch(epoch, timezone_name, now_epoch) if epoch > 0 else None
         except (TypeError, ValueError):
             return None
         text = str(value).strip()
+        if text.isdigit():
+            epoch = int(text)
+            return self._normalize_future_epoch(epoch, timezone_name, now_epoch) if epoch > 0 else None
         for fmt in ("%H:%M:%S", "%H:%M:%S.%f"):
             try:
-                parsed = datetime.strptime(text, fmt).replace(
-                    year=datetime.now().year, month=datetime.now().month, day=datetime.now().day,
-                    tzinfo=ZoneInfo("UTC"),
-                )
-                return int(parsed.timestamp())
+                parsed = datetime.strptime(text, fmt)
+                tz = ZoneInfo(timezone_name)
+                local_now = datetime.fromtimestamp(now_epoch, tz)
+                candidates = []
+                for day_delta in (-1, 0, 1):
+                    local_date = local_now.date() + timedelta(days=day_delta)
+                    local = parsed.replace(year=local_date.year, month=local_date.month, day=local_date.day, tzinfo=tz)
+                    candidates.append(int(local.timestamp()))
+                nearest = min(candidates, key=lambda epoch: abs(epoch - now_epoch))
+                return nearest if nearest <= int(now_epoch) + self.FUTURE_TIMESTAMP_TOLERANCE_SECONDS else None
             except ValueError:
-                pass
+                continue
         try:
             parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
             if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=ZoneInfo("UTC"))
-            return int(parsed.timestamp())
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return self._normalize_future_epoch(int(parsed.timestamp()), timezone_name, now_epoch)
         except ValueError:
             return None
 
