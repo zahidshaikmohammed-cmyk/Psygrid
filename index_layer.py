@@ -218,14 +218,22 @@ class IndexState:
                 self.current_1m = None
 
 class IndexLayerFeed:
+    NO_MESSAGE_WATCHDOG_SECONDS = 25.0
+
     def __init__(self, settings, states: dict[str, IndexState]):
         self.settings = settings
         self.states = states
         self._feed = None
         self._thread: Optional[threading.Thread] = None
+        self._watchdog: Optional[threading.Thread] = None
         self._stop = threading.Event()
         self._connection_stop = threading.Event()
         self._backoff = 5.0
+        self._connection_started_epoch = 0.0
+        self._connection_quote_baseline = 0
+
+    def _total_quote_packets(self) -> int:
+        return sum(state.quote_packets for state in self.states.values())
 
     def _build_feed(self):
         context = DhanContext(self.settings.client_id, self.settings.access_token)
@@ -268,6 +276,8 @@ class IndexLayerFeed:
 
     def _on_connect(self, _feed):
         self._backoff = 5.0
+        self._connection_started_epoch = time.time()
+        self._connection_quote_baseline = self._total_quote_packets()
         self._connection_stop.clear()
         for state in self.states.values():
             state.set_feed_status("CONNECTED")
@@ -306,6 +316,43 @@ class IndexLayerFeed:
                     state.update_quote(ltp, ltt, volume, ltq)
                 return
 
+    def _watch_connection(self, feed) -> None:
+        started = self._connection_started_epoch
+        baseline = self._connection_quote_baseline
+        while not self._stop.is_set() and not self._connection_stop.wait(2.0):
+            if time.time() - started < self.NO_MESSAGE_WATCHDOG_SECONDS:
+                continue
+            if self._total_quote_packets() > baseline:
+                return
+            for state in self.states.values():
+                state.set_feed_status(
+                    "RECONNECTING",
+                    f"index websocket:No market-feed quote packets received for {int(self.NO_MESSAGE_WATCHDOG_SECONDS)}s after connect",
+                )
+            try:
+                feed.close_connection()
+            except Exception:
+                pass
+            return
+
+    def _run_connected_session(self, feed) -> None:
+        self._connection_stop.clear()
+        self._watchdog = threading.Thread(
+            target=self._watch_connection,
+            args=(feed,),
+            daemon=True,
+            name="psygrid-index-watchdog",
+        )
+        self._watchdog.start()
+        try:
+            feed.run()
+        finally:
+            self._connection_stop.set()
+            watchdog = self._watchdog
+            self._watchdog = None
+            if watchdog is not None and watchdog is not threading.current_thread():
+                watchdog.join(timeout=2)
+
     def _run(self):
         while not self._stop.is_set():
             feed = None
@@ -314,7 +361,7 @@ class IndexLayerFeed:
                 self._feed = feed
                 for state in self.states.values():
                     state.set_feed_status("CONNECTING")
-                feed.run()
+                self._run_connected_session(feed)
                 if not self._stop.is_set():
                     for state in self.states.values():
                         state.set_feed_status("RECONNECTING", "index feed loop ended")
