@@ -34,6 +34,7 @@ from rbi_news import RbiNewsManager, rbi_news_json
 from health_monitor import component_health, build_health
 from sensex_options import SensexOptionsManager, sensex_options_json
 from sensex_depth import SensexDepthManager, sensex_depth_json
+from stock_options import StockOptionsManager, NIFTY50_SYMBOLS, stock_options_json, stock_options_listing_json
 
 settings = state = manager = indicator_runtime = index_manager = None
 nifty_options_manager = nifty_depth_manager = None
@@ -45,6 +46,7 @@ nifty_underlying_indicators = banknifty_underlying_indicators = midcpnifty_under
 sensex_underlying_indicators = None
 nifty_futures_manager = banknifty_futures_manager = sensex_futures_manager = None
 global_context_manager = rbi_news_manager = None
+stock_options_manager = None
 config_error = ""
 indicator_error = ""
 index_error = ""
@@ -93,6 +95,7 @@ def startup() -> None:
     global sensex_options_manager, sensex_depth_manager, sensex_underlying_indicators, sensex_futures_manager
     global midcpnifty_underlying_manager, nifty_underlying_indicators, banknifty_underlying_indicators, midcpnifty_underlying_indicators
     global nifty_futures_manager, banknifty_futures_manager, global_context_manager, rbi_news_manager
+    global stock_options_manager
     config_error = ""
     indicator_error = ""
     index_error = ""
@@ -267,6 +270,17 @@ def startup() -> None:
         except Exception:
             nifty_futures_manager = banknifty_futures_manager = sensex_futures_manager = None
 
+        # Stock option chains for the NIFTY 50 constituents that carry
+        # listed derivatives. Shares the same rate-limited Dhan option-chain
+        # REST queue as the index option-chain pollers above, round-robining
+        # one symbol at a time; entirely separate from the 990-equity
+        # universe, the 16-index layer, and the index derivatives above.
+        try:
+            stock_options_manager = StockOptionsManager(settings, dhan_api, instruments)
+            stock_options_manager.start()
+        except Exception:
+            stock_options_manager = None
+
         # Tier 2: delayed official reference data (FRED) and RBI's own
         # official RSS feeds. Never presented as live; see market_data_status.
         try:
@@ -294,7 +308,7 @@ def shutdown() -> None:
         index_manager.stop()
         index_manager = None
     for name in (
-        "rbi_news_manager", "global_context_manager",
+        "rbi_news_manager", "global_context_manager", "stock_options_manager",
         "nifty_futures_manager", "banknifty_futures_manager", "sensex_futures_manager",
         "midcpnifty_underlying_indicators", "banknifty_underlying_indicators", "nifty_underlying_indicators", "sensex_underlying_indicators",
         "midcpnifty_underlying_manager",
@@ -371,6 +385,13 @@ def root() -> Response:
             "/public/midcpnifty-indicators.json", "/public/sensex-indicators.json",
         ],
         "futures_endpoints": ["/public/nifty-futures.json", "/public/banknifty-futures.json", "/public/sensex-futures.json"],
+        "stock_options": {
+            "universe": "NIFTY_50",
+            "symbol_count": len(NIFTY50_SYMBOLS),
+            "listing_endpoint": "/public/stock-options.json",
+            "per_symbol_endpoint": "/public/stock-options/{SYMBOL}.json",
+            "note": "Shares the same rate-limited Dhan option-chain queue as the index option endpoints above; round-robins one symbol at a time.",
+        },
         "breadth_endpoints": ["/public/market-breadth.json", "/public/sectors.json"],
         "context_endpoints": {
             "global_context": {"endpoint": "/public/global-context.json", "market_data_status": "DELAYED", "source": "FRED"},
@@ -569,6 +590,33 @@ for _path, _manager_name, _to_json, _symbol, _unavailable in _DERIVATIVES_ROUTES
 
 
 # ---------------------------------------------------------------------------
+# NIFTY 50 stock option chains: one manager round-robins Dhan's option-chain
+# REST API across every NIFTY 50 constituent that resolves against the
+# equity universe. A per-symbol route plus a combined listing route.
+# ---------------------------------------------------------------------------
+
+@app.get("/public/stock-options.json", response_class=Response)
+def public_stock_options_listing() -> Response:
+    error = _error_response()
+    if error:
+        return error
+    if stock_options_manager is None:
+        return json_response({"service": "PSYGRID", "status": "STOCK_OPTIONS_UNAVAILABLE"}, 503)
+    return json_response(stock_options_listing_json(stock_options_manager))
+
+
+@app.get("/public/stock-options/{symbol}.json", response_class=Response)
+def public_stock_options_symbol(symbol: str) -> Response:
+    error = _error_response()
+    if error:
+        return error
+    if stock_options_manager is None:
+        return json_response({"service": "PSYGRID", "symbol": symbol.upper(), "status": "STOCK_OPTIONS_UNAVAILABLE"}, 503)
+    payload = stock_options_json(stock_options_manager, symbol)
+    return json_response(payload, 200 if payload.get("status") == "LIVE" else 503)
+
+
+# ---------------------------------------------------------------------------
 # Real technical-indicator suite per derivatives underlying (NIFTY,
 # BANKNIFTY, MIDCPNIFTY), reusing the same engine that computes indicators
 # for the 990-equity universe. Isolated: each runtime only reads an
@@ -725,6 +773,25 @@ def _build_health_payload() -> dict:
         name="equity_indicators", status="LIVE" if indicator_runtime is not None else None,
         updated_at=None, expected_refresh_seconds=1.0, now=now_ist, last_error=indicator_error,
     ))
+
+    if stock_options_manager is not None:
+        states = stock_options_manager.states.values()
+        live_count = sum(1 for st in states if st.status == "LIVE")
+        updated_ats = [st.updated_at for st in states if st.updated_at]
+        components.append(component_health(
+            name="stock_options_nifty50",
+            status="LIVE" if live_count > 0 else "STARTING",
+            updated_at=max(updated_ats) if updated_ats else None,
+            # A full round-robin cycle takes symbol_count * 3.2s; any one
+            # symbol going that long without an update is still normal.
+            expected_refresh_seconds=len(stock_options_manager.instruments) * 3.2 if stock_options_manager.instruments else 3.2,
+            now=now_ist,
+            record_count=live_count,
+            expected_record_count=len(NIFTY50_SYMBOLS),
+            extra={"resolved_count": len(stock_options_manager.instruments), "resolution_errors": stock_options_manager.resolution_errors},
+        ))
+    else:
+        components.append(component_health(name="stock_options_nifty50", status=None, updated_at=None, expected_refresh_seconds=3.2, now=now_ist))
 
     market_status = "OPEN" if (state is not None and state.session_status == "LIVE") else "CLOSED"
     return build_health(components, market_status)

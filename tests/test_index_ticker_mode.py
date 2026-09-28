@@ -10,7 +10,9 @@ detecting silence and reconnecting, but every reconnect re-subscribed with
 the same unsupported mode, so real market data could never arrive.
 """
 
+from datetime import datetime
 from types import SimpleNamespace
+from zoneinfo import ZoneInfo
 
 from dhanhq import MarketFeed
 
@@ -24,6 +26,15 @@ def _settings():
 def _nifty_state() -> IndexState:
     instrument = IndexInstrument(security_id="13", exchange_segment="IDX_I")
     return IndexState(_settings(), "nifty", "NIFTY", instrument)
+
+
+def _ltt_now() -> str:
+    # _parse_ltt (fixed in a later commit) rejects a bare HH:MM:SS string
+    # that lands implausibly far in the future once tagged with today's
+    # date - a hardcoded clock-time string would flake depending on when
+    # the suite happens to run, so every packet here carries the real
+    # current IST time instead.
+    return datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%H:%M:%S")
 
 
 def test_index_layer_subscribes_indices_with_ticker_mode_not_full():
@@ -55,7 +66,7 @@ def test_on_message_processes_a_real_ticker_data_packet():
         "exchange_segment": 0,
         "security_id": 13,  # dhanhq emits this as an int, not a string
         "LTP": "25100.50",
-        "LTT": "10:15:30",
+        "LTT": _ltt_now(),
     }
     feed._on_message(None, packet)
 
@@ -71,14 +82,14 @@ def test_on_message_still_processes_quote_and_full_packets_if_ever_sent():
 
     quote_packet = {
         "type": "Quote Data", "security_id": 13,
-        "LTP": "25101.00", "LTT": "10:15:31", "volume": 0,
+        "LTP": "25101.00", "LTT": _ltt_now(), "volume": 0,
     }
     feed._on_message(None, quote_packet)
     assert state.quote_packets == 1
 
     full_packet = {
         "type": "Full Data", "security_id": 13,
-        "LTP": "25102.00", "LTT": "10:15:32", "volume": 0,
+        "LTP": "25102.00", "LTT": _ltt_now(), "volume": 0,
     }
     feed._on_message(None, full_packet)
     assert state.quote_packets == 2
@@ -92,6 +103,6 @@ def test_watchdog_baseline_grows_from_ticker_packets():
     feed = IndexLayerFeed(_settings(), {"nifty": state})
     assert feed._total_quote_packets() == 0
 
-    feed._on_message(None, {"type": "Ticker Data", "security_id": 13, "LTP": "25100.0", "LTT": "10:00:00"})
+    feed._on_message(None, {"type": "Ticker Data", "security_id": 13, "LTP": "25100.0", "LTT": _ltt_now()})
 
     assert feed._total_quote_packets() == 1

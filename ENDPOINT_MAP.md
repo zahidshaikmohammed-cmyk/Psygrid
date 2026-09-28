@@ -39,6 +39,15 @@ Base URL (production): `http://140.245.226.102:10000`
 
 **SENSEX trades on BSE, not NSE** — its option-chain underlying identity (`security_id=51`, `IDX_I`) matches the sealed index layer, but its actual option/futures contracts trade on Dhan's `BSE_FNO` segment (vs. `NSE_FNO` for NIFTY/BANKNIFTY). `futures_layer.py`/`derivatives_instruments.py` take an `exchange` parameter for this; MIDCPNIFTY has no futures endpoint (no listed MIDCPNIFTY futures contract exists).
 
+## NIFTY 50 stock options
+
+| Endpoint | Purpose | Refresh | Data source |
+|---|---|---|---|
+| `/public/stock-options.json` | Listing of all 50 NIFTY 50 constituents' option status/rotation metadata | On request (reads cached state) | — |
+| `/public/stock-options/{SYMBOL}.json` | One stock's option chain + chain analytics | Round-robin, ~3.2s per symbol | Dhan Option Chain REST API |
+
+Covers the 50 NIFTY 50 index constituents (a fixed, periodically-reconstituted list — see `stock_options.py`'s `NIFTY50_SYMBOLS`), each resolved against the existing 989-equity universe's Dhan security ID — no separate resolution step. `StockOptionsManager` is a single round-robin poller sharing the **same** rate-limited Dhan option-chain REST queue as the NIFTY/BANKNIFTY/MIDCPNIFTY/SENSEX option-chain pollers above, one symbol at a time — a full rotation across all resolved symbols takes roughly `resolved_count × 3.2s` (~2.7 minutes for all 50), which is by design, not a bug: polling all NSE F&O stocks (~180-220) at this same rate would take closer to 10 minutes per cycle, which is why this is scoped to NIFTY 50 rather than the full F&O universe. If a symbol never resolves (e.g. not present in `stocks.json`) its own state reports `"UNRESOLVED"` — never fabricated.
+
 ## Market-wide aggregates (Tier 1, new)
 
 | Endpoint | Purpose | Refresh | Data source |
