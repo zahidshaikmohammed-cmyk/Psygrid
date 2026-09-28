@@ -273,7 +273,7 @@ def startup() -> None:
         # one symbol at a time; entirely separate from the 990-equity
         # universe, the 16-index layer, and the index derivatives above.
         try:
-            stock_options_manager = StockOptionsManager(settings, dhan_api, instruments)
+            stock_options_manager = StockOptionsManager(settings, dhan_api)
             stock_options_manager.start()
         except Exception:
             stock_options_manager = None

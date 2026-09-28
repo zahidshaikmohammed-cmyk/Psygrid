@@ -6,8 +6,9 @@ from datetime import datetime, time as datetime_time
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-from config import refresh_access_token
+from config import Instrument, refresh_access_token
 from dhan_auth import DhanTokenRateLimited
+from instrument_master import fetch_nse_equity_security_ids
 from option_analytics import ChainAnalyticsTracker
 
 OPTION_CHAIN_REFRESH_SECONDS = 3.2
@@ -19,12 +20,16 @@ STOCK_OPTIONS_MARKET_CLOSE = datetime_time(15, 30)
 # reconstituted by NSE (typically semi-annually) and, like stocks.json's
 # 990-equity universe, needs manual maintenance when that happens - Dhan's
 # instrument master has no "index membership" field to resolve this from.
+# Updated 2026-09-28: TATAMOTORS, INDUSINDBK, BRITANNIA, DIVISLAB,
+# HEROMOTOCO, BPCL, UPL, LTIM removed; BEL, ETERNAL, HINDALCO, INDIGO,
+# JIOFIN, MAXHEALTH, TMPV, TRENT added, per user-confirmed current
+# constituents.
 NIFTY50_SYMBOLS = (
-    "RELIANCE", "TCS", "HDFCBANK", "ICICIBANK", "INFY", "HINDUNILVR", "ITC", "SBIN", "BHARTIARTL", "BAJFINANCE",
-    "KOTAKBANK", "LT", "AXISBANK", "ASIANPAINT", "MARUTI", "SUNPHARMA", "TITAN", "ULTRACEMCO", "NESTLEIND", "WIPRO",
-    "ONGC", "NTPC", "POWERGRID", "M&M", "TATAMOTORS", "TATASTEEL", "JSWSTEEL", "ADANIENT", "ADANIPORTS", "COALINDIA",
-    "BAJAJFINSV", "HCLTECH", "TECHM", "INDUSINDBK", "GRASIM", "CIPLA", "DRREDDY", "EICHERMOT", "BRITANNIA", "DIVISLAB",
-    "HEROMOTOCO", "BPCL", "SBILIFE", "HDFCLIFE", "APOLLOHOSP", "UPL", "BAJAJ-AUTO", "SHRIRAMFIN", "LTIM", "TATACONSUM",
+    "ADANIENT", "ADANIPORTS", "APOLLOHOSP", "ASIANPAINT", "AXISBANK", "BAJAJ-AUTO", "BAJAJFINSV", "BAJFINANCE", "BEL", "BHARTIARTL",
+    "CIPLA", "COALINDIA", "DRREDDY", "EICHERMOT", "ETERNAL", "GRASIM", "HCLTECH", "HDFCBANK", "HDFCLIFE", "HINDALCO",
+    "HINDUNILVR", "ICICIBANK", "INDIGO", "INFY", "ITC", "JIOFIN", "JSWSTEEL", "KOTAKBANK", "LT", "M&M",
+    "MARUTI", "MAXHEALTH", "NESTLEIND", "NTPC", "ONGC", "POWERGRID", "RELIANCE", "SBILIFE", "SBIN", "SHRIRAMFIN",
+    "SUNPHARMA", "TATACONSUM", "TATASTEEL", "TCS", "TECHM", "TITAN", "TMPV", "TRENT", "ULTRACEMCO", "WIPRO",
 )
 
 
@@ -123,11 +128,18 @@ class StockOptionsManager:
     queue is shared with every other option-chain poller (NIFTY/BANKNIFTY/
     MIDCPNIFTY/SENSEX index options); polling 50 stocks at the same
     ~3.2s-per-request cadence means a full rotation across all of them takes
-    roughly len(resolved) * 3.2s - by design, not a bug. Never fabricates
-    data for a symbol that fails to resolve or fails to fetch; that symbol's
-    own state simply reports its own error/status."""
+    roughly len(resolved) * 3.2s - by design, not a bug. Resolves each
+    symbol's NSE equity security ID independently, directly against Dhan's
+    instrument master - deliberately not reusing the 990/989-equity
+    universe's already-resolved instrument list, since that list's coverage
+    is unrelated to NIFTY 50 membership (two current constituents, e.g.
+    SBILIFE and SHRIRAMFIN, are not part of it) and this domain should not
+    silently lose a real, resolvable stock just because stocks.json happens
+    not to include it. Never fabricates data for a symbol that fails to
+    resolve or fails to fetch; that symbol's own state simply reports its
+    own error/status."""
 
-    def __init__(self, settings, dhan_api, instruments) -> None:
+    def __init__(self, settings, dhan_api) -> None:
         self.settings = settings
         self.dhan_api = dhan_api
         self.stop_event = threading.Event()
@@ -135,17 +147,24 @@ class StockOptionsManager:
         self._auth_retry_at = 0.0
         self._auth_lock = threading.Lock()
 
-        by_symbol = {item.symbol: item for item in instruments}
         self.instruments: dict[str, object] = {}
         self.states: dict[str, StockOptionState] = {}
         self.resolution_errors: dict[str, str] = {}
+        try:
+            security_ids = fetch_nse_equity_security_ids(NIFTY50_SYMBOLS)
+            fetch_error = ""
+        except Exception as exc:
+            security_ids = {}
+            fetch_error = f"{type(exc).__name__}: {exc}"
+
         for symbol in NIFTY50_SYMBOLS:
-            item = by_symbol.get(symbol)
-            if item is None:
+            security_id = security_ids.get(symbol)
+            if security_id is None:
                 self.states[symbol] = StockOptionState(symbol, settings)
                 self.states[symbol].status = "UNRESOLVED"
-                self.resolution_errors[symbol] = "not found in the 989-equity universe"
+                self.resolution_errors[symbol] = fetch_error or "not found in Dhan's NSE equity instrument master"
                 continue
+            item = Instrument(symbol=symbol, security_id=security_id)
             self.instruments[symbol] = item
             self.states[symbol] = StockOptionState(symbol, settings, item.security_id, item.exchange_segment)
 
