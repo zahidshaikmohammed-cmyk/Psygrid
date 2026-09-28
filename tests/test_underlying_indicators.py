@@ -63,3 +63,34 @@ def test_bad_candles_report_error_not_crash():
     snap = rt.snapshot()
     assert snap["status"] == "ERROR"
     assert "error" in snap
+
+
+def test_duplicate_and_unordered_candles_do_not_freeze_indicators():
+    candles = _candles()
+    messy = candles[:10] + [dict(candles[5])] + candles[12:] + [candles[11], candles[10]]
+    rt = UnderlyingIndicatorRuntime("NIFTY", lambda: messy, SimpleNamespace(timezone="Asia/Kolkata"))
+    rt._sync_once()
+    snap = rt.snapshot()
+    assert snap["status"] == "OK"
+    assert snap["result"]["bar_count"] == len(candles)
+
+
+def test_freshness_is_evaluated_when_served_not_when_computed():
+    candles = _candles()  # 2026-09-21 09:15-09:39, long in the past
+    rt = UnderlyingIndicatorRuntime("NIFTY", lambda: candles, SimpleNamespace(timezone="Asia/Kolkata"))
+    rt._sync_once()
+    with rt._lock:
+        rt._result["freshness"] = {"status": "FRESH", "age_seconds": 0, "reason": None}
+    snap = rt.snapshot()
+    assert snap["result"]["freshness"]["status"] == "STALE"
+
+
+def test_error_after_a_good_result_is_exposed():
+    good = _candles()
+    state = {"candles": good}
+    rt = UnderlyingIndicatorRuntime("NIFTY", lambda: state["candles"], SimpleNamespace(timezone="Asia/Kolkata"))
+    rt._sync_once()
+    state["candles"] = good + [{"timestamp": "2026-09-21 09:40:00 IST", "open": 1, "high": 0, "low": 2, "close": 1, "volume": 1}]
+    rt._sync_once()
+    snap = rt.snapshot()
+    assert snap["status"] == "OK" and "invalid OHLC" in snap["last_error"]["message"]

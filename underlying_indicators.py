@@ -17,7 +17,9 @@ from datetime import datetime
 from typing import Any, Callable, Optional
 from zoneinfo import ZoneInfo
 
-from psygrid_master_indicator import IndicatorConfig, PsygridMasterIndicatorEngine
+import pandas as pd
+
+from psygrid_master_indicator import IndicatorConfig, PsygridMasterIndicatorEngine, _freshness
 
 UNDERLYING_INDICATOR_INTERVAL_SECONDS = 5.0
 
@@ -58,10 +60,25 @@ class UnderlyingIndicatorRuntime:
         c = candles[-1]
         return (c.get("timestamp"), c.get("open"), c.get("high"), c.get("low"), c.get("close"), c.get("volume"), len(candles))
 
+    @staticmethod
+    def _sanitize(candles: list[dict]) -> list[dict]:
+        """One duplicate or out-of-order minute makes the engine reject the
+        whole series, which used to freeze the served result for the rest of
+        the session. Keep the last candle per timestamp, in time order."""
+        by_ts: dict = {}
+        for c in candles:
+            if isinstance(c, dict):
+                by_ts[c.get("timestamp")] = c
+        try:
+            return [by_ts[k] for k in sorted(by_ts)]
+        except TypeError:
+            return list(candles)
+
     def _sync_once(self) -> None:
         candles = self.candles_source()
         if not candles:
             return
+        candles = self._sanitize(candles)
         fingerprint = self._fingerprint_of(candles)
         with self._lock:
             if fingerprint == self._fingerprint and self._result is not None:
@@ -98,7 +115,19 @@ class UnderlyingIndicatorRuntime:
             error = self._error
             sync_count = self._sync_count
         if result is not None:
-            return {"service": "PSYGRID_MASTER_INDICATOR", "engine_version": "1.0.0", "symbol": self.symbol, "status": "OK", "timeframe": "1m", "sync_count": sync_count, "result": result}
+            result = dict(result)
+            # Freshness is judged when served, not when last computed: a
+            # result that stopped updating must not keep claiming FRESH.
+            if result.get("as_of"):
+                try:
+                    now = datetime.now(self.tz).strftime("%Y-%m-%d %H:%M:%S IST")
+                    result["freshness"] = _freshness(now, pd.Timestamp(result["as_of"]), self.engine.config)
+                except Exception:
+                    pass
+            payload = {"service": "PSYGRID_MASTER_INDICATOR", "engine_version": "1.0.0", "symbol": self.symbol, "status": "OK", "timeframe": "1m", "sync_count": sync_count, "result": result}
+            if error is not None:
+                payload["last_error"] = error
+            return payload
         if error is not None:
             return {"service": "PSYGRID_MASTER_INDICATOR", "engine_version": "1.0.0", "symbol": self.symbol, "status": "ERROR", "timeframe": "1m", "error": error}
         return {"service": "PSYGRID_MASTER_INDICATOR", "engine_version": "1.0.0", "symbol": self.symbol, "status": "STARTING", "timeframe": "1m"}
