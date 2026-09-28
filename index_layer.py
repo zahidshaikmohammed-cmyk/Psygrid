@@ -28,6 +28,14 @@ INDEX_FALLBACK_IDS = {
     "niftyit": "29",
 }
 
+# Indices whose 1m candles feed the derivatives indicator runtimes. Their
+# completed candles are re-fetched from Dhan's intraday API every minute so
+# the series keeps growing even when the index websocket delivers no ticks
+# (observed live: feed CONNECTED with messages=0 for a whole session).
+CANDLE_BACKFILL_KEYS = ("nifty", "banknifty", "sensex")
+CANDLE_BACKFILL_SECONDS = 60.0
+CANDLE_BACKFILL_OFFSET_SECONDS = 3.0
+
 INDEX_SPECS = {
     "nifty": ("NIFTY", ("NIFTY", "NIFTY 50")),
     "banknifty": ("BANKNIFTY", ("BANKNIFTY", "NIFTY BANK", "NIFTY BANK 50")),
@@ -124,6 +132,7 @@ class IndexState:
         self.last_trade_key: Optional[tuple] = None
         self.feed_messages = 0
         self.quote_packets = 0
+        self.last_backfill_error = ""
 
     def begin(self, session_date: str) -> None:
         with self.lock:
@@ -170,7 +179,7 @@ class IndexState:
                     return
                 if minute_key > current_minute:
                     self.current_1m["complete"] = True
-                    self.live_candles.append(dict(self.current_1m))
+                    self._store_complete(dict(self.current_1m))
                     self.current_1m = None
             delta_volume = max(0, cumulative_volume - self.prev_cumulative_volume)
             self.prev_cumulative_volume = cumulative_volume
@@ -194,6 +203,19 @@ class IndexState:
                 candle["close"] = ltp
                 candle["volume"] = int(candle["volume"]) + delta_volume
 
+    def _store_complete(self, candle: dict) -> None:
+        """Append a completed websocket candle without ever creating a
+        duplicate or out-of-order minute: a minute already filled from
+        Dhan's intraday API keeps the official candle."""
+        ts = int(candle["timestamp"])
+        if self.live_candles and int(self.live_candles[-1]["timestamp"]) >= ts:
+            if any(int(c["timestamp"]) == ts for c in self.live_candles):
+                return
+            self.live_candles.append(candle)
+            self.live_candles.sort(key=lambda c: int(c["timestamp"]))
+            return
+        self.live_candles.append(candle)
+
     def merge_history(self, rows: list[dict], timeframe: str) -> None:
         with self.lock:
             existing = {int(c["timestamp"]): dict(c) for c in self.historical.get(timeframe, [])}
@@ -215,7 +237,7 @@ class IndexState:
             if self.current_1m is not None:
                 candle = dict(self.current_1m)
                 candle["complete"] = True
-                self.live_candles.append(candle)
+                self._store_complete(candle)
                 self.current_1m = None
 
 class IndexLayerFeed:
@@ -541,12 +563,17 @@ class IndexLayerManager:
     def _loop(self):
         started_for_date = None
         tz = ZoneInfo(self.settings.timezone)
+        last_backfill_minute = None
         while not self.stop_event.is_set():
             now = datetime.now(tz)
             if self._in_market(now):
                 if started_for_date != now.date().isoformat():
                     self._start_session(now)
                     started_for_date = now.date().isoformat()
+                minute = now.replace(second=0, microsecond=0)
+                if now.second >= CANDLE_BACKFILL_OFFSET_SECONDS and minute != last_backfill_minute:
+                    last_backfill_minute = minute
+                    self.backfill_recent_candles()
             elif started_for_date is not None:
                 self._end_session()
                 started_for_date = None
@@ -588,6 +615,23 @@ class IndexLayerManager:
                         pass
                 state.set_feed_status("STARTING", f"history bootstrap: {exc}")
         self.feed.start()
+
+    def backfill_recent_candles(self) -> None:
+        """Merge the last few completed 1m candles from Dhan's intraday API
+        into the live series for CANDLE_BACKFILL_KEYS. Never fabricates a
+        candle; a failed request leaves the series as it was."""
+        for key in CANDLE_BACKFILL_KEYS:
+            state = self.states.get(key)
+            if state is None or state.session_status != "LIVE":
+                continue
+            try:
+                rows = self.dhan_api.load_recent_completed_intraday(state.instrument, 1, lookback_intervals=5)
+            except Exception as exc:
+                state.last_backfill_error = f"{type(exc).__name__}: {exc}"
+                continue
+            state.last_backfill_error = ""
+            if rows:
+                state.merge_today_1m(rows)
 
     def _end_session(self):
         self.feed.stop()
