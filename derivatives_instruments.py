@@ -66,23 +66,36 @@ def _float_or_none(value) -> Optional[float]:
         return None
 
 
+def download_instrument_master(timeout: int = 30) -> str:
+    """Download Dhan's instrument master CSV once; callers parse it for as
+    many exchanges/symbols as they need instead of re-downloading it."""
+    response = requests.get(DHAN_INSTRUMENT_MASTER_URL, timeout=timeout)
+    response.raise_for_status()
+    response.encoding = response.encoding or "utf-8"
+    return response.text
+
+
 def fetch_front_month_index_futures(underlying_symbols: tuple[str, ...], timeout: int = 30, exchange: str = "NSE") -> dict[str, FuturesContract]:
     """Resolve the nearest-expiry index-futures contract for each of the
     given underlying symbols (e.g. "NIFTY", "BANKNIFTY" on NSE, "SENSEX" on
     BSE). Never fabricates a contract: a symbol with no matching, unexpired
     row is simply absent from the returned dict rather than guessed.
     """
+    if not {s.strip().upper() for s in underlying_symbols if s.strip()}:
+        return {}
+    return parse_front_month_index_futures(download_instrument_master(timeout), underlying_symbols, exchange)
+
+
+def parse_front_month_index_futures(csv_text: str, underlying_symbols: tuple[str, ...], exchange: str = "NSE") -> dict[str, FuturesContract]:
+    """Same resolution as fetch_front_month_index_futures, on an already
+    downloaded instrument master."""
     wanted = {s.strip().upper() for s in underlying_symbols if s.strip()}
     if not wanted:
         return {}
     exchange = exchange.strip().upper()
     exchange_segment = f"{exchange}_FNO"
 
-    response = requests.get(DHAN_INSTRUMENT_MASTER_URL, timeout=timeout)
-    response.raise_for_status()
-    response.encoding = response.encoding or "utf-8"
-
-    reader = csv.DictReader(io.StringIO(response.text))
+    reader = csv.DictReader(io.StringIO(csv_text))
     today = datetime.now().date()
     candidates: dict[str, list[tuple[date, dict]]] = {symbol: [] for symbol in wanted}
 
