@@ -41,6 +41,9 @@ def _parse_expiry(value: str) -> Optional[date]:
     value = (value or "").strip()
     if not value:
         return None
+    # Dhan's scrip master writes SEM_EXPIRY_DATE with a time component
+    # ("2026-10-27 14:30:00"); only the date part identifies the expiry.
+    value = value.replace("T", " ").split(" ")[0]
     for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%Y%m%d"):
         try:
             return datetime.strptime(value, fmt).date()

@@ -8,6 +8,12 @@ def test_parse_expiry_handles_common_formats():
     assert _parse_expiry("").__bool__() is False if _parse_expiry("") else True
 
 
+def test_parse_expiry_handles_dhan_datetime_format():
+    # the live api-scrip-master.csv carries the expiry time, e.g. 14:30:00
+    assert _parse_expiry("2026-10-27 14:30:00").isoformat() == "2026-10-27"
+    assert _parse_expiry("2026-10-27T15:30:00").isoformat() == "2026-10-27"
+
+
 def test_parse_expiry_returns_none_for_garbage():
     assert _parse_expiry("not-a-date") is None
     assert _parse_expiry("") is None
@@ -28,7 +34,7 @@ def test_fetch_front_month_futures_respects_exchange_parameter():
     from unittest.mock import MagicMock, patch
     from derivatives_instruments import fetch_front_month_index_futures
 
-    next_week = (dt.date.today() + dt.timedelta(days=7)).isoformat()
+    next_week = (dt.date.today() + dt.timedelta(days=7)).isoformat() + " 14:30:00"
     rows = [
         {"SEM_EXM_EXCH_ID": "NSE", "SEM_INSTRUMENT_NAME": "FUTIDX", "SEM_TRADING_SYMBOL": f"NIFTY-{next_week}-FUT", "SEM_SMST_SECURITY_ID": "1", "SEM_EXPIRY_DATE": next_week, "SEM_LOT_UNITS": "75", "SEM_TICK_SIZE": "0.05"},
         {"SEM_EXM_EXCH_ID": "BSE", "SEM_INSTRUMENT_NAME": "FUTIDX", "SEM_TRADING_SYMBOL": f"SENSEX-{next_week}-FUT", "SEM_SMST_SECURITY_ID": "2", "SEM_EXPIRY_DATE": next_week, "SEM_LOT_UNITS": "10", "SEM_TICK_SIZE": "0.05"},
