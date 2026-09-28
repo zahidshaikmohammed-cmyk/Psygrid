@@ -15,7 +15,12 @@ from dataclasses import dataclass
 from datetime import datetime, time as datetime_time
 from zoneinfo import ZoneInfo
 
-from derivatives_instruments import FuturesContract, fetch_front_month_index_futures
+from derivatives_instruments import (
+    FuturesContract,
+    download_instrument_master,
+    fetch_front_month_index_futures,
+    parse_front_month_index_futures,
+)
 
 FUTURES_CONTRACT_REFRESH_SECONDS = 1800.0
 FUTURES_QUOTE_REFRESH_SECONDS = 2.0
@@ -145,8 +150,12 @@ class FuturesManager:
         self.stop_event = threading.Event()
         self.thread: threading.Thread | None = None
         self._contract_resolved_at = 0.0
+        self.group: "FuturesGroup | None" = None
 
     def start(self) -> None:
+        if self.group is not None:
+            self.group.start()
+            return
         if self.thread and self.thread.is_alive():
             return
         self.stop_event.clear()
@@ -154,6 +163,9 @@ class FuturesManager:
         self.thread.start()
 
     def stop(self) -> None:
+        if self.group is not None:
+            self.group.stop()
+            return
         self.stop_event.set()
         if self.thread and self.thread is not threading.current_thread():
             self.thread.join(timeout=8)
@@ -183,6 +195,104 @@ class FuturesManager:
             except Exception as exc:
                 self.state.set_error(f"{type(exc).__name__}: {exc}")
                 self.stop_event.wait(FUTURES_QUOTE_REFRESH_SECONDS)
+
+
+class FuturesGroup:
+    """Polls several FuturesManagers' contracts with ONE market-quote request
+    per cycle, and resolves their contracts from ONE instrument-master
+    download on a separate thread.
+
+    Every Dhan REST call in Psygrid shares one process-wide throttle, so three
+    independent futures threads (each also re-downloading the whole instrument
+    master inside its quote loop every 30 min) queued behind depth, options and
+    stock requests and regularly left a quote older than the consumer's 20 s
+    freshness limit. Batching cuts futures quote requests 3 -> 1 per cycle and
+    keeps the slow CSV download out of the quote loop entirely.
+    """
+
+    def __init__(self, managers: list[FuturesManager], dhan_api):
+        self.managers = [m for m in managers if m is not None]
+        self.dhan_api = dhan_api
+        for m in self.managers:
+            m.group = self
+        self.stop_event = threading.Event()
+        self.lock = threading.Lock()
+        self.quote_thread: threading.Thread | None = None
+        self.contract_thread: threading.Thread | None = None
+
+    def start(self) -> None:
+        with self.lock:
+            if self.quote_thread and self.quote_thread.is_alive():
+                return
+            self.stop_event.clear()
+            self.contract_thread = threading.Thread(target=self._contract_loop, daemon=True, name="psygrid-futures-contracts")
+            self.quote_thread = threading.Thread(target=self._quote_loop, daemon=True, name="psygrid-futures-quotes")
+            self.contract_thread.start()
+            self.quote_thread.start()
+
+    def stop(self) -> None:
+        self.stop_event.set()
+        with self.lock:
+            threads = [t for t in (self.quote_thread, self.contract_thread) if t is not None]
+            self.quote_thread = self.contract_thread = None
+        for t in threads:
+            if t is not threading.current_thread():
+                t.join(timeout=8)
+
+    def resolve_contracts(self) -> None:
+        text = download_instrument_master()
+        by_exchange: dict[str, list[FuturesManager]] = {}
+        for m in self.managers:
+            by_exchange.setdefault(m.exchange, []).append(m)
+        for exchange, managers in by_exchange.items():
+            contracts = parse_front_month_index_futures(text, tuple(m.symbol for m in managers), exchange=exchange)
+            for m in managers:
+                contract = contracts.get(m.symbol)
+                if contract is None:
+                    m.state.set_error(f"RuntimeError: DHAN_{m.symbol}_FUTURES_NOT_RESOLVED")
+                    continue
+                m.state.set_contract(contract)
+                m._contract_resolved_at = time.monotonic()
+
+    def poll_quotes(self) -> None:
+        live = [m for m in self.managers if m.state.contract is not None]
+        if not live:
+            return
+        instruments = [_QuoteInstrument(security_id=m.state.contract.security_id,
+                                        exchange_segment=m.state.contract.exchange_segment) for m in live]
+        try:
+            quotes = self.dhan_api.quote_snapshot(instruments)
+        except Exception as exc:
+            for m in live:
+                m.state.set_error(f"{type(exc).__name__}: {exc}")
+            return
+        for m in live:
+            row = quotes.get(str(m.state.contract.security_id))
+            if isinstance(row, dict):
+                m.state.set_quote(row)
+            else:
+                m.state.set_error(f"RuntimeError: DHAN_{m.symbol}_FUTURES_QUOTE_UNAVAILABLE")
+
+    def _contract_loop(self) -> None:
+        while not self.stop_event.is_set():
+            unresolved = any(m.state.contract is None for m in self.managers)
+            try:
+                self.resolve_contracts()
+                wait = FUTURES_CONTRACT_REFRESH_SECONDS
+            except Exception as exc:
+                for m in self.managers:
+                    if m.state.contract is None:
+                        m.state.set_error(f"{type(exc).__name__}: {exc}")
+                wait = 30.0
+            if unresolved and any(m.state.contract is None for m in self.managers):
+                wait = min(wait, 60.0)
+            self.stop_event.wait(wait)
+
+    def _quote_loop(self) -> None:
+        while not self.stop_event.is_set():
+            started = time.monotonic()
+            self.poll_quotes()
+            self.stop_event.wait(max(0.2, FUTURES_QUOTE_REFRESH_SECONDS - (time.monotonic() - started)))
 
 
 def futures_json(state: FuturesState) -> dict:

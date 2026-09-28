@@ -27,7 +27,7 @@ from midcpnifty_options import MidcapNiftyOptionsManager, midcpnifty_options_jso
 from midcpnifty_depth import MidcapNiftyDepthManager, midcpnifty_depth_json
 from midcpnifty_underlying import MidcapNiftyUnderlyingManager
 from underlying_indicators import UnderlyingIndicatorRuntime
-from futures_layer import FuturesManager, futures_json
+from futures_layer import FuturesGroup, FuturesManager, futures_json
 from market_breadth import build_market_breadth, build_sector_breadth
 from global_context import GlobalContextManager, global_context_json
 from rbi_news import RbiNewsManager, rbi_news_json
@@ -248,21 +248,24 @@ def startup() -> None:
         # Real NIFTY/BANKNIFTY/SENSEX front-month futures, resolved from
         # Dhan's own instrument master and polled via Dhan's market-quote
         # API. SENSEX futures trade on BSE rather than NSE.
+        # All three are polled by one FuturesGroup: one batched quote request
+        # per cycle, contracts resolved from one instrument-master download.
         try:
             nifty_futures_manager = FuturesManager("NIFTY", settings, dhan_api)
-            nifty_futures_manager.start()
         except Exception:
             nifty_futures_manager = None
         try:
             banknifty_futures_manager = FuturesManager("BANKNIFTY", settings, dhan_api)
-            banknifty_futures_manager.start()
         except Exception:
             banknifty_futures_manager = None
         try:
             sensex_futures_manager = FuturesManager("SENSEX", settings, dhan_api, exchange="BSE")
-            sensex_futures_manager.start()
         except Exception:
             sensex_futures_manager = None
+        try:
+            FuturesGroup([nifty_futures_manager, banknifty_futures_manager, sensex_futures_manager], dhan_api).start()
+        except Exception:
+            nifty_futures_manager = banknifty_futures_manager = sensex_futures_manager = None
 
         # Tier 2: delayed official reference data (FRED) and RBI's own
         # official RSS feeds. Never presented as live; see market_data_status.
