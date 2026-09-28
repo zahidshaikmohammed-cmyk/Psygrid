@@ -14,10 +14,6 @@ from stock_options import (
 )
 
 
-def _instrument(symbol, security_id):
-    return SimpleNamespace(symbol=symbol, security_id=security_id, exchange_segment="NSE_EQ", instrument="EQUITY")
-
-
 class FakeDhanAPI:
     def __init__(self):
         self.settings = None
@@ -39,6 +35,14 @@ class FakeDhanAPI:
                 "oc": {"1000": {"ce": {"security_id": "1"}, "pe": {"security_id": "2"}}},
             }
         }
+
+
+def _manager(dhan_api, resolved: dict[str, str], settings=None):
+    """Builds a StockOptionsManager with a controlled resolution result,
+    bypassing the real Dhan instrument-master network fetch entirely."""
+    settings = settings or SimpleNamespace(timezone="Asia/Kolkata", access_token="tok")
+    with patch("stock_options.fetch_nse_equity_security_ids", return_value=resolved):
+        return StockOptionsManager(settings, dhan_api)
 
 
 class NIFTY50UniverseTests(unittest.TestCase):
@@ -74,22 +78,40 @@ class StockOptionStateTests(unittest.TestCase):
 
 
 class StockOptionsManagerResolutionTests(unittest.TestCase):
-    def test_resolves_only_instruments_present_in_the_equity_universe(self):
-        settings = SimpleNamespace(timezone="Asia/Kolkata", access_token="tok")
-        instruments = [_instrument(symbol, str(i)) for i, symbol in enumerate(NIFTY50_SYMBOLS[:3])]
-        manager = StockOptionsManager(settings, FakeDhanAPI(), instruments)
+    def test_resolves_symbols_independently_of_the_equity_universe(self):
+        resolved = {symbol: str(i) for i, symbol in enumerate(NIFTY50_SYMBOLS[:3])}
+        manager = _manager(FakeDhanAPI(), resolved)
 
         self.assertEqual(len(manager.instruments), 3)
         self.assertEqual(len(manager.states), 50)  # every NIFTY 50 symbol gets a state, resolved or not
-        unresolved = [s for s in NIFTY50_SYMBOLS if s not in NIFTY50_SYMBOLS[:3]]
+        unresolved = [s for s in NIFTY50_SYMBOLS if s not in resolved]
         for symbol in unresolved:
             self.assertEqual(manager.states[symbol].status, "UNRESOLVED")
             self.assertIn(symbol, manager.resolution_errors)
 
-    def test_listing_reports_resolution_and_rotation_metadata(self):
+    def test_a_symbol_missing_from_stocks_json_can_still_resolve(self):
+        # SBILIFE/SHRIRAMFIN are real NIFTY 50 constituents not present in
+        # the unrelated 989-equity universe - resolution must not depend on
+        # that list at all.
+        resolved = {"SBILIFE": "21808", "SHRIRAMFIN": "4306"}
+        manager = _manager(FakeDhanAPI(), resolved)
+
+        self.assertEqual(manager.instruments["SBILIFE"].security_id, "21808")
+        self.assertEqual(manager.states["SBILIFE"].status, "PENDING")
+        self.assertNotIn("SBILIFE", manager.resolution_errors)
+
+    def test_instrument_master_fetch_failure_marks_every_symbol_unresolved_not_crashed(self):
         settings = SimpleNamespace(timezone="Asia/Kolkata", access_token="tok")
-        instruments = [_instrument(symbol, str(i)) for i, symbol in enumerate(NIFTY50_SYMBOLS[:5])]
-        manager = StockOptionsManager(settings, FakeDhanAPI(), instruments)
+        with patch("stock_options.fetch_nse_equity_security_ids", side_effect=RuntimeError("network down")):
+            manager = StockOptionsManager(settings, FakeDhanAPI())
+
+        self.assertEqual(len(manager.instruments), 0)
+        self.assertEqual(len(manager.resolution_errors), 50)
+        self.assertTrue(all("network down" in err for err in manager.resolution_errors.values()))
+
+    def test_listing_reports_resolution_and_rotation_metadata(self):
+        resolved = {symbol: str(i) for i, symbol in enumerate(NIFTY50_SYMBOLS[:5])}
+        manager = _manager(FakeDhanAPI(), resolved)
 
         listing = stock_options_listing_json(manager)
         self.assertEqual(listing["universe"], "NIFTY_50_STOCK_OPTIONS")
@@ -102,10 +124,8 @@ class StockOptionsManagerResolutionTests(unittest.TestCase):
 
 class StockOptionsManagerPollingTests(unittest.TestCase):
     def test_poll_one_populates_state_with_real_chain_data(self):
-        settings = SimpleNamespace(timezone="Asia/Kolkata", access_token="tok")
-        instruments = [_instrument("RELIANCE", "500")]
         api = FakeDhanAPI()
-        manager = StockOptionsManager(settings, api, instruments)
+        manager = _manager(api, {"RELIANCE": "500"})
 
         manager._poll_one("RELIANCE")
 
@@ -116,17 +136,13 @@ class StockOptionsManagerPollingTests(unittest.TestCase):
         self.assertIn("analytics", snap)
 
     def test_poll_one_records_error_without_crashing_other_symbols(self):
-        settings = SimpleNamespace(timezone="Asia/Kolkata", access_token="tok")
-        instruments = [_instrument("RELIANCE", "500"), _instrument("TCS", "501")]
-        api = FakeDhanAPI()
-
         class FlakyAPI(FakeDhanAPI):
             def option_expiry_list(self, item):
                 if item.symbol == "RELIANCE":
                     raise RuntimeError("DHAN_RELIANCE_OPTIONS_NO_ACTIVE_EXPIRIES")
                 return super().option_expiry_list(item)
 
-        manager = StockOptionsManager(settings, FlakyAPI(), instruments)
+        manager = _manager(FlakyAPI(), {"RELIANCE": "500", "TCS": "501"})
         manager._poll_one("RELIANCE")
         manager._poll_one("TCS")
 
@@ -137,8 +153,7 @@ class StockOptionsManagerPollingTests(unittest.TestCase):
         self.assertEqual(tcs["status"], "LIVE")
 
     def test_snapshot_for_unknown_symbol_never_fabricates_data(self):
-        settings = SimpleNamespace(timezone="Asia/Kolkata", access_token="tok")
-        manager = StockOptionsManager(settings, FakeDhanAPI(), [])
+        manager = _manager(FakeDhanAPI(), {})
         snap = manager.snapshot("NOTASYMBOL")
         self.assertEqual(snap["status"], "UNKNOWN_SYMBOL")
         self.assertNotIn("strikes", snap)
@@ -147,10 +162,9 @@ class StockOptionsManagerPollingTests(unittest.TestCase):
 class StockOptionsManagerAuthRetryTests(unittest.TestCase):
     def test_401_refreshes_token_and_retries(self):
         settings = SimpleNamespace(timezone="Asia/Kolkata", access_token="stale")
-        instruments = [_instrument("RELIANCE", "500")]
         api = FakeDhanAPI()
         api.expiry_error_once.add("RELIANCE")
-        manager = StockOptionsManager(settings, api, instruments)
+        manager = _manager(api, {"RELIANCE": "500"}, settings=settings)
 
         def refresh(current_settings, force=False):
             self.assertTrue(force)
@@ -165,10 +179,9 @@ class StockOptionsManagerAuthRetryTests(unittest.TestCase):
 
     def test_token_generation_rate_limit_enters_cooldown(self):
         settings = SimpleNamespace(timezone="Asia/Kolkata", access_token="stale")
-        instruments = [_instrument("RELIANCE", "500")]
         api = FakeDhanAPI()
         api.expiry_error_once.add("RELIANCE")
-        manager = StockOptionsManager(settings, api, instruments)
+        manager = _manager(api, {"RELIANCE": "500"}, settings=settings)
 
         with patch(
             "stock_options.refresh_access_token",
