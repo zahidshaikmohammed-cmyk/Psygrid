@@ -48,6 +48,15 @@ Base URL (production): `http://140.245.226.102:10000`
 
 Covers the 50 NIFTY 50 index constituents (a fixed, periodically-reconstituted list — see `stock_options.py`'s `NIFTY50_SYMBOLS`, last updated 2026-09-28). Each symbol's Dhan security ID is resolved **independently**, directly against Dhan's live NSE equity instrument master — deliberately not reused from the unrelated 989-equity universe, since two current NIFTY 50 constituents (SBILIFE, SHRIRAMFIN) aren't part of that list. `StockOptionsManager` is a single round-robin poller sharing the **same** rate-limited Dhan option-chain REST queue as the NIFTY/BANKNIFTY/MIDCPNIFTY/SENSEX option-chain pollers above, one symbol at a time — a full rotation across all resolved symbols takes roughly `resolved_count × 3.2s` (~2.7 minutes for all 50), which is by design, not a bug: polling all NSE F&O stocks (~180-220) at this same rate would take closer to 10 minutes per cycle, which is why this is scoped to NIFTY 50 rather than the full F&O universe. If a symbol never resolves against Dhan's instrument master, its own state reports `"UNRESOLVED"` — never fabricated.
 
+## NIFTY 50 stock option depth
+
+| Endpoint | Purpose | Refresh | Data source |
+|---|---|---|---|
+| `/public/stock-depth.json` | Listing of all 50 stocks' depth rotation status | On request | — |
+| `/public/stock-depth/{SYMBOL}.json` | One stock's 20-level depth, nearest 5 strikes × CE/PE | WebSocket push (depth), 1s (quotes), rotated | Dhan 20-level Depth WebSocket + Market Quote REST |
+
+Dhan's 20-level depth WebSocket allows **at most 50 subscribed instruments per connection** — confirmed by every existing per-underlying depth module in this codebase (NIFTY/BANKNIFTY/MIDCPNIFTY/SENSEX) independently landing on that exact cap. Real-time depth for all 50 NIFTY 50 stocks at 5 strikes × CE/PE each (10 contracts/stock) would need 10 separate connections — instead `StockDepthManager` shares **one** connection and rotates its 50-instrument subscription through the stock universe in batches of 5 stocks every 30s, the same spirit as the option-chain poller's own rotation, rather than opening 10 more WebSocket connections on top of the 6 already running (equity feed, the shared 16-index feed, and the 4 existing per-underlying depth feeds). Each stock's `rotation_status` is `"ACTIVE"` only while its batch is the WebSocket's current subscription; `"IDLE"` the rest of the time, showing its last known depth from its previous turn rather than fabricating anything for the gap. A full rotation across all resolved stocks takes roughly `ceil(resolved_count / 5) × 30s` (~5 minutes for all 50).
+
 ## Market-wide aggregates (Tier 1, new)
 
 | Endpoint | Purpose | Refresh | Data source |
