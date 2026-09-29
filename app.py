@@ -35,6 +35,7 @@ from health_monitor import component_health, build_health
 from sensex_options import SensexOptionsManager, sensex_options_json
 from sensex_depth import SensexDepthManager, sensex_depth_json
 from stock_options import StockOptionsManager, NIFTY50_SYMBOLS, stock_options_json, stock_options_listing_json
+from stock_depth import StockDepthManager, stock_depth_json, stock_depth_listing_json
 
 settings = state = manager = indicator_runtime = index_manager = None
 nifty_options_manager = nifty_depth_manager = None
@@ -47,6 +48,7 @@ sensex_underlying_indicators = None
 nifty_futures_manager = banknifty_futures_manager = sensex_futures_manager = None
 global_context_manager = rbi_news_manager = None
 stock_options_manager = None
+stock_depth_manager = None
 config_error = ""
 indicator_error = ""
 index_error = ""
@@ -95,7 +97,7 @@ def startup() -> None:
     global sensex_options_manager, sensex_depth_manager, sensex_underlying_indicators, sensex_futures_manager
     global midcpnifty_underlying_manager, nifty_underlying_indicators, banknifty_underlying_indicators, midcpnifty_underlying_indicators
     global nifty_futures_manager, banknifty_futures_manager, global_context_manager, rbi_news_manager
-    global stock_options_manager
+    global stock_options_manager, stock_depth_manager
     config_error = ""
     indicator_error = ""
     index_error = ""
@@ -278,6 +280,18 @@ def startup() -> None:
         except Exception:
             stock_options_manager = None
 
+        # Stock option depth: one shared Dhan 20-level depth WebSocket,
+        # rotating its 50-instrument subscription through the NIFTY 50
+        # stock universe rather than opening one connection per stock (see
+        # stock_depth.py for why). Depends on stock_options_manager for
+        # each stock's strike/security-id identity.
+        if stock_options_manager is not None:
+            try:
+                stock_depth_manager = StockDepthManager(settings, dhan_api, stock_options_manager)
+                stock_depth_manager.start()
+            except Exception:
+                stock_depth_manager = None
+
         # Tier 2: delayed official reference data (FRED) and RBI's own
         # official RSS feeds. Never presented as live; see market_data_status.
         try:
@@ -305,7 +319,7 @@ def shutdown() -> None:
         index_manager.stop()
         index_manager = None
     for name in (
-        "rbi_news_manager", "global_context_manager", "stock_options_manager",
+        "rbi_news_manager", "global_context_manager", "stock_depth_manager", "stock_options_manager",
         "nifty_futures_manager", "banknifty_futures_manager", "sensex_futures_manager",
         "midcpnifty_underlying_indicators", "banknifty_underlying_indicators", "nifty_underlying_indicators", "sensex_underlying_indicators",
         "midcpnifty_underlying_manager",
@@ -388,6 +402,12 @@ def root() -> Response:
             "listing_endpoint": "/public/stock-options.json",
             "per_symbol_endpoint": "/public/stock-options/{SYMBOL}.json",
             "note": "Shares the same rate-limited Dhan option-chain queue as the index option endpoints above; round-robins one symbol at a time.",
+        },
+        "stock_depth": {
+            "universe": "NIFTY_50",
+            "listing_endpoint": "/public/stock-depth.json",
+            "per_symbol_endpoint": "/public/stock-depth/{SYMBOL}.json",
+            "note": "One shared Dhan 20-level depth WebSocket (its 50-instrument cap) rotating through the stock universe in batches; a stock's depth is only live while its rotation_status is ACTIVE.",
         },
         "breadth_endpoints": ["/public/market-breadth.json", "/public/sectors.json"],
         "context_endpoints": {
@@ -614,6 +634,33 @@ def public_stock_options_symbol(symbol: str) -> Response:
 
 
 # ---------------------------------------------------------------------------
+# NIFTY 50 stock option depth: one shared Dhan 20-level depth WebSocket
+# rotating its 50-instrument subscription through the stock universe in
+# batches (see stock_depth.py). A per-symbol route plus a listing route.
+# ---------------------------------------------------------------------------
+
+@app.get("/public/stock-depth.json", response_class=Response)
+def public_stock_depth_listing() -> Response:
+    error = _error_response()
+    if error:
+        return error
+    if stock_depth_manager is None:
+        return json_response({"service": "PSYGRID", "status": "STOCK_DEPTH_UNAVAILABLE"}, 503)
+    return json_response(stock_depth_listing_json(stock_depth_manager))
+
+
+@app.get("/public/stock-depth/{symbol}.json", response_class=Response)
+def public_stock_depth_symbol(symbol: str) -> Response:
+    error = _error_response()
+    if error:
+        return error
+    if stock_depth_manager is None:
+        return json_response({"service": "PSYGRID", "symbol": symbol.upper(), "status": "STOCK_DEPTH_UNAVAILABLE"}, 503)
+    payload = stock_depth_json(stock_depth_manager, symbol)
+    return json_response(payload, 200 if payload.get("status") == "LIVE" else 503)
+
+
+# ---------------------------------------------------------------------------
 # Real technical-indicator suite per derivatives underlying (NIFTY,
 # BANKNIFTY, MIDCPNIFTY), reusing the same engine that computes indicators
 # for the 990-equity universe. Isolated: each runtime only reads an
@@ -789,6 +836,26 @@ def _build_health_payload() -> dict:
         ))
     else:
         components.append(component_health(name="stock_options_nifty50", status=None, updated_at=None, expected_refresh_seconds=3.2, now=now_ist))
+
+    if stock_depth_manager is not None:
+        depth_states = stock_depth_manager.states.values()
+        depth_live_count = sum(1 for st in depth_states if st.status == "LIVE")
+        depth_updated_ats = [st.updated_at for st in depth_states if st.updated_at]
+        resolved_count = len(stock_depth_manager.stock_options_manager.instruments)
+        batch_count = max(1, -(-resolved_count // 5)) if resolved_count else 1
+        components.append(component_health(
+            name="stock_depth_nifty50",
+            status="LIVE" if depth_live_count > 0 else "STARTING",
+            updated_at=max(depth_updated_ats) if depth_updated_ats else None,
+            # A full rotation across every batch is the meaningful cadence
+            # here, not any single stock's turn.
+            expected_refresh_seconds=batch_count * 30.0,
+            now=now_ist,
+            record_count=depth_live_count,
+            expected_record_count=len(NIFTY50_SYMBOLS),
+        ))
+    else:
+        components.append(component_health(name="stock_depth_nifty50", status=None, updated_at=None, expected_refresh_seconds=30.0, now=now_ist))
 
     market_status = "OPEN" if (state is not None and state.session_status == "LIVE") else "CLOSED"
     return build_health(components, market_status)

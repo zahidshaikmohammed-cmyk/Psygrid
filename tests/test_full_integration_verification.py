@@ -73,10 +73,17 @@ def _setup_all_healthy(monkeypatch):
 
     from stock_options import NIFTY50_SYMBOLS
     healthy_stock_option_state = SimpleNamespace(status="LIVE", updated_at=datetime.now(timezone.utc).isoformat())
-    monkeypatch.setattr(app_module, "stock_options_manager", SimpleNamespace(
+    stock_options_manager = SimpleNamespace(
         states={symbol: healthy_stock_option_state for symbol in NIFTY50_SYMBOLS},
         instruments={symbol: SimpleNamespace() for symbol in NIFTY50_SYMBOLS},
         resolution_errors={},
+    )
+    monkeypatch.setattr(app_module, "stock_options_manager", stock_options_manager)
+
+    healthy_stock_depth_state = SimpleNamespace(status="LIVE", updated_at=datetime.now(timezone.utc).isoformat())
+    monkeypatch.setattr(app_module, "stock_depth_manager", SimpleNamespace(
+        states={symbol: healthy_stock_depth_state for symbol in NIFTY50_SYMBOLS},
+        stock_options_manager=stock_options_manager,
     ))
 
     return equity_state, fake_index_manager, nifty_futures_state
@@ -96,6 +103,7 @@ def test_health_reports_everything_fresh_when_all_managers_healthy(monkeypatch):
     assert payload["components"]["sensex_options"]["status"] == "FRESH"
     assert payload["components"]["sensex_futures"]["status"] == "FRESH"
     assert payload["components"]["stock_options_nifty50"]["status"] == "FRESH"
+    assert payload["components"]["stock_depth_nifty50"]["status"] == "FRESH"
 
 
 def test_one_broken_secondary_feed_does_not_take_down_core_dhan_infrastructure(monkeypatch):
