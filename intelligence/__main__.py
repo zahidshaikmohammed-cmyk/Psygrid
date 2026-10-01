@@ -133,6 +133,7 @@ def _backup(args) -> int:
 def _bootstrap_history(args) -> int:
     from datetime import datetime
 
+    from dhan_auth import DhanTokenRateLimited
     from intelligence.archive import IST
     from intelligence.history_bootstrap import (
         DEFAULT_RATE,
@@ -168,6 +169,9 @@ def _bootstrap_history(args) -> int:
         result = bootstrap.run(allow_market_hours=args.allow_market_hours, keep_staging=args.keep_staging)
     except BootstrapBlocked as exc:
         print(f"blocked: {exc}", file=sys.stderr)
+        return 3
+    except DhanTokenRateLimited as exc:
+        print(f"blocked: Dhan token generation is cooling down; retry in {exc.retry_after}s", file=sys.stderr)
         return 3
     summary = {k: v for k, v in result.items() if k != "verified"}
     summary["verified_ok"] = sum(r["ok"] for r in result.get("verified", {}).values())

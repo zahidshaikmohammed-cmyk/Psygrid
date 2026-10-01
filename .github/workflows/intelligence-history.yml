@@ -25,6 +25,11 @@ on:
         description: Dhan requests per second (max 4)
         required: true
         default: "2"
+      generate_token:
+        description: let the bootstrap generate its own Dhan token from PIN + TOTP (PSYGRID has no stored token)
+        required: true
+        default: false
+        type: boolean
 
 concurrency:
   group: intelligence-history
@@ -41,6 +46,7 @@ jobs:
           ACTION: ${{ inputs.action }}
           SESSIONS: ${{ inputs.sessions }}
           RATE: ${{ inputs.rate }}
+          GENERATE: ${{ inputs.generate_token }}
         run: |
           set -euo pipefail
           case "$ACTION" in inspect|plan|run|status|verify|validate) ;; *) echo "bad action"; exit 2;; esac
@@ -50,7 +56,7 @@ jobs:
           printf '%s\n' "$ORACLE_SSH_KEY" > ~/.ssh/psygrid_oracle && chmod 600 ~/.ssh/psygrid_oracle
           ssh-keyscan -H 140.245.226.102 >> ~/.ssh/known_hosts
           ssh -o ServerAliveInterval=30 -i ~/.ssh/psygrid_oracle ubuntu@140.245.226.102 \
-            "ACTION=$ACTION SESSIONS=$SESSIONS RATE=$RATE bash -s" <<'REMOTE'
+            "ACTION=$ACTION SESSIONS=$SESSIONS RATE=$RATE GENERATE=$GENERATE bash -s" <<'REMOTE'
           set -euo pipefail
           cd /home/ubuntu/Psygrid
           PY=/home/ubuntu/Psygrid/.venv/bin/python
@@ -61,6 +67,8 @@ jobs:
           ARCHIVE=$(sudo cat /proc/$PSYGRID_PID/environ 2>/dev/null | tr '\0' '\n' | sed -n 's/^PSYGRID_ARCHIVE_DIR=//p' | head -1)
           ARCHIVE=${ARCHIVE:-/home/ubuntu/psygrid-data}
           CLI="$PY -m intelligence --archive-dir $ARCHIVE"
+          TOKEN_FLAG=""
+          if [[ "$GENERATE" == "true" ]]; then TOKEN_FLAG="--generate-token"; fi
           health() { curl -s --max-time 5 http://127.0.0.1:18101/v2/health || echo '{"unreachable": true}'; echo; }
 
           case "$ACTION" in
@@ -103,7 +111,7 @@ jobs:
                   --working-directory /home/ubuntu/Psygrid \
                   -p EnvironmentFile=$ENVFILE -p "ExecStopPost=/bin/rm -f $ENVFILE" \
                   -p Nice=15 -p CPUQuota=50% -p MemoryMax=700M -p IOSchedulingClass=idle -p RuntimeMaxSec=7200 \
-                  $CLI bootstrap-history run --sessions "$SESSIONS" --rate "$RATE" --workers 2
+                  $CLI bootstrap-history run --sessions "$SESSIONS" --rate "$RATE" --workers 2 $TOKEN_FLAG
               fi
               for i in $(seq 1 480); do
                 systemctl is-active --quiet "$UNIT" || break
