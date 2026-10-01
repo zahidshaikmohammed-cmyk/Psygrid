@@ -91,3 +91,34 @@ jobs:
         env:
           PSYGRID_BASE_URL: http://140.245.226.102:10000
         run: python tools/check_live_universe.py
+
+      # The intelligence service is separate from PSYGRID: it is installed and checked only after
+      # every PSYGRID check above has passed, and nothing below restarts or reconfigures `psygrid`.
+      - name: Deploy intelligence service
+        env:
+          ORACLE_SSH_KEY: ${{ secrets.ORACLE_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/psygrid_oracle ubuntu@140.245.226.102 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /home/ubuntu/Psygrid
+          mkdir -p /home/ubuntu/psygrid-intelligence
+          /home/ubuntu/Psygrid/.venv/bin/python -c "import intelligence.api"
+          sudo install -m 0644 deploy/psygrid-intelligence.service /etc/systemd/system/psygrid-intelligence.service
+          sudo systemctl daemon-reload
+          sudo systemctl enable psygrid-intelligence
+          sudo systemctl restart psygrid-intelligence
+          health_ok=0
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:10001/v2/health; then
+              echo
+              health_ok=1
+              break
+            fi
+            sleep 2
+          done
+          test "$health_ok" -eq 1
+          # PSYGRID must still be healthy with the intelligence service running beside it.
+          curl -fsS http://127.0.0.1:10000/health
+          echo
+          REMOTE

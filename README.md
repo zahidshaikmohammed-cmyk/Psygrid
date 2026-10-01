@@ -107,19 +107,26 @@ import pandas as pd
 day = pd.read_csv("~/psygrid-data/2026-10-01/equity_1m.csv.gz")
 ```
 
-## Intelligence layer (in development)
+## Intelligence layer
 
-`intelligence/` is a separate, read-only layer that will compute observations
-across the whole market. It reads only the daily archive, never calls Dhan,
-and changes nothing in the live service. Today it can replay any archived day
-exactly as it was known minute by minute, with a data-quality record:
+`intelligence/` is a separate service, `psygrid-intelligence` on port 10001,
+that turns the archived market data into features for every instrument,
+contextual anomalies, relationship breaks, events with a searchable history,
+and historical similarity. It reads only the daily archive and a few
+read-only localhost endpoints, never calls Dhan, needs no paid service, and
+runs as its own resource-capped process, so it cannot affect the production
+feed. Its `/v2` API needs an API key; PSYGRID's `/public` API is unchanged.
 
 ```bash
-python -m intelligence days
-python -m intelligence replay 2026-10-02 --until 10:17
+python -m intelligence days                       # archived sessions
+python -m intelligence run 2026-10-20             # replay a session through every engine
+python -m intelligence keys create --name my-engine
+python -m intelligence serve                      # what the systemd unit runs
 ```
 
-The plan, phases and data-rights questions are in `docs/intelligence/`.
+Documentation: [`docs/intelligence/`](docs/intelligence/README.md) covers
+architecture, the API, the event schema, features, replay, deployment,
+configuration, operations, testing, security, performance and data rights.
 
 ## Development
 
@@ -151,6 +158,9 @@ Every push to `main` triggers `.github/workflows/deploy-oracle.yml`:
 2. Pull `main` on the VM, install requirements and restart the service.
 3. Wait for `/health`, then check all 16 index endpoints and the full equity
    universe (`tools/check_live_universe.py`).
+4. Only then install and restart `psygrid-intelligence`
+   (`deploy/psygrid-intelligence.service`), wait for `/v2/health`, and check
+   PSYGRID's `/health` again.
 
 `.github/workflows/ci.yml` runs the same lint and test checks on every pull
 request.

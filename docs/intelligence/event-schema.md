@@ -1,109 +1,145 @@
-# Event schema, version 1 (draft for review)
+# Event schema, version 1
 
 An event is one measurable, unusual observation about the market, stated with
 the evidence that makes it reproducible. It never says what to trade: it says
 what was measured, against what baseline, how unusual that is, and how good
 the underlying data was.
 
-Status: **draft**. No detector emits events yet; this is the contract the
-first detectors (Phase 3) will be built against. Comments and changes are
-expected before it is frozen.
+Status: **final** for `event/1` (engine `1.0.0`). Fields may be *added* in a
+compatible way; renaming, removing or changing the meaning of a field requires
+`event/2`. Produced by `intelligence/events.py`, stored by
+`intelligence/event_store.py`.
 
 ## Example
 
 ```json
 {
   "schema_version": "event/1",
-  "event_id": "evt_3f9a1c0b7d2e4a68",
+  "event_id": "evt_9c62c3c388821e3b",
   "event_type": "volume_surge",
   "category": "ANOMALY",
-  "session_date": "2026-10-05",
-  "observed_at": "2026-10-05 10:17:00 IST",
-  "bar_time": "2026-10-05 10:16:00 IST",
+  "session_date": "2026-09-10",
+  "observed_at": "2026-09-10 11:16:00 IST",
+  "bar_time": "2026-09-10 11:15:00 IST",
+  "bar_epoch": 1789019100,
   "scope": "INSTRUMENT",
-  "subject": {"key": "RELIANCE", "kind": "EQUITY"},
-  "magnitude": {"statistic": "robust_z", "value": 6.4, "threshold": 4.0},
-  "severity": "HIGH",
+  "subject": {"key": "TCS", "kind": "EQUITY"},
+  "magnitude": {"statistic": "robust_z_log_volume", "value": 5.22768, "threshold": 5.0},
+  "severity": "LOW",
+  "classification": "EXTREME",
   "novelty": {"lookback_sessions": 20, "prior_occurrences": 0},
   "evidence": {
-    "observation": {"volume": 182400},
+    "observation": {"volume": 101141.0, "scored_value": 11.524281},
     "baseline": {
-      "method": "median and MAD of the same minute-of-day",
-      "window_sessions": 20,
-      "sample_size": 20,
-      "median": 21050,
-      "mad": 6300
+      "method": "robust median and scaled MAD of the same minute of day (+-2 min) over earlier sessions",
+      "kind": "HISTORICAL", "median": 9.537628, "scale": 0.380026, "sample": 7
     },
-    "context": {"sector": "ENERGY", "sector_median_robust_z": 0.8}
+    "context": {"sector": "INFORMATION_TECHNOLOGY", "sector_members_scored": 4, "sector_median_z": 0.394891}
   },
-  "affected_instruments": ["RELIANCE"],
+  "affected_instruments": ["TCS"],
   "relationships": [],
   "historical_context": null,
   "data_quality": {
-    "subject_status": "COMPLETE",
-    "subject_missing_bars": 0,
-    "frame_coverage": 0.981,
-    "baseline_sessions_complete": 20,
-    "flags": []
+    "subject_status": "COMPLETE", "subject_missing_bars": 0, "frame_coverage": 1.0,
+    "baseline_sessions_complete": 7, "flags": ["BASELINE_SHORT"]
   },
   "provenance": {
-    "engine": "anomaly.volume_surge",
-    "engine_version": "1.0.0",
-    "feature_versions": {"volume_by_minute": "1"},
-    "source": "ARCHIVE_REPLAY"
+    "engine": "intelligence.anomaly.volume_surge", "engine_version": "1.0.0",
+    "feature_versions": {"features": "1"}, "source": "ARCHIVE_REPLAY"
   },
+  "supersedes": null,
   "synthetic_data": false
 }
 ```
+
+`magnitude.value` can be recomputed by hand from the evidence:
+`(11.524281 - 9.537628) / 0.380026 = 5.2277`.
 
 ## Fields
 
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `schema_version` | string | `event/1`. Independent of the API version; stored events outlive API releases. |
-| `event_id` | string | Deterministic: `evt_` + the first 16 hex characters of SHA-256 over `event_type`, `subject.key`, `bar_time` and `provenance.engine_version`. The same input replayed gives the same id. |
-| `event_type` | string | snake_case name from the event catalogue (below). |
-| `category` | enum | `ANOMALY`, `RELATIONSHIP`, `BREADTH`, `DISPERSION`, `REGIME`. |
+| `event_id` | string | Deterministic: `evt_` + the first 16 hex characters of SHA-256 over `event_type`, `subject.key`, `subject.counterpart` (or empty), `bar_epoch` and `provenance.engine_version`, joined with `\|`. A live event and its replay twin share an id. |
+| `event_type` | string | From the catalogue below. |
+| `category` | enum | `ANOMALY`, `RELATIONSHIP`, `DERIVATIVES`, `BREADTH`, `DISPERSION`. |
 | `session_date` | string | `YYYY-MM-DD`. |
 | `observed_at` | string | When the event became knowable: the frame's `as_of`, `YYYY-MM-DD HH:MM:SS IST`. |
-| `bar_time` | string | Open time of the latest bar the evidence uses. Always before `observed_at`. |
+| `bar_time`, `bar_epoch` | string, int | Open time of the latest 1m bar the evidence uses (IST text and Unix seconds). Always before `observed_at`. |
 | `scope` | enum | `INSTRUMENT`, `SECTOR`, `INDEX`, `MARKET`. |
-| `subject` | object | `key` (symbol, sector or index key) and `kind` (`EQUITY`, `INDEX`, `SECTOR`, `MARKET`). |
-| `magnitude` | object | The one statistic the event is about: its name, value and the threshold it crossed. |
-| `severity` | enum | `LOW`, `MEDIUM`, `HIGH`, from fixed bands of `magnitude.value / magnitude.threshold` (below 1.5, below 2.5, otherwise), never from judgement. |
-| `novelty` | object | How many times the same `event_type` fired for the same subject in the lookback window. |
-| `evidence` | object | The measured `observation`, the `baseline` it was compared with (method, window, sample size and its statistics) and any `context` comparisons (sector, index, peers). Enough to recompute `magnitude` by hand. |
-| `affected_instruments` | array | Keys of every instrument the event involves. |
-| `relationships` | array | For `RELATIONSHIP` events: the pair, the baseline co-movement and the current one. Empty otherwise. |
-| `historical_context` | object or null | Phase 6: similar past states and the distribution of what followed. Null until then. |
-| `data_quality` | object | Quality of the subject's data in the frame, the frame's coverage, how many baseline sessions were complete, and `flags` (for example `SUBJECT_HAS_GAPS`, `BASELINE_SHORT`). |
-| `provenance` | object | Engine name and version, versions of the features used, and `source`: `ARCHIVE_REPLAY` or `LIVE_SNAPSHOT`. |
-| `synthetic_data` | bool | Always `false`. |
+| `subject` | object | `key` and `kind` (`EQUITY`, `SECTOR`, `INDEX`, `MARKET`); for a pair, also `counterpart` and `counterpart_kind`. |
+| `magnitude` | object | The one statistic the event is about: `statistic` name, signed `value`, and the `threshold` its absolute value crossed: 5.0 for every instrument-scope event (anomalies, price/volume disagreements, divergences from sector or index), 3.0 for sector, index and market events. |
+| `severity` | enum | `LOW`, `MEDIUM`, `HIGH` from `abs(value) / threshold`: below 1.5, below 2.5, otherwise (with threshold 3: \|z\| < 4.5, < 7.5, ≥ 7.5; with threshold 5: < 7.5, < 12.5, ≥ 12.5). Fixed bands, never judgement. |
+| `classification` | enum | `UNUSUAL` (\|z\| ≥ 3) or `EXTREME` (\|z\| ≥ 5), as in the anomaly engine. |
+| `novelty` | object | `prior_occurrences`: times the same `event_type` fired for the same subject in the last `lookback_sessions` sessions held by the store, strictly before this session. |
+| `evidence` | object | `observation` (the measured values), `baseline` (method, kind, centre, scale, sample size) and optional `context` (sector comparison). Enough to recompute `magnitude`. |
+| `affected_instruments` | array | Equity keys the event involves (all members of both sectors for a sector pair; empty for index and market events). Searchable. |
+| `relationships` | array | For relationship and derivatives events: the pair, the fitted beta and correlation, the residual statistics and both sides' moves. Empty otherwise. |
+| `historical_context` | object or null | Reserved for similar past states; events are emitted with `null`. Similarity is served separately by `/v2/historical-matches`. |
+| `data_quality` | object | The subject's status (`COMPLETE`, `GAPS`) and missing bars (equity subjects only), the frame's coverage, the number of earlier sessions in the baselines, and `flags`. |
+| `provenance` | object | Engine name and version, feature versions, and `source`: `ARCHIVE_REPLAY` or `LIVE_SNAPSHOT`. |
+| `supersedes` | string or null | The id of an event this one corrects. The engine never edits stored events. |
+| `synthetic_data` | bool | `true` only when the archive day was generated by `intelligence.synthetic` (tests and benchmarks). Always `false` for recorded market data. |
+
+### Data-quality flags
+
+| Flag | Meaning |
+| --- | --- |
+| `SUBJECT_HAS_GAPS` | The subject is missing at least one completed bar today. |
+| `BASELINE_SHORT` | A historical baseline was used, but with fewer than 20 earlier sessions. |
+| `BASELINE_INTRADAY` | No usable history; the instrument's own earlier minutes today were the baseline. |
+| `BASELINE_CROSS_SECTIONAL` | No usable history; every instrument at the same minute was the baseline. |
 
 ## Rules
 
-1. **Evidence, not advice.** No field or event type expresses a trading view. Words like bullish, bearish, buy or sell never appear; a measured direction is a signed number in `evidence`.
-2. **Reproducible.** An event is a pure function of the frame and the archive before it. Replaying the same day with the same engine versions yields the same events with the same ids.
-3. **No look-ahead.** Every value in an event comes from bars completed by `observed_at`.
-4. **Quality gates.** A detector never fires for a subject whose status is `NO_DATA`. If the subject has gaps or the baseline is shorter than its window, the event may still fire but carries the matching flag.
-5. **Append-only.** Stored events are never edited. A correction is a new event with `supersedes: <event_id>`.
-6. **One statistic per event.** An event is about one measurement. A finding that needs several becomes several events that share `affected_instruments` and `bar_time`.
+1. **Evidence, not advice.** No field or event type expresses a trading view; a direction is a signed number.
+2. **Reproducible.** An event is a pure function of the frame, the archive before it and the store's earlier sessions. Replaying a day with the same engine version and the same frame cadence yields the same events with the same ids.
+3. **No look-ahead.** Every value comes from bars completed, and derivatives snapshots taken, by `observed_at`.
+4. **Quality gates.** Nothing fires for an instrument whose latest bar is missing (`STALE`), was rejected (`INVALID`), or has no usable baseline (`INSUFFICIENT_DATA`). Weaker evidence fires with the matching flag.
+5. **Append-only.** Stored events are never edited; a correction is a new event naming the one it `supersedes`. Storing an id twice is a no-op.
+6. **One statistic per event.** A finding that needs several statistics becomes several events sharing `affected_instruments` and `bar_time`.
+7. **Cooldown.** After an event type fires for a subject (and counterpart), it fires again within 15 minutes only if its severity rises. The cooldown state is read back from the store, so a restart does not repeat events.
 
-## First event catalogue (Phase 3 candidates)
+## Event catalogue
 
-| `event_type` | Category | Measures |
-| --- | --- | --- |
-| `return_shock` | ANOMALY | 1m or 5m return vs the instrument's own minute-of-day distribution |
-| `volume_surge` | ANOMALY | Volume vs the same minute-of-day baseline |
-| `range_expansion` | ANOMALY | Bar range vs recent and minute-of-day range |
-| `sector_divergence` | RELATIONSHIP | Instrument return vs its sector median, against the usual spread |
-| `index_divergence` | RELATIONSHIP | Instrument return vs its index, against the usual spread |
-| `breadth_shift` | BREADTH | Change in advancers minus decliners vs its usual change at that time |
-| `dispersion_jump` | DISPERSION | Cross-sectional return dispersion vs its usual level at that time |
+Why two thresholds: every minute, about 1,000 instruments are scored on three
+measures and against up to three benchmarks. At |z| ≥ 3, chance alone would
+produce hundreds of instrument events a day (measured: about 900 a day on a
+synthetic market with no real anomalies), so an instrument-scope finding
+becomes an event only at |z| ≥ 5. Below that it stays visible in
+`/v2/anomalies` and `/v2/relationships`. Sector, index and market findings are
+a few dozen tests a minute, so they fire from |z| ≥ 3.
 
-## Open questions
+| `event_type` | Category | Scope | Statistic | Fires when |
+| --- | --- | --- | --- | --- |
+| `volume_surge` / `volume_drought` | ANOMALY | INSTRUMENT | `robust_z_log_volume` | 1m log volume vs its minute-of-day baseline (or earlier minutes today) is ≥ +5 / ≤ −5 |
+| `return_shock` | ANOMALY | INSTRUMENT | `return_sigma_z` | \|1m return\| ≥ 5 typical 1m moves at that minute of day (or vs the cross-section) |
+| `range_expansion` | ANOMALY | INSTRUMENT | `robust_z_log_range` | 1m high-low range vs its minute-of-day baseline is ≥ +5 (a quiet single bar is not an event) |
+| `sector_divergence` | RELATIONSHIP | INSTRUMENT | `residual_z` | \|z\| ≥ 5 on the 15-minute cumulative residual vs the leave-one-out sector median, given beta and correlation ≥ 0.3 fitted on the 60 minutes before; the variance includes the error in beta |
+| `index_divergence` | RELATIONSHIP | INSTRUMENT | `residual_z` | Same, against NIFTY 500 |
+| `sector_index_divergence` | RELATIONSHIP | INSTRUMENT | `residual_z` | Same, against the stock's sector index (e.g. NIFTY IT) |
+| `sector_spread_shift` | RELATIONSHIP | SECTOR | `spread_z` | The 15-minute spread between two sectors' median returns vs what the 1m spreads earlier today imply (mean × 15, SD × √15; at least 60 earlier minutes) |
+| `volume_without_move` | RELATIONSHIP | INSTRUMENT | `volume_z` | Volume z ≥ 5 while \|return z\| < 1 |
+| `move_without_volume` | RELATIONSHIP | INSTRUMENT | `return_z` | \|Return z\| ≥ 5 while \|volume z\| < 1 |
+| `basis_shift` | DERIVATIVES | INDEX | `robust_z` | (futures − spot) / spot vs its earlier values today (≥ 20 snapshots) |
+| `futures_spread_shift` | DERIVATIVES | INDEX | `robust_z` | Futures top-of-book spread vs its earlier values today |
+| `pcr_shift` | DERIVATIVES | INDEX | `robust_z` | Option put-call OI ratio vs its earlier values today |
+| `iv_skew_shift` | DERIVATIVES | INDEX | `robust_z` | Option IV skew vs its earlier values today |
+| `breadth_shift` | BREADTH | MARKET | `robust_z` | Advancers minus decliners (as a share) vs its minute-of-day baseline |
+| `dispersion_shift` | DISPERSION | MARKET | `robust_z` | Cross-sectional dispersion of 15m returns vs its minute-of-day baseline |
 
-1. Severity bands: are three fixed bands right, or should severity be the percentile of `magnitude` among past events of the same type?
-2. Baseline window: 20 sessions is a starting point. Robust statistics need history; until the archive has 20 sessions, should events fire with a `BASELINE_SHORT` flag or not at all?
-3. Sector source: `sector_taxonomy.sector_for_symbol` is hand-maintained (RELIANCE maps to `ENERGY`). Is it the source of truth for `context.sector` and `SECTOR` scope, or should the NSE sector classification be adopted?
-4. Should the id include `observed_at` as well as `bar_time`, so a live event and its replay twin differ? (Proposed: no; the same evidence should give the same id.)
+## Decisions on the draft's open questions
+
+1. **Severity**: three fixed bands of \|z\| / threshold. Percentile-of-past-events severity changes meaning as history grows and is not reproducible across stores; it can be added later as a separate field.
+2. **Short history**: events fire with `BASELINE_SHORT` (or the fallback flag) rather than not at all. The baseline kind and sample size are always in the evidence.
+3. **Sector source**: `sector_taxonomy.sector_for_symbol`. Symbols it maps to `OTHER` (about three in four of the 989) have no sector, so they get no sector comparisons; this is a documented limitation.
+4. **Id and `observed_at`**: the id excludes `observed_at` and `source`, so the same evidence gives the same id live and in replay; whichever is stored first is kept.
+
+## Storage
+
+`<PSYGRID_INTELLIGENCE_DIR>/events.db`, SQLite in WAL mode. The table
+`events` holds the full JSON plus indexed columns (`session_date`,
+`bar_epoch`, `event_type`, `category`, `scope`, `subject_key`, `counterpart`,
+`severity_rank`, `magnitude`, `source`). `event_instruments` maps every
+affected instrument to its events. Each row's `rowid` is exposed as `seq`, a
+monotonic cursor used for paging and for the event stream.

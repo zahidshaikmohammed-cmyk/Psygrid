@@ -1,0 +1,81 @@
+{
+  "generate_archive_s": 66.853,
+  "load_day_s": 3.39,
+  "instruments": 989,
+  "sessions_in_archive": 21,
+  "baselines_cold_s": 76.271,
+  "baselines_cached_s": 5.505,
+  "peak_rss_after_baselines_mb": 606.3,
+  "replay_s": 54.605,
+  "replay": {
+    "steps": 361,
+    "events": 96,
+    "events_by_type": {
+      "index_divergence": 4,
+      "move_without_volume": 3,
+      "return_shock": 5,
+      "sector_divergence": 4,
+      "sector_index_divergence": 4,
+      "sector_spread_shift": 59,
+      "volume_drought": 6,
+      "volume_surge": 6,
+      "volume_without_move": 5
+    },
+    "step_ms": {
+      "mean": 143.1,
+      "p50": 149.0,
+      "p95": 181.8,
+      "max": 256.0
+    },
+    "stage_ms_mean": {
+      "baselines": 0.0,
+      "quality": 18.28,
+      "features": 8.3,
+      "anomalies": 2.75,
+      "relationships": 109.01,
+      "events": 4.77,
+      "total": 143.11
+    }
+  },
+  "peak_rss_after_replay_mb": 606.3,
+  "similarity_market_cold_s": 67.949,
+  "similarity_market_cached_s": 0.095,
+  "similarity_instrument_s": 0.101,
+  "peak_rss_mb": 606.3,
+  "api": {
+    "/v2/market": {
+      "p50_ms": 4.9,
+      "max_ms": 11.1
+    },
+    "/v2/observations?limit=1000": {
+      "p50_ms": 93.9,
+      "max_ms": 119.0
+    },
+    "/v2/instruments/TCS": {
+      "p50_ms": 3.7,
+      "max_ms": 15.1
+    },
+    "/v2/anomalies": {
+      "p50_ms": 5.1,
+      "max_ms": 6.4
+    },
+    "/v2/relationships": {
+      "p50_ms": 17.4,
+      "max_ms": 20.1
+    },
+    "/v2/events?limit=100": {
+      "p50_ms": 19.1,
+      "max_ms": 46.4
+    },
+    "/v2/historical-matches/market": {
+      "p50_ms": 3.6,
+      "max_ms": 114.6
+    }
+  },
+  "store_bytes": {
+    "events_db": 327680,
+    "summaries": 72904880,
+    "states": 51782600
+  },
+  "archive_bytes_per_day": 6135323
+}
