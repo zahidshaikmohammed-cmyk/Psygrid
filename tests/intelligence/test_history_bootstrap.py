@@ -214,6 +214,25 @@ def test_credentials_never_generate_a_token_implicitly(tmp_path):
     assert read_env_file(env) == {"DHAN_CLIENT_ID": "12", "DHAN_ACCESS_TOKEN": "abc=def"}
 
 
+def test_requests_match_psygrids_own_historical_calls(built):
+    seen = []
+
+    def post(url, headers, payload):
+        seen.append((url, headers, payload))
+        return 200, {}, {"timestamp": [], "open": [], "high": [], "low": [], "close": [], "volume": []}
+
+    client = HistoryClient("cid", "tok", post=post, sleep=lambda s: None)
+    from intelligence.history_bootstrap import Instrument
+
+    inst = Instrument("equity", "TCS", "TCS", "11536", "NSE_EQ", "EQUITY")
+    client.intraday(inst, NOW.replace(hour=9, minute=15), NOW.replace(hour=15, minute=30))
+    client.daily(inst, NOW.date(), NOW.date())
+    for _, headers, _ in seen:
+        assert set(headers) == {"Accept", "Content-Type", "access-token"}  # as dhan_api.DhanAPI._post for /charts
+    assert seen[0][0].endswith("/charts/intraday") and seen[0][2]["interval"] == "1" and seen[0][2]["oi"] is False
+    assert seen[1][0].endswith("/charts/historical") and seen[1][2]["expiryCode"] == 0
+
+
 def test_rate_limiter_spaces_requests_and_cools_down():
     now, slept = [0.0], []
 
@@ -306,3 +325,18 @@ def test_validate_replay_command(market_root, store_root, capsys):
     report = json.loads(capsys.readouterr().out)
     assert report["deterministic"] and report["no_look_ahead"] and report["events"] > 0
     assert all(not c["differences"] for c in report["checkpoints"].values())
+
+
+def test_probe_reports_status_codes_only():
+    def post(url, headers, payload):
+        if "client-id" in headers:
+            return 451, {}, {"errorCode": "DH-902", "errorMessage": "not subscribed"}
+        return 200, {}, {"timestamp": [1, 2], "open": [1, 1], "high": [1, 1], "low": [1, 1], "close": [1, 1],
+                         "volume": [0, 0]}  # fmt: skip
+
+    client = HistoryClient("cid", "SECRET-TOKEN-XYZ", post=post, sleep=lambda s: None)
+    checks = {c["check"]: c for c in client.probe()}
+    assert checks["charts/historical NIFTY (access-token)"]["status"] == 200
+    assert checks["charts/historical NIFTY (access-token)"]["rows"] == 2
+    assert checks["charts/historical NIFTY (+client-id)"]["errorCode"] == "DH-902"
+    assert "SECRET-TOKEN-XYZ" not in json.dumps(checks)  # never echoes credentials

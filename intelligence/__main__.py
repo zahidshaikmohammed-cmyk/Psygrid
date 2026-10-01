@@ -130,6 +130,15 @@ def _backup(args) -> int:
     return 0
 
 
+def _safe_preflight(client) -> dict:
+    from intelligence.history_bootstrap import BootstrapBlocked
+
+    try:
+        return client.preflight()
+    except BootstrapBlocked as exc:
+        return {"blocked": str(exc)}
+
+
 def _bootstrap_history(args) -> int:
     from datetime import datetime
 
@@ -166,6 +175,10 @@ def _bootstrap_history(args) -> int:
         client_id, token, how = credentials(env, allow_generate=args.generate_token)
         log(f"credentials: {how}; rate {args.rate}/s, {args.workers} workers")
         bootstrap.client = HistoryClient(client_id, token, rate=args.rate or DEFAULT_RATE)
+        if args.action == "probe":
+            print(json.dumps({"profile": _safe_preflight(bootstrap.client), "checks": bootstrap.client.probe()},
+                             indent=2))  # fmt: skip
+            return 0
         result = bootstrap.run(allow_market_hours=args.allow_market_hours, keep_staging=args.keep_staging)
     except BootstrapBlocked as exc:
         print(f"blocked: {exc}", file=sys.stderr)
@@ -232,7 +245,7 @@ def main(argv: list[str] | None = None) -> int:
         "bootstrap-history",
         help="fill the archive with genuine Dhan 1m history (plan, run, status, verify); resumable",
     )
-    history.add_argument("action", choices=("plan", "run", "status", "verify"))
+    history.add_argument("action", choices=("plan", "run", "status", "verify", "probe"))
     history.add_argument("--sessions", type=int, default=20, help="completed sessions to hold (default 20)")
     history.add_argument("--rate", type=float, default=2.0, help="Dhan requests per second (max 4; default 2)")
     history.add_argument("--workers", type=int, default=2, help="concurrent downloads (max 4; default 2)")
