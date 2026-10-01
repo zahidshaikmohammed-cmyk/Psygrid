@@ -75,6 +75,60 @@ def _run(args) -> int:
     return 0
 
 
+def _serve(args) -> int:
+    import logging
+
+    import uvicorn
+
+    from intelligence.api import create_app
+    from intelligence.settings import Settings
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    settings = Settings.from_environment()
+    app = create_app(settings)
+    uvicorn.run(
+        app,
+        host=settings.host,
+        port=settings.port,
+        log_level="warning",
+        access_log=False,  # the app writes its own access log, without query strings
+        timeout_graceful_shutdown=20,
+        limit_concurrency=200,
+        ws_max_size=65536,
+    )
+    return 0
+
+
+def _keys(args) -> int:
+    from intelligence.keys import KeyStore
+    from intelligence.settings import Settings
+
+    store = KeyStore(Settings.from_environment().keys_file)
+    if args.action == "create":
+        key_id, key = store.create(args.name, args.rate_per_minute)
+        print(f"created key {key_id} for {args.name!r}. Store it now; it cannot be shown again:\n{key}")
+    elif args.action == "revoke":
+        if not store.revoke(args.id):
+            print(f"no active key {args.id}", file=sys.stderr)
+            return 1
+        print(f"revoked {args.id}")
+    else:
+        print(json.dumps(store.list(), indent=2))
+    return 0
+
+
+def _backup(args) -> int:
+    from datetime import datetime
+
+    from intelligence.archive import IST
+    from intelligence.live import LiveRunner
+    from intelligence.settings import Settings
+
+    runner = LiveRunner(Settings.from_environment())
+    print(runner.backup(datetime.now(IST).strftime("%Y-%m-%dT%H%M%S")))
+    return 0
+
+
 def _days(args) -> int:
     days = available_days(args.archive_dir)
     print("\n".join(days) if days else f"no archived days under {args.archive_dir}")
@@ -101,6 +155,16 @@ def main(argv: list[str] | None = None) -> int:
         "--store-dir", type=Path, default=None, help="intelligence store (default PSYGRID_INTELLIGENCE_DIR)"
     )
     run.set_defaults(run=_run)
+    commands.add_parser(
+        "serve", help="run the live engine and the /v2 API (the psygrid-intelligence service)"
+    ).set_defaults(run=_serve)
+    keys = commands.add_parser("keys", help="manage API keys for /v2")
+    keys.add_argument("action", choices=("create", "list", "revoke"))
+    keys.add_argument("--name", help="who the key is for (create)")
+    keys.add_argument("--id", help="key id (revoke)")
+    keys.add_argument("--rate-per-minute", type=int, default=None, help="override the default rate limit (create)")
+    keys.set_defaults(run=_keys)
+    commands.add_parser("backup", help="copy the event store and key file to <store>/backups").set_defaults(run=_backup)
     args = parser.parse_args(argv)
     return args.run(args)
 

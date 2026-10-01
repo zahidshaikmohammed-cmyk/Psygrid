@@ -1,0 +1,43 @@
+# PSYGRID intelligence: the live engine and the /v2 API, isolated from the production feed.
+#
+# It runs as its own process, reads PSYGRID only through the daily archive and
+# read-only localhost endpoints, and is capped so that it can never take CPU,
+# memory or I/O from the `psygrid` service: lower CPU and I/O priority, a hard
+# memory ceiling, and a higher OOM score so the kernel would end this process,
+# never PSYGRID, under memory pressure. Installed by the deploy workflow.
+[Unit]
+Description=PSYGRID intelligence (live engine and /v2 API)
+After=network-online.target psygrid.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/Psygrid
+# Optional overrides (port, host, rate limits, directories); see docs/intelligence/configuration.md.
+EnvironmentFile=-/etc/psygrid-intelligence.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/ubuntu/Psygrid/.venv/bin/python -m intelligence serve
+Restart=always
+RestartSec=10
+TimeoutStopSec=30
+KillSignal=SIGTERM
+
+Nice=10
+CPUWeight=20
+CPUQuota=100%
+IOSchedulingClass=idle
+MemoryHigh=900M
+MemoryMax=1200M
+OOMScoreAdjust=500
+TasksMax=64
+LimitNOFILE=4096
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/home/ubuntu/psygrid-intelligence
+
+[Install]
+WantedBy=multi-user.target

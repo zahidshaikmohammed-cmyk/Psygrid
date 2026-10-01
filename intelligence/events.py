@@ -126,7 +126,7 @@ class EventEngine:
         relationships: list[Relationship] = (),
         baselines=None,
     ) -> list[dict]:
-        """Events for one frame, after cooldown. Stores them when the engine has a store."""
+        """Events for one frame, after cooldown. With a store, stores them and returns only those that were new."""
         if not len(frame.grid):
             return []
         self._start_session(frame.session_date)
@@ -144,7 +144,7 @@ class EventEngine:
             event["novelty"]["prior_occurrences"] = self._prior(event["event_type"], event["subject"]["key"])
             events.append(event)
         if self.store and events:
-            self.store.add(events)
+            events = self.store.add(events)  # an id already stored (a replayed or restarted minute) is not new
         return events
 
 
