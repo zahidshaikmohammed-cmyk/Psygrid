@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 
 from auth_retry import AuthRetryGuard
 from config import Instrument
-from index_options import _is_market_open, _normalize_chain
+from index_options import MARKET_CLOSED_RECHECK_SECONDS, MARKET_CLOSED_STATUS, _is_market_open, _normalize_chain
 from instrument_master import fetch_nse_equity_security_ids
 from option_analytics import ChainAnalyticsTracker
 
@@ -115,6 +115,12 @@ class StockOptionState:
         with self.lock:
             self.status = "ERROR"
             self.last_error = error
+
+    def set_market_closed(self) -> None:
+        """Pause outside market hours; the last chain stays available."""
+        with self.lock:
+            self.status = MARKET_CLOSED_STATUS
+            self.last_error = ""
 
     def snapshot(self) -> dict:
         with self.lock:
@@ -240,12 +246,20 @@ class StockOptionsManager:
         except Exception as exc:
             state.set_error(f"{type(exc).__name__}: {exc}")
 
+    def _market_open(self) -> bool:
+        return _is_market_open(datetime.now(ZoneInfo(self.settings.timezone)))
+
     def _loop(self) -> None:
         symbols = list(self.instruments.keys())
         if not symbols:
             return
         index = 0
         while not self.stop_event.is_set():
+            if not self._market_open():
+                for symbol in symbols:
+                    self.states[symbol].set_market_closed()
+                self.stop_event.wait(MARKET_CLOSED_RECHECK_SECONDS)
+                continue
             self._poll_one(symbols[index % len(symbols)])
             index += 1
             self.stop_event.wait(OPTION_CHAIN_REFRESH_SECONDS)
