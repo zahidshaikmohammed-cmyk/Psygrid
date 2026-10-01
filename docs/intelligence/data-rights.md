@@ -18,6 +18,7 @@ Status values:
 | Equity ticks → 1m candles (989 stocks) | NSE via Dhan | Dhan Full-mode market-feed WebSocket | RAM; daily archive on disk | `/public/live*.json`, `/public/stock/*` | UNVERIFIED |
 | Previous close, today's open | NSE via Dhan | Dhan market-quote REST | RAM; daily archive | same | UNVERIFIED |
 | Equity 1m history (bootstrap, gap backfill) | NSE via Dhan | Dhan intraday historical REST | RAM; daily archive | same | UNVERIFIED |
+| Archive history bootstrap (equity and index 1m, daily open/close) | NSE, BSE via Dhan | Dhan intraday and daily historical REST, run on demand by `bootstrap-history` | Daily archive on disk (`source: DHAN_HISTORICAL_API`) | Only through Intelligence outputs | UNVERIFIED (own use) |
 | Index ticks and candles (16 indices) | NSE, BSE via Dhan | Dhan WebSocket + historical REST | RAM; daily archive | `/public/{index}.json` | UNVERIFIED |
 | Index and stock option chains | NSE, BSE via Dhan | Dhan option-chain REST | RAM | `*-options.json`, `/public/stock-options/*` | UNVERIFIED |
 | 20-level market depth | NSE, BSE via Dhan | Dhan 20-depth WebSocket | RAM | `*-depth.json`, `/public/stock-depth/*` | UNVERIFIED |

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from dataclasses import asdict
 from pathlib import Path
@@ -129,6 +130,65 @@ def _backup(args) -> int:
     return 0
 
 
+def _bootstrap_history(args) -> int:
+    from datetime import datetime
+
+    from intelligence.archive import IST
+    from intelligence.history_bootstrap import (
+        DEFAULT_RATE,
+        Bootstrap,
+        BootstrapBlocked,
+        HistoryClient,
+        credentials,
+        read_env_file,
+    )
+
+    def log(message: str) -> None:
+        print(f"{datetime.now(IST):%H:%M:%S} {message}", flush=True)
+
+    bootstrap = Bootstrap(args.archive_dir, sessions=args.sessions, workers=args.workers, log=log)
+    if args.action == "plan":
+        print(json.dumps(bootstrap.plan(args.rate), indent=2))
+        return 0
+    if args.action == "status":
+        print(json.dumps(bootstrap.status(), indent=2))
+        return 0
+    if args.action == "verify":
+        report = bootstrap.verify()
+        bad = {day: r["problems"] for day, r in report.items() if not r["ok"]}
+        print(json.dumps({"days": len(report), "ok": len(report) - len(bad), "failed": bad}, indent=2))
+        return 1 if bad else 0
+    env = dict(os.environ)
+    if args.env_file:
+        env.update(read_env_file(args.env_file))
+    try:
+        client_id, token, how = credentials(env, allow_generate=args.generate_token)
+        log(f"credentials: {how}; rate {args.rate}/s, {args.workers} workers")
+        bootstrap.client = HistoryClient(client_id, token, rate=args.rate or DEFAULT_RATE)
+        result = bootstrap.run(allow_market_hours=args.allow_market_hours, keep_staging=args.keep_staging)
+    except BootstrapBlocked as exc:
+        print(f"blocked: {exc}", file=sys.stderr)
+        return 3
+    summary = {k: v for k, v in result.items() if k != "verified"}
+    summary["verified_ok"] = sum(r["ok"] for r in result.get("verified", {}).values())
+    summary["verified_failed"] = {d: r["problems"] for d, r in result.get("verified", {}).items() if not r["ok"]}
+    print(json.dumps(summary, indent=2))
+    return 0 if not result.get("failures") and not summary["verified_failed"] else 1
+
+
+def _validate_replay(args) -> int:
+    from intelligence.history import store_dir
+    from intelligence.validation import validate_replay
+
+    date = args.date or (available_days(args.archive_dir) or [None])[-1]
+    if date is None:
+        print(f"no archived days under {args.archive_dir}", file=sys.stderr)
+        return 2
+    report = validate_replay(args.archive_dir, date, args.store_dir or store_dir(), every=args.every)
+    print(json.dumps(report, indent=2))
+    return 0 if report["ok"] else 1
+
+
 def _days(args) -> int:
     days = available_days(args.archive_dir)
     print("\n".join(days) if days else f"no archived days under {args.archive_dir}")
@@ -164,6 +224,24 @@ def main(argv: list[str] | None = None) -> int:
     keys.add_argument("--id", help="key id (revoke)")
     keys.add_argument("--rate-per-minute", type=int, default=None, help="override the default rate limit (create)")
     keys.set_defaults(run=_keys)
+    history = commands.add_parser(
+        "bootstrap-history",
+        help="fill the archive with genuine Dhan 1m history (plan, run, status, verify); resumable",
+    )
+    history.add_argument("action", choices=("plan", "run", "status", "verify"))
+    history.add_argument("--sessions", type=int, default=20, help="completed sessions to hold (default 20)")
+    history.add_argument("--rate", type=float, default=2.0, help="Dhan requests per second (max 4; default 2)")
+    history.add_argument("--workers", type=int, default=2, help="concurrent downloads (max 4; default 2)")
+    history.add_argument("--env-file", type=Path, help="read Dhan credentials from this KEY=VALUE file")
+    history.add_argument("--generate-token", action="store_true", help="allow generating a token from PIN + TOTP")
+    history.add_argument("--allow-market-hours", action="store_true", help="run even during market hours")
+    history.add_argument("--keep-staging", action="store_true", help="keep downloaded staging files after success")
+    history.set_defaults(run=_bootstrap_history)
+    validate = commands.add_parser("validate-replay", help="check determinism and no look-ahead on an archived day")
+    validate.add_argument("date", nargs="?", help="session date (default: the latest archived)")
+    validate.add_argument("--every", type=int, default=5)
+    validate.add_argument("--store-dir", type=Path, default=None, help="baseline cache (default: the service store)")
+    validate.set_defaults(run=_validate_replay)
     commands.add_parser("backup", help="copy the event store and key file to <store>/backups").set_defaults(run=_backup)
     args = parser.parse_args(argv)
     return args.run(args)

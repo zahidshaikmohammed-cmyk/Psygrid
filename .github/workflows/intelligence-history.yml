@@ -1,0 +1,131 @@
+name: Intelligence history (VM operations)
+
+# Manual operations for the history bootstrap on the Oracle VM. Never runs on push.
+#   inspect   what the VM has: archive days, intelligence health, ports, disk, memory, and the NAMES (never
+#             values) of the Dhan variables in the running PSYGRID process
+#   plan      offline estimate of requests, time, storage and Dhan API budget
+#   run       start the resumable bootstrap as a capped transient unit, follow it, then verify and validate
+#   status    progress of the bootstrap unit and the archive
+#   verify    integrity check of every archived day
+#   validate  replay determinism and no-look-ahead on the latest day, and /v2/health
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: inspect, plan, run, status, verify or validate
+        required: true
+        default: inspect
+        type: choice
+        options: [inspect, plan, run, status, verify, validate]
+      sessions:
+        description: completed sessions to hold (20 = the Intelligence baseline window)
+        required: true
+        default: "20"
+      rate:
+        description: Dhan requests per second (max 4)
+        required: true
+        default: "2"
+
+concurrency:
+  group: intelligence-history
+  cancel-in-progress: false
+
+jobs:
+  operate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Run on the VM
+        env:
+          ORACLE_SSH_KEY: ${{ secrets.ORACLE_SSH_KEY }}
+          ACTION: ${{ inputs.action }}
+          SESSIONS: ${{ inputs.sessions }}
+          RATE: ${{ inputs.rate }}
+        run: |
+          set -euo pipefail
+          case "$ACTION" in inspect|plan|run|status|verify|validate) ;; *) echo "bad action"; exit 2;; esac
+          [[ "$SESSIONS" =~ ^[0-9]{1,4}$ ]] || { echo "bad sessions"; exit 2; }
+          [[ "$RATE" =~ ^[0-9](\.[0-9]+)?$ ]] || { echo "bad rate"; exit 2; }
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$ORACLE_SSH_KEY" > ~/.ssh/psygrid_oracle && chmod 600 ~/.ssh/psygrid_oracle
+          ssh-keyscan -H 140.245.226.102 >> ~/.ssh/known_hosts
+          ssh -o ServerAliveInterval=30 -i ~/.ssh/psygrid_oracle ubuntu@140.245.226.102 \
+            "ACTION=$ACTION SESSIONS=$SESSIONS RATE=$RATE bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd /home/ubuntu/Psygrid
+          PY=/home/ubuntu/Psygrid/.venv/bin/python
+          UNIT=psygrid-history-bootstrap
+          ENVFILE=/run/psygrid-history.env
+          PSYGRID_PID=$(systemctl show -p MainPID --value psygrid)
+          # The archive directory PSYGRID itself uses, so the bootstrap writes where PSYGRID and Intelligence read.
+          ARCHIVE=$(sudo cat /proc/$PSYGRID_PID/environ 2>/dev/null | tr '\0' '\n' | sed -n 's/^PSYGRID_ARCHIVE_DIR=//p' | head -1)
+          ARCHIVE=${ARCHIVE:-/home/ubuntu/psygrid-data}
+          CLI="$PY -m intelligence --archive-dir $ARCHIVE"
+          health() { curl -s --max-time 5 http://127.0.0.1:18101/v2/health || echo '{"unreachable": true}'; echo; }
+
+          case "$ACTION" in
+            inspect)
+              echo "== PSYGRID process $PSYGRID_PID: Dhan-related environment variable NAMES"
+              sudo cat /proc/$PSYGRID_PID/environ | tr '\0' '\n' | cut -d= -f1 | grep -E '^(DHAN_|PSYGRID_)' | sort || true
+              echo "== archive $ARCHIVE"; ls -la "$ARCHIVE" 2>/dev/null | tail -30 || echo "(missing)"
+              du -sh "$ARCHIVE" 2>/dev/null || true
+              echo "== intelligence health"; health
+              echo "== listeners on 10000, 10001, 18101"; sudo ss -ltnpH '( sport = :10000 or sport = :10001 or sport = :18101 )' || true
+              echo "== disk"; df -h /home/ubuntu | tail -1
+              echo "== memory"; free -m
+              echo "== cpus"; nproc
+              ;;
+            plan)
+              $CLI bootstrap-history plan --sessions "$SESSIONS" --rate "$RATE"
+              ;;
+            status)
+              systemctl status "$UNIT" --no-pager -n 0 2>/dev/null || echo "bootstrap unit not running"
+              sudo journalctl -u "$UNIT" -n 30 --no-pager 2>/dev/null || true
+              $CLI bootstrap-history status
+              ;;
+            verify)
+              $CLI bootstrap-history verify
+              ;;
+            validate)
+              echo "== /v2/health"; health
+              $CLI validate-replay
+              ;;
+            run)
+              $CLI bootstrap-history plan --sessions "$SESSIONS" --rate "$RATE"
+              if systemctl is-active --quiet "$UNIT"; then
+                echo "a bootstrap is already running; following it"
+              else
+                sudo systemctl reset-failed "$UNIT" 2>/dev/null || true
+                # Credentials exactly as the running PSYGRID process has them, in a root-only tmpfs file that is
+                # removed when the unit stops. Only Dhan and PSYGRID variables are copied; values are never printed.
+                sudo sh -c "umask 077; tr '\0' '\n' < /proc/$PSYGRID_PID/environ | grep -E '^(DHAN_|PSYGRID_)' > $ENVFILE"
+                sudo systemd-run --unit "$UNIT" --uid ubuntu --gid ubuntu \
+                  --working-directory /home/ubuntu/Psygrid \
+                  -p EnvironmentFile=$ENVFILE -p "ExecStopPost=/bin/rm -f $ENVFILE" \
+                  -p Nice=15 -p CPUQuota=50% -p MemoryMax=700M -p IOSchedulingClass=idle -p RuntimeMaxSec=7200 \
+                  $CLI bootstrap-history run --sessions "$SESSIONS" --rate "$RATE" --workers 2
+              fi
+              for i in $(seq 1 480); do
+                systemctl is-active --quiet "$UNIT" || break
+                if (( i % 6 == 0 )); then sudo journalctl -u "$UNIT" -n 2 --no-pager -o cat || true; fi
+                sleep 10
+              done
+              echo "== bootstrap log"; sudo journalctl -u "$UNIT" -n 60 --no-pager -o cat || true
+              result=$(systemctl show -p Result --value "$UNIT" 2>/dev/null || echo unknown)
+              echo "== unit result: $result"
+              $CLI bootstrap-history status
+              $CLI bootstrap-history verify
+              echo "== waiting for Intelligence to pick the sessions up"
+              for i in $(seq 1 30); do
+                state=$(curl -s --max-time 5 http://127.0.0.1:18101/v2/health | $PY -c "import json,sys; print(json.load(sys.stdin)['live']['state'])" 2>/dev/null || echo unreachable)
+                echo "live state: $state"
+                [[ "$state" != "WAITING_FOR_DATA" && "$state" != "STARTING" && "$state" != "unreachable" ]] && break
+                sleep 20
+              done
+              health
+              $CLI validate-replay
+              # PSYGRID must be untouched.
+              curl -fsS http://127.0.0.1:10000/health; echo
+              ;;
+          esac
+          REMOTE
