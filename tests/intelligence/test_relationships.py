@@ -87,7 +87,7 @@ def test_sector_pairs(day):
     _, features = at(day, 229)
     rels = sector_relationships(features, only_flagged=False)
     assert rels and all(r.kind == "sector_sector" and r.subject < r.counterpart for r in rels)
-    assert all(r.evidence["history_points"] >= 10 for r in rels)
+    assert all(r.evidence["history_minutes"] >= 60 for r in rels)
 
 
 def test_price_and_volume_disagreements():

@@ -12,7 +12,7 @@ Relationships covered:
 
 - stock vs its sector (leave-one-out median of the other members) and vs its
   sector index and the broad index;
-- sector vs sector (spread of 15-minute returns vs its own variability today);
+- sector vs sector (the 15-minute spread of median returns vs what earlier 1m spreads today imply);
 - price vs volume (an unusual move without volume, or volume without a move);
 - spot vs futures (basis) and option-chain measures (PCR, IV skew), from the
   recorded derivatives snapshots, each vs its own earlier values today.
@@ -40,6 +40,7 @@ MIN_ESTIMATION_PAIRS = 40
 MIN_RECENT_PAIRS = 10
 MIN_CORRELATION = 0.3
 MIN_SECTOR_MEMBERS = 3
+MIN_SPREAD_HISTORY = 60  # earlier 1m spreads today needed before a sector pair is judged
 NOT_ESTABLISHED = "NOT_ESTABLISHED"
 
 
@@ -59,7 +60,7 @@ def _num(value) -> float | None:
 
 
 def _pairwise_fit(y: np.ndarray, x: np.ndarray) -> tuple[np.ndarray, ...]:
-    """Row-wise beta, correlation, residual SD and pair count of y on x, ignoring NaN pairs."""
+    """Row-wise beta, correlation, residual SD, pair count and the benchmark's sum of squares, ignoring NaN pairs."""
     valid = ~np.isnan(y) & ~np.isnan(x)
     count = valid.sum(axis=1)
     ym = np.where(valid, y, np.nan)
@@ -73,7 +74,7 @@ def _pairwise_fit(y: np.ndarray, x: np.ndarray) -> tuple[np.ndarray, ...]:
         corr = sxy / np.sqrt(sxx * syy)
         resid = ym - beta[:, None] * xm
         resid_sd = np.nanstd(resid, axis=1, ddof=2)
-    return beta, corr, resid_sd, count
+    return beta, corr, resid_sd, count, sxx
 
 
 def judge_against(r: np.ndarray, benchmark: np.ndarray) -> dict[str, np.ndarray]:
@@ -81,15 +82,17 @@ def judge_against(r: np.ndarray, benchmark: np.ndarray) -> dict[str, np.ndarray]
     m = r.shape[1]
     est = slice(max(0, m - RECENT_MINUTES - ESTIMATION_MINUTES), max(0, m - RECENT_MINUTES))
     recent = slice(max(0, m - RECENT_MINUTES), m)
-    beta, corr, resid_sd, pairs = _pairwise_fit(r[:, est], benchmark[:, est])
+    beta, corr, resid_sd, pairs, sxx = _pairwise_fit(r[:, est], benchmark[:, est])
     with warnings.catch_warnings(), np.errstate(invalid="ignore"):
         warnings.simplefilter("ignore", RuntimeWarning)
         resid = r[:, recent] - beta[:, None] * benchmark[:, recent]
         recent_pairs = np.sum(~np.isnan(resid), axis=1)
         deviation = np.nansum(resid, axis=1)
-        z = deviation / (resid_sd * np.sqrt(recent_pairs))
         stock_move = np.nansum(r[:, recent], axis=1)
         bench_move = np.nansum(benchmark[:, recent], axis=1)
+        # Prediction variance of the cumulative residual: the noise over n minutes plus the error in the
+        # fitted beta carried by the benchmark's move (var(beta_hat) = resid_sd^2 / sxx).
+        z = deviation / (resid_sd * np.sqrt(recent_pairs + bench_move**2 / sxx))
     enough = (pairs >= MIN_ESTIMATION_PAIRS) & (recent_pairs >= MIN_RECENT_PAIRS) & np.isfinite(z)
     established = enough & (corr >= MIN_CORRELATION)
     classification = classify_z(z).astype(object)
@@ -181,7 +184,7 @@ def stock_relationships(frame: MarketFrame, features: FeatureSet, only_flagged: 
 
 
 def sector_relationships(features: FeatureSet, only_flagged: bool = True) -> list[Relationship]:
-    """Spread of each pair of sectors' 15-minute median returns, against that spread's variability today."""
+    """Each pair of sectors' 15-minute spread of median returns, against the 1m spreads earlier today."""
     r = features.returns_1m
     if r is None or r.shape[1] < 2 * RECENT_MINUTES:
         return []
@@ -195,17 +198,23 @@ def sector_relationships(features: FeatureSet, only_flagged: bool = True) -> lis
         }
     names = sorted(series)
     out = []
-    window = np.ones(RECENT_MINUTES)
     for a_pos, a in enumerate(names):
         for b in names[a_pos + 1 :]:
-            spread = series[a] - series[b]
-            spread = np.where(np.isnan(spread), 0.0, spread)
-            rolling = np.convolve(spread, window, mode="valid")  # 15-minute spread at each minute
-            history, latest = rolling[:-RECENT_MINUTES], rolling[-1]
-            if len(history) < MIN_RECENT_PAIRS:
+            spread = series[a] - series[b]  # 1m spread of the two sectors' median returns
+            history, recent = spread[:-RECENT_MINUTES], spread[-RECENT_MINUTES:]
+            history = history[np.isfinite(history)]
+            recent = recent[np.isfinite(recent)]
+            if len(history) < MIN_SPREAD_HISTORY or len(recent) < MIN_RECENT_PAIRS:
                 continue
+            # The 15-minute spread against what independent 1m spreads like today's earlier ones would give:
+            # mean 15 * mu, SD sigma * sqrt(15). Mean and SD rather than median and MAD: the 1m spread is close to
+            # normal, and the SD's lower estimation noise keeps the null flag rate near nominal (an outlier only
+            # widens sigma, making the test more conservative).
+            mu = float(np.mean(history))
             sd = float(np.std(history, ddof=1))
-            z = (latest - float(np.mean(history))) / sd if sd > 0 else float("nan")
+            latest = float(np.sum(recent))
+            expected = mu * len(recent)
+            z = (latest - expected) / (sd * np.sqrt(len(recent))) if sd > 0 else float("nan")
             corr = (
                 float(np.corrcoef(series[a], series[b])[0, 1])
                 if np.nanstd(series[a]) and np.nanstd(series[b])
@@ -215,8 +224,9 @@ def sector_relationships(features: FeatureSet, only_flagged: bool = True) -> lis
             if only_flagged and cls not in (UNUSUAL, EXTREME):
                 continue
             evidence = {
-                "spread_15m": _num(latest), "spread_mean": _num(np.mean(history)), "spread_sd": _num(sd),
-                "history_points": len(history), "session_correlation": _num(corr),
+                "spread_15m": _num(latest), "expected_spread_15m": _num(expected),
+                "spread_1m_mean": _num(mu), "spread_1m_sd": _num(sd),
+                "history_minutes": len(history), "session_correlation": _num(corr),
             }  # fmt: skip
             out.append(Relationship("sector_sector", a, b, cls, _num(z), evidence))
     return out

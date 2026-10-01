@@ -32,10 +32,11 @@ NOVELTY_SESSIONS = 20
 BASELINE_WINDOW = 20
 ARCHIVE_REPLAY, LIVE_SNAPSHOT = "ARCHIVE_REPLAY", "LIVE_SNAPSHOT"
 
-# Single-minute findings (anomalies and price/volume disagreements) become events only at EXTREME (|z| >= 5):
-# with ~1,000 instruments and three measures, UNUSUAL single minutes are routine and stay visible through
-# the anomaly API instead. Multi-minute relationship breaks and market measures fire from UNUSUAL (|z| >= 3).
-SINGLE_MINUTE_THRESHOLD = EXTREME_Z
+# Every per-instrument finding (anomalies, price/volume disagreements, divergences from sector or index)
+# becomes an event only at EXTREME (|z| >= 5): with ~1,000 instruments tested every minute, |z| >= 3 arises by
+# chance hundreds of times a day, so those stay visible through /v2/anomalies and /v2/relationships instead.
+# Sector, index and market findings, a few dozen tests a minute, fire from UNUSUAL (|z| >= 3).
+INSTRUMENT_THRESHOLD = EXTREME_Z
 # anomaly measure -> (event type when z > 0, event type when z < 0 or None, statistic)
 ANOMALY_TYPES = {
     "volume": ("volume_surge", "volume_drought", "robust_z_log_volume"),
@@ -264,7 +265,7 @@ class _Context:
                     evidence,
                     [anomaly.key],
                     flags=flags,
-                    threshold=SINGLE_MINUTE_THRESHOLD,
+                    threshold=INSTRUMENT_THRESHOLD,
                 )
             )
         return out
@@ -305,7 +306,7 @@ class _Context:
             if rel.classification not in (UNUSUAL, EXTREME) or rel.z is None:
                 continue
             if rel.kind == "price_volume":
-                if abs(rel.z) < SINGLE_MINUTE_THRESHOLD:
+                if abs(rel.z) < INSTRUMENT_THRESHOLD:
                     continue
                 evidence = {"observation": dict(rel.evidence), "baseline": {"method": "anomaly engine z-scores"}}
                 out.append(
@@ -321,11 +322,14 @@ class _Context:
                         rel.z,
                         evidence,
                         [rel.subject],
-                        threshold=SINGLE_MINUTE_THRESHOLD,
+                        threshold=INSTRUMENT_THRESHOLD,
                     )
                 )
                 continue
             event_type, category, scope, kind, counterpart_kind, statistic = RELATIONSHIP_TYPES[rel.kind]
+            threshold = INSTRUMENT_THRESHOLD if scope == "INSTRUMENT" else UNUSUAL_Z
+            if abs(rel.z) < threshold:
+                continue
             counterpart = rel.counterpart if counterpart_kind else None
             if rel.kind == "sector_sector":
                 affected = [k for k, s in zip(self.features.keys, self.features.sectors, strict=True)
@@ -353,6 +357,7 @@ class _Context:
                     evidence,
                     affected,
                     relationships=relationships,
+                    threshold=threshold,
                 )
             )
         return out

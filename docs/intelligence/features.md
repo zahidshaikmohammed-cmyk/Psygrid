@@ -71,10 +71,15 @@ NIFTY 500; the sector index). Beta, correlation and residual SD are fitted on
 the 60 minutes *before* the 15 being judged. The relationship is judged only
 if at least 40 estimation pairs, 10 recent pairs and correlation ≥ 0.3;
 otherwise `NOT_ESTABLISHED` or `INSUFFICIENT_DATA`. The statistic is the
-cumulative residual over the 15 minutes divided by `residual_sd × √n`.
+cumulative residual over the 15 minutes divided by its prediction SD,
+`residual_sd × √(n + B² / Sxx)`, where `B` is the benchmark's move over the
+15 minutes and `Sxx` its sum of squares in the estimation window (the second
+term is the error in the fitted beta).
 
 **Sector vs sector.** The 15-minute spread of two sectors' median returns
-against the mean and SD of the same spread earlier today.
+against what the 1m spreads earlier today imply: mean × 15, with SD
+SD × √15 (at least 60 earlier minutes). Measured null flag rates per check
+(|z| ≥ 3, nominal 0.27%): stock divergences 0.3–0.65%, sector pairs 0.41%.
 
 **Price vs volume.** `move_without_volume`: |return z| ≥ 3 while |volume z| <
 1; `volume_without_move`: volume z ≥ 3 while |return z| < 1.
