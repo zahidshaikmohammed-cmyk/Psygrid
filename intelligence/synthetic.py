@@ -69,7 +69,9 @@ class SyntheticMarket:
         r = market[None, :] + sector_moves[sectors] + idio
         minutes = np.arange(SESSION_MINUTES)
         profile = 1.0 + 1.5 * np.exp(-minutes / 30) + 1.0 * np.exp(-(SESSION_MINUTES - minutes) / 30)
-        base_volume = rng.uniform(2e3, 5e4, n)
+        # A stock's typical volume persists across days, varying ~20% day to day.
+        stable = np.random.default_rng(zlib.crc32(f"{self.seed}:volume".encode())).uniform(2e3, 5e4, n)
+        base_volume = stable * rng.lognormal(0, 0.2, n)
         volume = base_volume[:, None] * profile[None, :] * rng.lognormal(0, 0.35, (n, SESSION_MINUTES))
         for inj in self.injections:
             if inj.session_date != session_date or inj.symbol not in self.symbols:

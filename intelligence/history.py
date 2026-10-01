@@ -1,7 +1,7 @@
 """Historical baselines: what is normal for each instrument at each minute of the day.
 
-Each archived day is summarised once into per-minute arrays (volume, absolute
-1m return, bar range) and market series (median absolute return, dispersion,
+Each archived day is summarised once into per-minute arrays (log volume, absolute
+1m return, log bar range) and market series (median absolute return, dispersion,
 breadth, active share), cached as ``summaries/<date>.npz`` in the intelligence
 store. A baseline for date D uses only sessions strictly before D, so it never
 sees the day it judges.
@@ -26,10 +26,10 @@ from intelligence.archive import available_days, load_day
 from intelligence.features import log_returns
 from intelligence.frame import as_of_time, frame_at
 
-SUMMARY_VERSION = 1
+SUMMARY_VERSION = 3
 MAD_TO_SD = 1.4826
 POOL_MINUTES = 2
-INSTRUMENT_FIELDS = ("volume_1m", "abs_ret_1m", "range_1m")
+INSTRUMENT_FIELDS = ("log_volume_1m", "abs_ret_1m", "log_range_1m")
 MARKET_FIELDS = ("median_abs_ret_1m", "dispersion_15m", "breadth_session", "active_share_1m")
 DEFAULT_WINDOW_SESSIONS = 20
 DEFAULT_MIN_SESSIONS = 5
@@ -56,9 +56,9 @@ def summarise_day(day) -> DaySummary:
         warnings.simplefilter("ignore", RuntimeWarning)
         r = log_returns(bars.close, bars.open)
         instrument = {
-            "volume_1m": bars.volume.astype(np.float32),
+            "log_volume_1m": np.log1p(bars.volume).astype(np.float32),  # volume is skewed; log stabilises it
             "abs_ret_1m": np.abs(r).astype(np.float32),
-            "range_1m": ((bars.high - bars.low) / bars.close).astype(np.float32),
+            "log_range_1m": np.log((bars.high - bars.low) / bars.close).astype(np.float32),
         }
         close = bars.close
         ret15 = np.full(close.shape, np.nan)

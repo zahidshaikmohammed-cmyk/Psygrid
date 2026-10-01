@@ -92,15 +92,17 @@ def test_baselines_use_only_earlier_sessions(market_root, store_root, day):
 def test_baseline_is_unavailable_with_too_little_history(market_root, store_root, day):
     baselines = build_baselines(market_root, DATES[2], day.equity.keys, min_sessions=5, cache_root=store_root)
     assert len(baselines.sessions) == 2 and not baselines.available
-    median, scale, count = baselines.lookup("volume_1m", 60)
+    median, scale, count = baselines.lookup("log_volume_1m", 60)
     assert np.isnan(median).all() and np.isnan(scale).all() and (count == 2).all()
 
 
 def test_baseline_matches_the_history_it_summarises(market_root, store_root, day):
     baselines = build_baselines(market_root, TODAY, day.equity.keys, cache_root=store_root)
     i = day.equity.keys.index("ITC")
-    stack = np.stack([load_summary(market_root, d, store_root).instrument["volume_1m"][i, 98:103] for d in DATES[:-1]])
-    median, scale, count = baselines.lookup("volume_1m", 100)
+    stack = np.stack(
+        [load_summary(market_root, d, store_root).instrument["log_volume_1m"][i, 98:103] for d in DATES[:-1]]
+    )
+    median, scale, count = baselines.lookup("log_volume_1m", 100)
     assert median[i] == pytest.approx(np.median(stack), rel=1e-5)
     assert scale[i] > 0 and count[i] == len(DATES) - 1
 
