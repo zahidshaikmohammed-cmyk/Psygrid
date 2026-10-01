@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Resolves NIFTY/BANKNIFTY index-futures contracts from Dhan's own
 instrument master (the same CSV instrument_master.py already fetches for
 equity resolution, requested independently here to keep the derivatives
@@ -10,11 +8,12 @@ front-month future and its lot size / tick size. It does not compute or
 suggest anything about direction, rollover timing signals, or strategy.
 """
 
+from __future__ import annotations
+
 import csv
 import io
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Optional
 
 import requests
 
@@ -33,11 +32,11 @@ class FuturesContract:
     instrument: str
     trading_symbol: str
     expiry_date: str
-    lot_size: Optional[int]
-    tick_size: Optional[float]
+    lot_size: int | None
+    tick_size: float | None
 
 
-def _parse_expiry(value: str) -> Optional[date]:
+def _parse_expiry(value: str) -> date | None:
     value = (value or "").strip()
     if not value:
         return None
@@ -52,14 +51,14 @@ def _parse_expiry(value: str) -> Optional[date]:
     return None
 
 
-def _int_or_none(value) -> Optional[int]:
+def _int_or_none(value) -> int | None:
     try:
         return int(float(str(value).strip()))
     except (TypeError, ValueError):
         return None
 
 
-def _float_or_none(value) -> Optional[float]:
+def _float_or_none(value) -> float | None:
     try:
         return float(str(value).strip())
     except (TypeError, ValueError):
@@ -75,7 +74,9 @@ def download_instrument_master(timeout: int = 30) -> str:
     return response.text
 
 
-def fetch_front_month_index_futures(underlying_symbols: tuple[str, ...], timeout: int = 30, exchange: str = "NSE") -> dict[str, FuturesContract]:
+def fetch_front_month_index_futures(
+    underlying_symbols: tuple[str, ...], timeout: int = 30, exchange: str = "NSE"
+) -> dict[str, FuturesContract]:
     """Resolve the nearest-expiry index-futures contract for each of the
     given underlying symbols (e.g. "NIFTY", "BANKNIFTY" on NSE, "SENSEX" on
     BSE). Never fabricates a contract: a symbol with no matching, unexpired
@@ -86,7 +87,9 @@ def fetch_front_month_index_futures(underlying_symbols: tuple[str, ...], timeout
     return parse_front_month_index_futures(download_instrument_master(timeout), underlying_symbols, exchange)
 
 
-def parse_front_month_index_futures(csv_text: str, underlying_symbols: tuple[str, ...], exchange: str = "NSE") -> dict[str, FuturesContract]:
+def parse_front_month_index_futures(
+    csv_text: str, underlying_symbols: tuple[str, ...], exchange: str = "NSE"
+) -> dict[str, FuturesContract]:
     """Same resolution as fetch_front_month_index_futures, on an already
     downloaded instrument master."""
     wanted = {s.strip().upper() for s in underlying_symbols if s.strip()}

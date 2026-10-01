@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Delayed, official reference data for global-market context, sourced
 only from FRED (Federal Reserve Bank of St. Louis) — a free, official,
 ToS-clean API with no production-use restriction.
@@ -12,10 +10,11 @@ Hang Seng, Shanghai, KOSPI, DXY, gold. Nothing here is approximated or
 substituted for those.
 """
 
+from __future__ import annotations
+
 import os
 import threading
 from datetime import datetime
-from typing import Optional
 from zoneinfo import ZoneInfo
 
 import requests
@@ -37,7 +36,7 @@ class GlobalContextState:
         self.lock = threading.RLock()
         self.status = "STARTING"
         self.last_error = ""
-        self.updated_at: Optional[str] = None
+        self.updated_at: str | None = None
         self.series: dict = {}
 
     def set_series(self, series: dict) -> None:
@@ -59,7 +58,17 @@ class GlobalContextState:
                 "status": self.status,
                 "market_data_status": "DELAYED",
                 "note": "Official end-of-day/next-business-day FRED releases. Never live ticks.",
-                "not_available": ["gift_nifty", "nasdaq", "dow_jones", "nikkei", "hang_seng", "shanghai", "kospi", "dxy", "gold"],
+                "not_available": [
+                    "gift_nifty",
+                    "nasdaq",
+                    "dow_jones",
+                    "nikkei",
+                    "hang_seng",
+                    "shanghai",
+                    "kospi",
+                    "dxy",
+                    "gold",
+                ],
                 "series": dict(self.series),
                 "updated_at": self.updated_at,
                 "synthetic_data": False,

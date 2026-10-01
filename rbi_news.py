@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Live RBI (Reserve Bank of India) official press releases, notifications,
 and speeches via RBI's own published RSS feeds — a first-party source, no
 scraping, no API key, no ToS restriction (RSS is explicitly meant for
@@ -7,11 +5,12 @@ automated syndication). Raw feed items only: no bullish/bearish
 classification, no market interpretation.
 """
 
+from __future__ import annotations
+
 import threading
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from email.utils import parsedate_to_datetime
-from typing import Optional
 from zoneinfo import ZoneInfo
 
 import requests
@@ -42,17 +41,19 @@ def _parse_rss(xml_text: str, category: str) -> list[dict]:
                 pub_date_iso = parsedate_to_datetime(pub_date_raw).isoformat()
             except (TypeError, ValueError):
                 pub_date_iso = None
-        items.append({
-            "id": guid,
-            "headline": title,
-            "source": "RBI_OFFICIAL",
-            "category": category,
-            "url": link,
-            "summary": description,
-            "published_at": pub_date_iso,
-            "published_at_raw": pub_date_raw or None,
-            "country": "IN",
-        })
+        items.append(
+            {
+                "id": guid,
+                "headline": title,
+                "source": "RBI_OFFICIAL",
+                "category": category,
+                "url": link,
+                "summary": description,
+                "published_at": pub_date_iso,
+                "published_at_raw": pub_date_raw or None,
+                "country": "IN",
+            }
+        )
     return items
 
 
@@ -62,7 +63,7 @@ class RbiNewsState:
         self.lock = threading.RLock()
         self.status = "STARTING"
         self.last_error = ""
-        self.updated_at: Optional[str] = None
+        self.updated_at: str | None = None
         self.items: list[dict] = []
         self.feed_errors: dict[str, str] = {}
 

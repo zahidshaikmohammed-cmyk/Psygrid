@@ -9,14 +9,16 @@ def _payload():
     for i in range(40):
         t = start + timedelta(minutes=i)
         p = 100.0 + i * 0.1
-        candles.append({
-            "timestamp": t.strftime("%Y-%m-%d %H:%M:%S IST"),
-            "open": p,
-            "high": p + 0.2,
-            "low": p - 0.1,
-            "close": p + 0.1,
-            "volume": 1000 + i,
-        })
+        candles.append(
+            {
+                "timestamp": t.strftime("%Y-%m-%d %H:%M:%S IST"),
+                "open": p,
+                "high": p + 0.2,
+                "low": p - 0.1,
+                "close": p + 0.1,
+                "volume": 1000 + i,
+            }
+        )
     return {
         "service": "PSYGRID",
         "schema_version": "4.0",

@@ -1,65 +1,87 @@
+"""Option chains for NIFTY 50 stocks, polled round-robin from Dhan's option-chain API."""
+
 from __future__ import annotations
 
 import threading
 import time
-from datetime import datetime, time as datetime_time
-from typing import Optional
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from config import Instrument, refresh_access_token
-from dhan_auth import DhanTokenRateLimited
+from auth_retry import AuthRetryGuard
+from config import Instrument
+from index_options import _is_market_open, _normalize_chain
 from instrument_master import fetch_nse_equity_security_ids
 from option_analytics import ChainAnalyticsTracker
 
 OPTION_CHAIN_REFRESH_SECONDS = 3.2
 EXPIRY_REFRESH_SECONDS = 1800.0
-STOCK_OPTIONS_MARKET_OPEN = datetime_time(9, 15)
-STOCK_OPTIONS_MARKET_CLOSE = datetime_time(15, 30)
 
 # NIFTY 50 index constituents as of this build. This list is periodically
 # reconstituted by NSE (typically semi-annually) and, like stocks.json's
-# 990-equity universe, needs manual maintenance when that happens - Dhan's
+# equity universe, needs manual maintenance when that happens - Dhan's
 # instrument master has no "index membership" field to resolve this from.
 # Updated 2026-09-28: TATAMOTORS, INDUSINDBK, BRITANNIA, DIVISLAB,
 # HEROMOTOCO, BPCL, UPL, LTIM removed; BEL, ETERNAL, HINDALCO, INDIGO,
 # JIOFIN, MAXHEALTH, TMPV, TRENT added, per user-confirmed current
 # constituents.
 NIFTY50_SYMBOLS = (
-    "ADANIENT", "ADANIPORTS", "APOLLOHOSP", "ASIANPAINT", "AXISBANK", "BAJAJ-AUTO", "BAJAJFINSV", "BAJFINANCE", "BEL", "BHARTIARTL",
-    "CIPLA", "COALINDIA", "DRREDDY", "EICHERMOT", "ETERNAL", "GRASIM", "HCLTECH", "HDFCBANK", "HDFCLIFE", "HINDALCO",
-    "HINDUNILVR", "ICICIBANK", "INDIGO", "INFY", "ITC", "JIOFIN", "JSWSTEEL", "KOTAKBANK", "LT", "M&M",
-    "MARUTI", "MAXHEALTH", "NESTLEIND", "NTPC", "ONGC", "POWERGRID", "RELIANCE", "SBILIFE", "SBIN", "SHRIRAMFIN",
-    "SUNPHARMA", "TATACONSUM", "TATASTEEL", "TCS", "TECHM", "TITAN", "TMPV", "TRENT", "ULTRACEMCO", "WIPRO",
+    "ADANIENT",
+    "ADANIPORTS",
+    "APOLLOHOSP",
+    "ASIANPAINT",
+    "AXISBANK",
+    "BAJAJ-AUTO",
+    "BAJAJFINSV",
+    "BAJFINANCE",
+    "BEL",
+    "BHARTIARTL",
+    "CIPLA",
+    "COALINDIA",
+    "DRREDDY",
+    "EICHERMOT",
+    "ETERNAL",
+    "GRASIM",
+    "HCLTECH",
+    "HDFCBANK",
+    "HDFCLIFE",
+    "HINDALCO",
+    "HINDUNILVR",
+    "ICICIBANK",
+    "INDIGO",
+    "INFY",
+    "ITC",
+    "JIOFIN",
+    "JSWSTEEL",
+    "KOTAKBANK",
+    "LT",
+    "M&M",
+    "MARUTI",
+    "MAXHEALTH",
+    "NESTLEIND",
+    "NTPC",
+    "ONGC",
+    "POWERGRID",
+    "RELIANCE",
+    "SBILIFE",
+    "SBIN",
+    "SHRIRAMFIN",
+    "SUNPHARMA",
+    "TATACONSUM",
+    "TATASTEEL",
+    "TCS",
+    "TECHM",
+    "TITAN",
+    "TMPV",
+    "TRENT",
+    "ULTRACEMCO",
+    "WIPRO",
 )
-
-
-def _is_market_open(now: datetime) -> bool:
-    return now.weekday() < 5 and STOCK_OPTIONS_MARKET_OPEN <= now.time() < STOCK_OPTIONS_MARKET_CLOSE
-
-
-def _normalize_chain(raw: dict) -> list[dict]:
-    chain = raw.get("oc", {}) if isinstance(raw, dict) else {}
-    if not isinstance(chain, dict):
-        return []
-    rows: list[dict] = []
-    for strike_key, pair in chain.items():
-        if not isinstance(pair, dict):
-            continue
-        try:
-            strike = float(strike_key)
-        except (TypeError, ValueError):
-            continue
-        ce = pair.get("ce") if isinstance(pair.get("ce"), dict) else None
-        pe = pair.get("pe") if isinstance(pair.get("pe"), dict) else None
-        rows.append({"strike": strike, "ce": dict(ce) if ce else None, "pe": dict(pe) if pe else None})
-    rows.sort(key=lambda row: row["strike"])
-    return rows
 
 
 class StockOptionState:
     """RAM-only per-symbol state for one NIFTY 50 stock's option chain."""
 
-    def __init__(self, symbol: str, settings, security_id: Optional[str] = None, exchange_segment: str = "NSE_EQ"):
+    def __init__(self, symbol: str, settings, security_id: str | None = None, exchange_segment: str = "NSE_EQ"):
         self.symbol = symbol
         self.security_id = security_id
         self.exchange_segment = exchange_segment
@@ -67,15 +89,15 @@ class StockOptionState:
         self.lock = threading.RLock()
         self.status = "PENDING"
         self.last_error = ""
-        self.updated_at: Optional[str] = None
-        self.underlying_ltp: Optional[float] = None
+        self.updated_at: str | None = None
+        self.underlying_ltp: float | None = None
         self.expiry_list: list[str] = []
-        self.expiry: Optional[str] = None
+        self.expiry: str | None = None
         self.rows: list[dict] = []
         self.fetch_count = 0
         self.analytics: dict = {}
 
-    def set_snapshot(self, payload: dict, expiry_list: list[str], expiry: str, analytics: Optional[dict] = None) -> None:
+    def set_snapshot(self, payload: dict, expiry_list: list[str], expiry: str, analytics: dict | None = None) -> None:
         with self.lock:
             self.underlying_ltp = payload.get("last_price")
             self.expiry_list = list(expiry_list)
@@ -130,7 +152,7 @@ class StockOptionsManager:
     ~3.2s-per-request cadence means a full rotation across all of them takes
     roughly len(resolved) * 3.2s - by design, not a bug. Resolves each
     symbol's NSE equity security ID independently, directly against Dhan's
-    instrument master - deliberately not reusing the 990/989-equity
+    instrument master - deliberately not reusing the equity-universe
     universe's already-resolved instrument list, since that list's coverage
     is unrelated to NIFTY 50 membership (two current constituents, e.g.
     SBILIFE and SHRIRAMFIN, are not part of it) and this domain should not
@@ -143,9 +165,8 @@ class StockOptionsManager:
         self.settings = settings
         self.dhan_api = dhan_api
         self.stop_event = threading.Event()
-        self.thread: Optional[threading.Thread] = None
-        self._auth_retry_at = 0.0
-        self._auth_lock = threading.Lock()
+        self.thread: threading.Thread | None = None
+        self._auth = AuthRetryGuard(settings, dhan_api)
 
         self.instruments: dict[str, object] = {}
         self.states: dict[str, StockOptionState] = {}
@@ -170,8 +191,10 @@ class StockOptionsManager:
 
         self._expiry_loaded_at: dict[str, float] = {}
         self._expiries: dict[str, list[str]] = {}
-        self._expiry: dict[str, Optional[str]] = {}
-        self._trackers: dict[str, ChainAnalyticsTracker] = {symbol: ChainAnalyticsTracker() for symbol in self.instruments}
+        self._expiry: dict[str, str | None] = {}
+        self._trackers: dict[str, ChainAnalyticsTracker] = {
+            symbol: ChainAnalyticsTracker() for symbol in self.instruments
+        }
 
     def start(self) -> None:
         if self.thread and self.thread.is_alive():
@@ -186,34 +209,6 @@ class StockOptionsManager:
             self.thread.join(timeout=8)
         self.thread = None
 
-    @staticmethod
-    def _looks_like_auth_failure(exc: Exception) -> bool:
-        text = str(exc).lower()
-        return any(token in text for token in ("401", "807", "808", "809", "810", "expired", "invalid token", "authentication failed", "unauthorized"))
-
-    def _call_with_auth_retry(self, operation):
-        now = time.monotonic()
-        with self._auth_lock:
-            if now < self._auth_retry_at:
-                raise RuntimeError(f"Dhan authentication refresh cooldown active: {int(self._auth_retry_at - now)}s")
-        try:
-            return operation()
-        except Exception as first_exc:
-            if not self._looks_like_auth_failure(first_exc):
-                raise
-            now = time.monotonic()
-            with self._auth_lock:
-                if now < self._auth_retry_at:
-                    raise RuntimeError(f"Dhan authentication refresh cooldown active: {int(self._auth_retry_at - now)}s") from first_exc
-                try:
-                    refresh_access_token(self.settings, force=True)
-                except DhanTokenRateLimited as exc:
-                    self._auth_retry_at = time.monotonic() + exc.retry_after
-                    raise
-                self.dhan_api.settings = self.settings
-                self._auth_retry_at = 0.0
-            return operation()
-
     def _poll_one(self, symbol: str) -> None:
         item = self.instruments[symbol]
         state = self.states[symbol]
@@ -221,7 +216,7 @@ class StockOptionsManager:
             loaded_at = self._expiry_loaded_at.get(symbol, 0.0)
             expiries = self._expiries.get(symbol) or []
             if not expiries or time.monotonic() - loaded_at >= EXPIRY_REFRESH_SECONDS:
-                expiries = self._call_with_auth_retry(lambda: self.dhan_api.option_expiry_list(item))
+                expiries = self._auth.call(lambda: self.dhan_api.option_expiry_list(item))
                 if not expiries:
                     raise RuntimeError(f"DHAN_{symbol}_OPTIONS_NO_ACTIVE_EXPIRIES")
                 self._expiries[symbol] = expiries
@@ -231,7 +226,7 @@ class StockOptionsManager:
                 self._expiry[symbol] = expiries[0]
             expiry = self._expiry[symbol]
 
-            raw = self._call_with_auth_retry(lambda: self.dhan_api.option_chain(item, expiry))
+            raw = self._auth.call(lambda: self.dhan_api.option_chain(item, expiry))
             payload = raw.get("data") if isinstance(raw, dict) else None
             if not isinstance(payload, dict):
                 raise RuntimeError(f"DHAN_{symbol}_OPTIONS_INVALID_RESPONSE")
@@ -259,7 +254,9 @@ class StockOptionsManager:
         key = symbol.strip().upper()
         if key not in self.states:
             return {
-                "service": "PSYGRID", "symbol": key, "status": "UNKNOWN_SYMBOL",
+                "service": "PSYGRID",
+                "symbol": key,
+                "status": "UNKNOWN_SYMBOL",
                 "error": "not part of the NIFTY 50 stock-options universe",
             }
         return self.states[key].snapshot()

@@ -1,3 +1,5 @@
+"""Fixed production configuration, the equity symbol universe, and Dhan credential loading."""
+
 from __future__ import annotations
 
 import base64
@@ -6,15 +8,13 @@ import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List
 
-from dhan_auth import generate_access_token, token_from_environment
 from dhan_auth import refresh_access_token as coordinated_refresh_access_token
+from dhan_auth import token_from_environment
 from instrument_master import fetch_nse_equity_security_ids
 
-
 # Psygrid is intentionally a fixed production configuration. Market-data
-# behavior must not change because a stale/leftover Render environment variable
+# behavior must not change because a stale/leftover environment variable
 # is present from an earlier experiment.
 UNIVERSE_SIZE = 989
 TIMEZONE = "Asia/Kolkata"
@@ -85,15 +85,13 @@ def _load_symbol_universe() -> list[str]:
         raise RuntimeError("stocks.json must contain a non-empty 'symbols' array")
     normalized = [str(symbol).strip().upper() for symbol in symbols if str(symbol).strip()]
     if len(normalized) != UNIVERSE_SIZE:
-        raise RuntimeError(
-            f"stocks.json must contain exactly {UNIVERSE_SIZE} unique symbols; got {len(normalized)}"
-        )
+        raise RuntimeError(f"stocks.json must contain exactly {UNIVERSE_SIZE} unique symbols; got {len(normalized)}")
     if len(normalized) != len(set(normalized)):
         raise RuntimeError("stocks.json contains duplicate symbols")
     return normalized
 
 
-def load_instruments() -> List[Instrument]:
+def load_instruments() -> list[Instrument]:
     symbols = _load_symbol_universe()
     security_ids = fetch_nse_equity_security_ids(symbols)
     if len(security_ids) != UNIVERSE_SIZE:

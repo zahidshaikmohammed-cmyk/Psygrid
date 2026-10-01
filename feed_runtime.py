@@ -1,3 +1,5 @@
+"""Production equity feed: the base WebSocket feed plus stale-instrument resubscribe and REST recovery."""
+
 from __future__ import annotations
 
 import asyncio
@@ -7,7 +9,6 @@ import time
 
 from dhan_api import DhanAPI
 from feed import LiveFeed as BaseLiveFeed
-from self_keepalive import SelfKeepAlive
 
 
 class LiveFeed(BaseLiveFeed):
@@ -23,20 +24,25 @@ class LiveFeed(BaseLiveFeed):
         self._last_rest_fallback = 0.0
         self._health_stop = threading.Event()
         self._health_thread: threading.Thread | None = None
-        self.self_keepalive = SelfKeepAlive("https://psygrid.onrender.com/public/live-a.json")
 
     def _market_hours(self) -> bool:
         return self.state.session_status == "LIVE"
 
     async def _resubscribe_one(self, feed, item) -> None:
-        await feed.ws.send(json.dumps({
-            "RequestCode": 21,
-            "InstrumentCount": 1,
-            "InstrumentList": [{
-                "ExchangeSegment": item.exchange_segment,
-                "SecurityId": str(item.security_id),
-            }],
-        }))
+        await feed.ws.send(
+            json.dumps(
+                {
+                    "RequestCode": 21,
+                    "InstrumentCount": 1,
+                    "InstrumentList": [
+                        {
+                            "ExchangeSegment": item.exchange_segment,
+                            "SecurityId": str(item.security_id),
+                        }
+                    ],
+                }
+            )
+        )
 
     def _health_pass(self, feed) -> None:
         if not self._market_hours() or self._stop_requested.is_set():
@@ -101,12 +107,10 @@ class LiveFeed(BaseLiveFeed):
         if self._thread and self._thread.is_alive():
             return
         self._stop_requested.clear()
-        self.self_keepalive.start()
         self._thread = threading.Thread(target=self._run, daemon=True, name="psygrid-dhan-feed")
         self._thread.start()
 
     def stop(self) -> None:
         self._stop_requested.set()
         self._health_stop.set()
-        self.self_keepalive.stop()
         super().stop()

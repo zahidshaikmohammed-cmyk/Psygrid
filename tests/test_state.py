@@ -15,9 +15,7 @@ class CandleStateTests(unittest.TestCase):
         self.state.seed_cumulative_volume("123", 1000)
 
     def _quote(self, ltt, ltp=100.0, volume=1001):
-        self.state.update_quote(
-            "123", {"LTP": ltp, "LTT_EPOCH": ltt, "volume": volume, "LTQ": 1}
-        )
+        self.state.update_quote("123", {"LTP": ltp, "LTT_EPOCH": ltt, "volume": volume, "LTQ": 1})
         self.state.record_live_quote("123", ltt)
 
     def test_first_quote_creates_current_1m_candle_only(self):

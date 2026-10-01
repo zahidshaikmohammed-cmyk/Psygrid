@@ -18,7 +18,7 @@ import threading
 import time
 from types import SimpleNamespace
 
-from index_layer import IndexLayerFeed, IndexInstrument, IndexState
+from index_layer import IndexInstrument, IndexLayerFeed, IndexState
 
 
 def _settings():

@@ -1,15 +1,19 @@
+"""20-level option depth for NIFTY 50 stocks over one shared, rotating Dhan depth WebSocket."""
+
 from __future__ import annotations
 
+import contextlib
 import json
-import struct
 import threading
 import time
 from dataclasses import dataclass
-from datetime import datetime, time as datetime_time
-from typing import Optional
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import websocket
+
+from index_depth import _parse_depth_message
+from index_options import _is_market_open
 
 STOCK_DEPTH_EXCHANGE_SEGMENT = "NSE_FNO"
 STOCK_DEPTH_INSTRUMENT = "OPTSTK"
@@ -31,8 +35,6 @@ STOCK_DEPTH_SYMBOLS_PER_BATCH = STOCK_DEPTH_MAX_INSTRUMENTS // STOCK_DEPTH_CONTR
 STOCK_DEPTH_BATCH_SECONDS = 30.0
 STOCK_DEPTH_RECONNECT_SECONDS = 3.0
 STOCK_DEPTH_QUOTE_REFRESH_SECONDS = 1.0
-STOCK_DEPTH_MARKET_OPEN = datetime_time(9, 15)
-STOCK_DEPTH_MARKET_CLOSE = datetime_time(15, 30)
 
 
 @dataclass(frozen=True)
@@ -42,10 +44,6 @@ class StockDepthContract:
     strike: float
     option_type: str
     expiry: str
-
-
-def _is_market_open(now: datetime) -> bool:
-    return now.weekday() < 5 and STOCK_DEPTH_MARKET_OPEN <= now.time() < STOCK_DEPTH_MARKET_CLOSE
 
 
 class StockDepthState:
@@ -60,9 +58,9 @@ class StockDepthState:
         self.lock = threading.RLock()
         self.status = "PENDING"
         self.last_error = ""
-        self.updated_at: Optional[str] = None
-        self.expiry: Optional[str] = None
-        self.underlying_ltp: Optional[float] = None
+        self.updated_at: str | None = None
+        self.expiry: str | None = None
+        self.underlying_ltp: float | None = None
         self.contracts: dict[str, dict] = {}
         self.rotation_status = "IDLE"
         self.packet_count = 0
@@ -72,10 +70,17 @@ class StockDepthState:
             self.expiry = expiry
             allowed = {c.security_id: c for c in contracts}
             self.contracts = {
-                security_id: self.contracts.get(security_id, {
-                    "security_id": security_id, "strike": c.strike, "option_type": c.option_type,
-                    "expiry": c.expiry, "bid": [], "ask": [],
-                })
+                security_id: self.contracts.get(
+                    security_id,
+                    {
+                        "security_id": security_id,
+                        "strike": c.strike,
+                        "option_type": c.option_type,
+                        "expiry": c.expiry,
+                        "bid": [],
+                        "ask": [],
+                    },
+                )
                 for security_id, c in allowed.items()
             }
 
@@ -125,14 +130,23 @@ class StockDepthState:
             rows = []
             for row in self.contracts.values():
                 cleaned = {
-                    key: (list(value) if key in ("bid", "ask") else dict(value) if key == "ohlc" and isinstance(value, dict) else value)
+                    key: (
+                        list(value)
+                        if key in ("bid", "ask")
+                        else dict(value)
+                        if key == "ohlc" and isinstance(value, dict)
+                        else value
+                    )
                     for key, value in row.items()
                 }
                 bid_levels = cleaned.get("bid") or []
                 ask_levels = cleaned.get("ask") or []
                 cleaned["crossed_book"] = bool(
-                    bid_levels and ask_levels and bid_levels[0].get("price") is not None
-                    and ask_levels[0].get("price") is not None and bid_levels[0]["price"] > ask_levels[0]["price"]
+                    bid_levels
+                    and ask_levels
+                    and bid_levels[0].get("price") is not None
+                    and ask_levels[0].get("price") is not None
+                    and bid_levels[0]["price"] > ask_levels[0]["price"]
                 )
                 rows.append(cleaned)
             rows.sort(key=lambda row: (row.get("strike", 0.0), row.get("option_type", "")))
@@ -163,7 +177,9 @@ class StockDepthState:
             }
 
 
-def _select_contracts_for_symbol(symbol: str, option_state) -> tuple[list[StockDepthContract], Optional[str], Optional[float]]:
+def _select_contracts_for_symbol(
+    symbol: str, option_state
+) -> tuple[list[StockDepthContract], str | None, float | None]:
     snapshot = option_state.snapshot()
     expiry = snapshot.get("expiry")
     underlying_ltp = snapshot.get("underlying_ltp")
@@ -181,38 +197,22 @@ def _select_contracts_for_symbol(symbol: str, option_state) -> tuple[list[StockD
             contract = row.get(key)
             security_id = contract.get("security_id") if isinstance(contract, dict) else None
             if security_id:
-                normalized.append((abs(float(strike) - float(underlying_ltp)), float(strike), option_type, str(security_id)))
+                normalized.append(
+                    (abs(float(strike) - float(underlying_ltp)), float(strike), option_type, str(security_id))
+                )
     if not normalized:
         return [], expiry, float(underlying_ltp)
-    strikes_sorted = sorted({item[1] for item in normalized}, key=lambda strike: (abs(strike - float(underlying_ltp)), strike))
+    strikes_sorted = sorted(
+        {item[1] for item in normalized}, key=lambda strike: (abs(strike - float(underlying_ltp)), strike)
+    )
     selected_strikes = set(strikes_sorted[:STOCK_DEPTH_STRIKES_PER_SYMBOL])
     contracts = [
         StockDepthContract(security_id=item[3], symbol=symbol, strike=item[1], option_type=item[2], expiry=str(expiry))
-        for item in normalized if item[1] in selected_strikes
+        for item in normalized
+        if item[1] in selected_strikes
     ]
     contracts.sort(key=lambda item: (abs(item.strike - float(underlying_ltp)), item.strike, item.option_type))
     return contracts[:STOCK_DEPTH_CONTRACTS_PER_SYMBOL], str(expiry), float(underlying_ltp)
-
-
-def _parse_depth_message(data: bytes) -> list[tuple[str, str, list[dict]]]:
-    messages = []
-    offset = 0
-    while offset + 12 <= len(data):
-        message_length = struct.unpack_from("<H", data, offset)[0]
-        if message_length < 12 or offset + message_length > len(data):
-            break
-        response_code = data[offset + 2]
-        security_id = str(struct.unpack_from("<i", data, offset + 4)[0])
-        if response_code in (41, 51) and message_length >= 332:
-            side = "bid" if response_code == 41 else "ask"
-            levels = []
-            base = offset + 12
-            for index in range(STOCK_DEPTH_LEVELS):
-                price, quantity, orders = struct.unpack_from("<dII", data, base + index * 16)
-                levels.append({"level": index + 1, "price": float(price), "quantity": int(quantity), "orders": int(orders)})
-            messages.append((security_id, side, levels))
-        offset += message_length
-    return messages
 
 
 class StockDepthManager:
@@ -230,7 +230,7 @@ class StockDepthManager:
             symbol: StockDepthState(symbol, settings) for symbol in stock_options_manager.states
         }
         self.stop_event = threading.Event()
-        self.thread: Optional[threading.Thread] = None
+        self.thread: threading.Thread | None = None
         self.ws = None
         self._contracts: list[StockDepthContract] = []
         self._batch_symbols: list[str] = []
@@ -247,10 +247,8 @@ class StockDepthManager:
         self.stop_event.set()
         ws = self.ws
         if ws is not None:
-            try:
+            with contextlib.suppress(Exception):
                 ws.close()
-            except Exception:
-                pass
         if self.thread and self.thread is not threading.current_thread():
             self.thread.join(timeout=8)
         self.thread = None
@@ -260,7 +258,10 @@ class StockDepthManager:
         symbols = list(self.stock_options_manager.instruments.keys())
         if not symbols:
             return []
-        return [symbols[i:i + STOCK_DEPTH_SYMBOLS_PER_BATCH] for i in range(0, len(symbols), STOCK_DEPTH_SYMBOLS_PER_BATCH)]
+        return [
+            symbols[i : i + STOCK_DEPTH_SYMBOLS_PER_BATCH]
+            for i in range(0, len(symbols), STOCK_DEPTH_SYMBOLS_PER_BATCH)
+        ]
 
     def _refresh_contracts_for_batch(self, batch_symbols: list[str]) -> list[StockDepthContract]:
         contracts: list[StockDepthContract] = []
@@ -280,10 +281,12 @@ class StockDepthManager:
         return f"wss://depth-api-feed.dhan.co/twentydepth?token={self.settings.access_token}&clientId={self.settings.client_id}&authType=2"
 
     def _subscribe_payload(self) -> str:
-        instruments = [{"ExchangeSegment": STOCK_DEPTH_EXCHANGE_SEGMENT, "SecurityId": c.security_id} for c in self._contracts]
+        instruments = [
+            {"ExchangeSegment": STOCK_DEPTH_EXCHANGE_SEGMENT, "SecurityId": c.security_id} for c in self._contracts
+        ]
         return json.dumps({"RequestCode": 23, "InstrumentCount": len(instruments), "InstrumentList": instruments})
 
-    def _symbol_for_security_id(self, security_id: str) -> Optional[str]:
+    def _symbol_for_security_id(self, security_id: str) -> str | None:
         for contract in self._contracts:
             if contract.security_id == security_id:
                 return contract.symbol
@@ -306,10 +309,8 @@ class StockDepthManager:
                 symbol = self._symbol_for_security_id(security_id)
                 if symbol:
                     self.states[symbol].update_depth(security_id, side, levels)
-        try:
+        with contextlib.suppress(Exception):
             self.ws.close()
-        except Exception:
-            pass
 
     def _quote_loop(self) -> None:
         while not self.stop_event.is_set():
@@ -317,7 +318,11 @@ class StockDepthManager:
             if contracts:
                 try:
                     instruments = [
-                        type("DepthInstrument", (), {"security_id": c.security_id, "exchange_segment": STOCK_DEPTH_EXCHANGE_SEGMENT})()
+                        type(
+                            "DepthInstrument",
+                            (),
+                            {"security_id": c.security_id, "exchange_segment": STOCK_DEPTH_EXCHANGE_SEGMENT},
+                        )()
                         for c in contracts
                     ]
                     quotes = self.dhan_api.quote_snapshot(instruments)
@@ -366,7 +371,9 @@ class StockDepthManager:
         key = symbol.strip().upper()
         if key not in self.states:
             return {
-                "service": "PSYGRID", "symbol": key, "status": "UNKNOWN_SYMBOL",
+                "service": "PSYGRID",
+                "symbol": key,
+                "status": "UNKNOWN_SYMBOL",
                 "error": "not part of the NIFTY 50 stock-options universe",
             }
         return self.states[key].snapshot()
@@ -376,8 +383,11 @@ class StockDepthManager:
         for symbol, state in self.states.items():
             with state.lock:
                 entry = {
-                    "symbol": symbol, "status": state.status, "rotation_status": state.rotation_status,
-                    "contract_count": len(state.contracts), "updated_at": state.updated_at,
+                    "symbol": symbol,
+                    "status": state.status,
+                    "rotation_status": state.rotation_status,
+                    "contract_count": len(state.contracts),
+                    "updated_at": state.updated_at,
                 }
                 if state.last_error:
                     entry["error"] = state.last_error

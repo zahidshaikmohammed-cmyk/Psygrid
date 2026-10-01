@@ -1,8 +1,9 @@
+"""JSON payload builders for the equity endpoints: candle cleaning, de-duplication and IST timestamps."""
+
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 from config import UNIVERSE_SIZE
@@ -20,27 +21,27 @@ def _price(value):
         return value
 
 
-def _ist_timestamp(value) -> Optional[str]:
+def _ist_timestamp(value) -> str | None:
     if value in (None, ""):
         return None
     try:
         if isinstance(value, (int, float)):
-            dt = datetime.fromtimestamp(float(value), timezone.utc).astimezone(PUBLIC_TIMEZONE)
+            dt = datetime.fromtimestamp(float(value), UTC).astimezone(PUBLIC_TIMEZONE)
         else:
             text = str(value).strip()
             try:
-                dt = datetime.fromtimestamp(float(text), timezone.utc).astimezone(PUBLIC_TIMEZONE)
+                dt = datetime.fromtimestamp(float(text), UTC).astimezone(PUBLIC_TIMEZONE)
             except ValueError:
                 parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
                 if parsed.tzinfo is None:
-                    parsed = parsed.replace(tzinfo=timezone.utc)
+                    parsed = parsed.replace(tzinfo=UTC)
                 dt = parsed.astimezone(PUBLIC_TIMEZONE)
         return dt.strftime("%Y-%m-%d %H:%M:%S IST")
     except (TypeError, ValueError, OSError, OverflowError):
         return None
 
 
-def _minute_key(row: dict) -> Optional[int]:
+def _minute_key(row: dict) -> int | None:
     value = row.get("epoch")
     if value is None:
         value = row.get("timestamp")
@@ -100,13 +101,15 @@ def _stock_payload(state, security_id: str, meta: dict) -> dict:
     }
 
 
-def market_live_json(state, stock_range: Optional[tuple[int, int]] = None, preserve_instrument_order: bool = False) -> dict:
+def market_live_json(
+    state, stock_range: tuple[int, int] | None = None, preserve_instrument_order: bool = False
+) -> dict:
     with state.lock:
         items = list(state.instruments.items())
         if not preserve_instrument_order:
             items.sort(key=lambda item: item[1]["symbol"])
         if stock_range is not None:
-            items = items[stock_range[0]:stock_range[1]]
+            items = items[stock_range[0] : stock_range[1]]
     stocks = {meta["symbol"]: _stock_payload(state, security_id, meta) for security_id, meta in items}
     return {
         "service": "PSYGRID",

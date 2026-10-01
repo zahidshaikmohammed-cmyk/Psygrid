@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from dhan_auth import DhanTokenRateLimited
-from nifty_options import NiftyOptionsManager
+from index_options import NIFTY, IndexOptionsManager
 
 
 class FakeDhanAPI:
@@ -22,13 +22,13 @@ class NiftyOptionsAuthTests(unittest.TestCase):
     def test_401_refreshes_token_and_retries(self):
         settings = SimpleNamespace(timezone="Asia/Kolkata", access_token="stale")
         api = FakeDhanAPI()
-        manager = NiftyOptionsManager(settings, api)
+        manager = IndexOptionsManager(settings, api, NIFTY)
 
         def refresh(current_settings, force=False):
             self.assertTrue(force)
             current_settings.access_token = "fresh"
 
-        with patch("nifty_options.refresh_access_token", side_effect=refresh) as refresh_mock:
+        with patch("auth_retry.refresh_access_token", side_effect=refresh) as refresh_mock:
             expiries = manager._load_expiries()
 
         self.assertEqual(expiries, ["2026-09-17"])
@@ -39,10 +39,10 @@ class NiftyOptionsAuthTests(unittest.TestCase):
     def test_token_generation_rate_limit_enters_cooldown(self):
         settings = SimpleNamespace(timezone="Asia/Kolkata", access_token="stale")
         api = FakeDhanAPI()
-        manager = NiftyOptionsManager(settings, api)
+        manager = IndexOptionsManager(settings, api, NIFTY)
 
         with patch(
-            "nifty_options.refresh_access_token",
+            "auth_retry.refresh_access_token",
             side_effect=DhanTokenRateLimited("rate limited", retry_after=120),
         ) as refresh_mock:
             with self.assertRaises(DhanTokenRateLimited):

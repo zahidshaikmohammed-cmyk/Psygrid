@@ -1,0 +1,34 @@
+[project]
+name = "psygrid"
+version = "1.0.0"
+description = "Live, machine-readable NSE/BSE market-data service built on the Dhan v2 Data APIs."
+readme = "README.md"
+requires-python = ">=3.12"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+extend-exclude = [".venv"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # import sorting
+    "B",   # bugbear
+    "UP",  # pyupgrade
+    "SIM", # simplify
+    "C4",  # comprehensions
+    "RUF", # ruff-specific
+]
+ignore = [
+    "E501", # line length is the formatter's job
+]
+
+[tool.ruff.lint.isort]
+known-first-party = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

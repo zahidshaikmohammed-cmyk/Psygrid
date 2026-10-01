@@ -6,7 +6,16 @@ from global_context import GlobalContextManager, GlobalContextState
 
 def test_snapshot_always_marks_delayed():
     state = GlobalContextState(SimpleNamespace(timezone="Asia/Kolkata"))
-    state.set_series({"sp500": {"series_id": "SP500", "value": 6500.0, "source_date": "2026-09-18", "source": "FRED_FEDERAL_RESERVE_BANK_OF_ST_LOUIS"}})
+    state.set_series(
+        {
+            "sp500": {
+                "series_id": "SP500",
+                "value": 6500.0,
+                "source_date": "2026-09-18",
+                "source": "FRED_FEDERAL_RESERVE_BANK_OF_ST_LOUIS",
+            }
+        }
+    )
     snap = state.snapshot()
     assert snap["market_data_status"] == "DELAYED"
     assert snap["series"]["sp500"]["value"] == 6500.0

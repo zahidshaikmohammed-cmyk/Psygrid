@@ -1,12 +1,15 @@
+"""The 16-index layer: one shared Dhan WebSocket for index ticks plus native historical 5m/15m/1h candles."""
+
 from __future__ import annotations
 
+import contextlib
 import csv
 import io
 import threading
 import time
 from dataclasses import dataclass
-from datetime import datetime, time as dt_time, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
+from datetime import time as dt_time
 from zoneinfo import ZoneInfo
 
 import requests
@@ -43,7 +46,10 @@ INDEX_SPECS = {
     "nifty500": ("NIFTY_500", ("NIFTY 500", "NIFTY500", "NIFTY_500")),
     "niftymidcap100": ("NIFTY_MIDCAP_100", ("NIFTY MIDCAP 100", "NIFTY_MIDCAP_100", "NIFTYMIDCAP100")),
     "niftysmallcap100": ("NIFTY_SMALLCAP_100", ("NIFTY SMALLCAP 100", "NIFTY_SMALLCAP_100", "NIFTYSMALLCAP100")),
-    "finnifty": ("NIFTY_FIN_SERVICE", ("NIFTY FIN SERVICE", "NIFTY FINANCIAL SERVICES", "NIFTY_FIN_SERVICE", "NIFTYFINSERVICE")),
+    "finnifty": (
+        "NIFTY_FIN_SERVICE",
+        ("NIFTY FIN SERVICE", "NIFTY FINANCIAL SERVICES", "NIFTY_FIN_SERVICE", "NIFTYFINSERVICE"),
+    ),
     "indiavix": ("INDIA VIX", ("INDIA VIX", "INDIAVIX")),
     "niftyit": ("NIFTY_IT", ("NIFTY IT", "NIFTY_IT", "NIFTYIT")),
     "niftyauto": ("NIFTY_AUTO", ("NIFTY AUTO", "NIFTY_AUTO", "NIFTYAUTO")),
@@ -55,10 +61,12 @@ INDEX_SPECS = {
     "niftyinfra": ("NIFTY_INFRA", ("NIFTY INFRA", "NIFTY_INFRA", "NIFTYINFRA")),
 }
 
+
 def _norm(value: object) -> str:
     return "".join(ch for ch in str(value or "").upper() if ch.isalnum())
 
-def _resolve_one(key: str) -> tuple["IndexInstrument | None", str]:
+
+def _resolve_one(key: str) -> tuple[IndexInstrument | None, str]:
     _symbol, aliases = INDEX_SPECS[key]
     fallback = INDEX_FALLBACK_IDS.get(key)
     if fallback:
@@ -78,7 +86,11 @@ def _resolve_one(key: str) -> tuple["IndexInstrument | None", str]:
             security_id = str(row.get("SEM_SMST_SECURITY_ID", "")).strip()
             if not security_id:
                 continue
-            values = (row.get("SEM_TRADING_SYMBOL", ""), row.get("SEM_CUSTOM_SYMBOL", ""), row.get("SM_SYMBOL_NAME", ""))
+            values = (
+                row.get("SEM_TRADING_SYMBOL", ""),
+                row.get("SEM_CUSTOM_SYMBOL", ""),
+                row.get("SM_SYMBOL_NAME", ""),
+            )
             if {_norm(v) for v in values} & wanted:
                 exchange = str(row.get("SEM_EXM_EXCH_ID", "")).strip().upper()
                 matches[(security_id, exchange, INDEX_INSTRUMENT)] = IndexInstrument(
@@ -93,7 +105,7 @@ def _resolve_one(key: str) -> tuple["IndexInstrument | None", str]:
         return None, f"{type(exc).__name__}: {exc}"
 
 
-def _resolve_all() -> tuple[dict[str, "IndexInstrument"], dict[str, str]]:
+def _resolve_all() -> tuple[dict[str, IndexInstrument], dict[str, str]]:
     resolved: dict[str, IndexInstrument] = {}
     errors: dict[str, str] = {}
     for key in INDEX_SPECS:
@@ -104,11 +116,13 @@ def _resolve_all() -> tuple[dict[str, "IndexInstrument"], dict[str, str]]:
             errors[key] = error
     return resolved, errors
 
+
 @dataclass(frozen=True)
 class IndexInstrument:
     security_id: str
     exchange_segment: str
     instrument: str = INDEX_INSTRUMENT
+
 
 class IndexState:
     def __init__(self, settings, key: str, symbol: str, instrument: IndexInstrument):
@@ -118,18 +132,18 @@ class IndexState:
         self.instrument = instrument
         self.tz = ZoneInfo(settings.timezone)
         self.lock = threading.RLock()
-        self.session_date: Optional[str] = None
+        self.session_date: str | None = None
         self.session_status = "CLOSED"
         self.feed_status = "STOPPED"
         self.last_feed_error = ""
-        self.last_ltp: Optional[float] = None
-        self.last_ltt: Optional[int] = None
-        self.last_tick_received_epoch: Optional[float] = None
+        self.last_ltp: float | None = None
+        self.last_ltt: int | None = None
+        self.last_tick_received_epoch: float | None = None
         self.live_candles: list[dict] = []
-        self.current_1m: Optional[dict] = None
+        self.current_1m: dict | None = None
         self.historical: dict[str, list[dict]] = {}
         self.prev_cumulative_volume = 0
-        self.last_trade_key: Optional[tuple] = None
+        self.last_trade_key: tuple | None = None
         self.feed_messages = 0
         self.quote_packets = 0
         self.last_backfill_error = ""
@@ -193,9 +207,15 @@ class IndexState:
             candle = self.current_1m
             if candle is None:
                 self.current_1m = {
-                    "timestamp": minute_key, "epoch": minute_key,
-                    "open": ltp, "high": ltp, "low": ltp, "close": ltp,
-                    "volume": delta_volume, "source": "DHAN_WEBSOCKET_FULL", "complete": False,
+                    "timestamp": minute_key,
+                    "epoch": minute_key,
+                    "open": ltp,
+                    "high": ltp,
+                    "low": ltp,
+                    "close": ltp,
+                    "volume": delta_volume,
+                    "source": "DHAN_WEBSOCKET_FULL",
+                    "complete": False,
                 }
             else:
                 candle["high"] = max(float(candle["high"]), ltp)
@@ -240,6 +260,7 @@ class IndexState:
                 self._store_complete(candle)
                 self.current_1m = None
 
+
 class IndexLayerFeed:
     NO_MESSAGE_WATCHDOG_SECONDS = 25.0
     NORMAL_INITIAL_BACKOFF = 5.0
@@ -250,8 +271,8 @@ class IndexLayerFeed:
         self.settings = settings
         self.states = states
         self._feed = None
-        self._thread: Optional[threading.Thread] = None
-        self._watchdog: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
+        self._watchdog: threading.Thread | None = None
         self._stop = threading.Event()
         self._connection_stop = threading.Event()
         self._connected_event = threading.Event()
@@ -269,13 +290,16 @@ class IndexLayerFeed:
         # fields that don't exist for an index, and the server sends nothing
         # at all for a Full-mode subscription on this segment.
         instruments = [
-            (MarketFeed.IDX, state.instrument.security_id, MarketFeed.Ticker)
-            for state in self.states.values()
+            (MarketFeed.IDX, state.instrument.security_id, MarketFeed.Ticker) for state in self.states.values()
         ]
         return MarketFeed(
-            context, instruments, version="v2",
-            on_connect=self._on_connect, on_message=self._on_message,
-            on_close=self._on_close, on_error=self._on_error,
+            context,
+            instruments,
+            version="v2",
+            on_connect=self._on_connect,
+            on_message=self._on_message,
+            on_close=self._on_close,
+            on_error=self._on_error,
         )
 
     FUTURE_TIMESTAMP_TOLERANCE_SECONDS = 5
@@ -284,13 +308,13 @@ class IndexLayerFeed:
     def _timezone_offset_seconds(timezone_name: str, now_epoch: float) -> int:
         try:
             tz = ZoneInfo(timezone_name)
-            offset = datetime.fromtimestamp(now_epoch, timezone.utc).astimezone(tz).utcoffset()
+            offset = datetime.fromtimestamp(now_epoch, UTC).astimezone(tz).utcoffset()
             return int(offset.total_seconds()) if offset is not None else 0
         except Exception:
             return 0
 
     @classmethod
-    def _normalize_future_epoch(cls, epoch: int, timezone_name: str, now_epoch: float) -> Optional[int]:
+    def _normalize_future_epoch(cls, epoch: int, timezone_name: str, now_epoch: float) -> int | None:
         if epoch <= int(now_epoch) + cls.FUTURE_TIMESTAMP_TOLERANCE_SECONDS:
             return epoch
         offset = cls._timezone_offset_seconds(timezone_name, now_epoch)
@@ -301,7 +325,7 @@ class IndexLayerFeed:
             return corrected if corrected <= int(now_epoch) + cls.FUTURE_TIMESTAMP_TOLERANCE_SECONDS else None
         return None
 
-    def _parse_ltt(self, value) -> Optional[int]:
+    def _parse_ltt(self, value) -> int | None:
         # Dhan reports LTT as a bare HH:MM:SS wall-clock string in the feed's
         # own timezone (Asia/Kolkata) - NOT UTC. Mislabeling it as UTC here
         # previously added a spurious +5:30 to every tick, which is exactly
@@ -337,7 +361,7 @@ class IndexLayerFeed:
         try:
             parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
             if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=timezone.utc)
+                parsed = parsed.replace(tzinfo=UTC)
             return self._normalize_future_epoch(int(parsed.timestamp()), timezone_name, now_epoch)
         except ValueError:
             return None
@@ -368,7 +392,9 @@ class IndexLayerFeed:
     def _is_rate_limited_error(error) -> bool:
         text = str(error).lower()
         return (
-            "429" in text or "805" in text or "too many requests" in text
+            "429" in text
+            or "805" in text
+            or "too many requests" in text
             or ("too many" in text and "connection" in text)
             or "connection limit" in text
         )
@@ -392,10 +418,8 @@ class IndexLayerFeed:
                 description = f"Dhan rate/connection limit; {description}"
             for state in self.states.values():
                 state.set_feed_status("ERROR", description)
-            try:
+            with contextlib.suppress(Exception):
                 feed.close_connection()
-            except Exception:
-                pass
             return
         try:
             security_id = str(data.get("security_id", data.get("securityId", ""))).strip()
@@ -439,10 +463,8 @@ class IndexLayerFeed:
                     "RECONNECTING",
                     f"index websocket:No market-feed quote packets received for {int(self.NO_MESSAGE_WATCHDOG_SECONDS)}s after connect",
                 )
-            try:
+            with contextlib.suppress(Exception):
                 feed.close_connection()
-            except Exception:
-                pass
             return
 
     def _run_connected_session(self, feed) -> None:
@@ -485,7 +507,10 @@ class IndexLayerFeed:
                 if self._is_rate_limited_error(message):
                     self._backoff = self.RATE_LIMIT_COOLDOWN
                     for state in self.states.values():
-                        state.set_feed_status("RECONNECTING", f"Dhan rate/connection limit; retrying in {int(self.RATE_LIMIT_COOLDOWN)}s; cause={message}")
+                        state.set_feed_status(
+                            "RECONNECTING",
+                            f"Dhan rate/connection limit; retrying in {int(self.RATE_LIMIT_COOLDOWN)}s; cause={message}",
+                        )
                 else:
                     for state in self.states.values():
                         state.set_feed_status("RECONNECTING", f"index websocket:{message}")
@@ -515,16 +540,15 @@ class IndexLayerFeed:
         self._stop.set()
         self._connection_stop.set()
         if self._feed is not None:
-            try:
+            with contextlib.suppress(Exception):
                 self._feed.close_connection()
-            except Exception:
-                pass
         if self._thread and self._thread is not threading.current_thread():
             self._thread.join(timeout=8)
         self._thread = None
         self._feed = None
         for state in self.states.values():
             state.set_feed_status("STOPPED")
+
 
 class IndexLayerManager:
     def __init__(self, settings, dhan_api):
@@ -537,7 +561,7 @@ class IndexLayerManager:
         }
         self.feed = IndexLayerFeed(settings, self.states)
         self.stop_event = threading.Event()
-        self.thread: Optional[threading.Thread] = None
+        self.thread: threading.Thread | None = None
 
     def _in_market(self, now: datetime) -> bool:
         sh, sm = map(int, self.settings.market_start.split(":"))
@@ -582,7 +606,19 @@ class IndexLayerManager:
     @staticmethod
     def _looks_like_auth_failure(exc: Exception) -> bool:
         text = str(exc).lower()
-        return any(token in text for token in ("401", "807", "808", "809", "expired", "invalid token", "authentication failed", "unauthorized"))
+        return any(
+            token in text
+            for token in (
+                "401",
+                "807",
+                "808",
+                "809",
+                "expired",
+                "invalid token",
+                "authentication failed",
+                "unauthorized",
+            )
+        )
 
     def _start_session(self, now: datetime):
         for state in self.states.values():
@@ -599,20 +635,20 @@ class IndexLayerManager:
             for state in self.states.values():
                 state.set_feed_status("STARTING", f"token refresh: {exc}")
         auth_retried = False
-        for key, state in self.states.items():
+        for state in self.states.values():
             try:
                 snap = self.dhan_api.quote_snapshot([state.instrument])
-                state.prev_cumulative_volume = max(0, int(snap.get(state.instrument.security_id, {}).get("volume", 0) or 0))
+                state.prev_cumulative_volume = max(
+                    0, int(snap.get(state.instrument.security_id, {}).get("volume", 0) or 0)
+                )
                 state.merge_today_1m(self.dhan_api.load_today_completed_intraday(state.instrument, 1))
                 for interval, tf in ((5, "5m"), (15, "15m"), (60, "1h")):
                     state.merge_history(self.dhan_api.load_today_completed_intraday(state.instrument, interval), tf)
             except Exception as exc:
                 if not auth_retried and self._looks_like_auth_failure(exc):
                     auth_retried = True
-                    try:
+                    with contextlib.suppress(Exception):
                         refresh_access_token(self.settings, force=True)
-                    except Exception:
-                        pass
                 state.set_feed_status("STARTING", f"history bootstrap: {exc}")
         self.feed.start()
 

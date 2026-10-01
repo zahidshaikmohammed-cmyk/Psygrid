@@ -1,40 +1,56 @@
+"""Real-time 20-level option depth for the index option chains in ``index_options``.
+
+Each index gets one Dhan full-market-depth WebSocket subscribed to the CE and PE
+contracts of the 25 strikes nearest the underlying (50 instruments, Dhan's per-
+connection cap), plus a REST quote poll for LTP/volume/OI on the same contracts.
+"""
+
 from __future__ import annotations
 
+import contextlib
 import json
 import struct
 import threading
-import time
 from dataclasses import dataclass
-from datetime import datetime, time as datetime_time
+from datetime import datetime
+from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
 import websocket
 
-MIDCPNIFTY_DEPTH_EXCHANGE_SEGMENT = "NSE_FNO"
-MIDCPNIFTY_DEPTH_INSTRUMENT = "OPTIDX"
-MIDCPNIFTY_DEPTH_SYMBOL = "MIDCPNIFTY"
-MIDCPNIFTY_DEPTH_SECURITY_ID = "442"
-MIDCPNIFTY_DEPTH_LEVELS = 20
-MIDCPNIFTY_DEPTH_MAX_INSTRUMENTS = 50
-MIDCPNIFTY_DEPTH_RECONNECT_SECONDS = 3.0
-MIDCPNIFTY_DEPTH_QUOTE_REFRESH_SECONDS = 1.0
-MIDCPNIFTY_MARKET_OPEN = datetime_time(9, 15)
-MIDCPNIFTY_MARKET_CLOSE = datetime_time(15, 30)
+from index_options import IndexDerivativesSpec, _is_market_open
+
+DEPTH_INSTRUMENT = "OPTIDX"
+DEPTH_LEVELS = 20
+DEPTH_MAX_INSTRUMENTS = 50
+DEPTH_NEAREST_STRIKES = 25
+DEPTH_RECONNECT_SECONDS = 3.0
+DEPTH_QUOTE_REFRESH_SECONDS = 1.0
+DEPTH_WS_URL = "wss://depth-api-feed.dhan.co/twentydepth"
+
+_BID_RESPONSE_CODE = 41
+_ASK_RESPONSE_CODE = 51
+_HEADER_BYTES = 12
+_LEVEL_STRUCT = "<dII"
+_LEVEL_BYTES = struct.calcsize(_LEVEL_STRUCT)
+_SIDE_PACKET_BYTES = _HEADER_BYTES + DEPTH_LEVELS * _LEVEL_BYTES
+_QUOTE_FIELDS = ("last_price", "average_price", "buy_quantity", "sell_quantity", "volume", "oi")
 
 
 @dataclass(frozen=True)
-class MidcapNiftyDepthContract:
+class DepthContract:
     security_id: str
     strike: float
     option_type: str
     expiry: str
 
 
-class MidcapNiftyDepthState:
-    """RAM-only current MIDCPNIFTY option premium-depth snapshot."""
+class IndexDepthState:
+    """RAM-only current option premium-depth snapshot for one index."""
 
-    def __init__(self, settings):
+    def __init__(self, settings, spec: IndexDerivativesSpec):
         self.settings = settings
+        self.spec = spec
         self.tz = ZoneInfo(settings.timezone)
         self.lock = threading.RLock()
         self.status = "STARTING"
@@ -46,16 +62,23 @@ class MidcapNiftyDepthState:
         self.connection_count = 0
         self.packet_count = 0
 
-    def set_contracts(self, contracts: list[MidcapNiftyDepthContract], expiry: str) -> None:
+    def set_contracts(self, contracts: list[DepthContract], expiry: str) -> None:
+        """Replace the tracked contract set, keeping existing depth for contracts that remain."""
         with self.lock:
             self.expiry = expiry
-            allowed = {contract.security_id: contract for contract in contracts}
             self.contracts = {
-                security_id: self.contracts.get(
-                    security_id,
-                    {"security_id": security_id, "strike": contract.strike, "option_type": contract.option_type, "expiry": contract.expiry, "bid": [], "ask": []},
+                contract.security_id: self.contracts.get(
+                    contract.security_id,
+                    {
+                        "security_id": contract.security_id,
+                        "strike": contract.strike,
+                        "option_type": contract.option_type,
+                        "expiry": contract.expiry,
+                        "bid": [],
+                        "ask": [],
+                    },
                 )
-                for security_id, contract in allowed.items()
+                for contract in contracts
             }
 
     def update_depth(self, security_id: str, side: str, levels: list[dict]) -> None:
@@ -76,7 +99,7 @@ class MidcapNiftyDepthState:
                 row = self.contracts.get(str(security_id))
                 if row is None or not isinstance(quote, dict):
                     continue
-                for key in ("last_price", "average_price", "buy_quantity", "sell_quantity", "volume", "oi"):
+                for key in _QUOTE_FIELDS:
                     if key in quote:
                         row[key] = quote[key]
                 ohlc = quote.get("ohlc")
@@ -95,30 +118,20 @@ class MidcapNiftyDepthState:
 
     def snapshot(self) -> dict:
         with self.lock:
-            now = datetime.now(self.tz)
-            market_open = _is_market_open(now)
-            rows = []
-            for row in self.contracts.values():
-                cleaned = {key: (list(value) if key in ("bid", "ask") else dict(value) if key == "ohlc" and isinstance(value, dict) else value) for key, value in row.items()}
-                bid_levels = cleaned.get("bid") or []
-                ask_levels = cleaned.get("ask") or []
-                cleaned["crossed_book"] = bool(
-                    bid_levels and ask_levels and bid_levels[0].get("price") is not None
-                    and ask_levels[0].get("price") is not None and bid_levels[0]["price"] > ask_levels[0]["price"]
-                )
-                rows.append(cleaned)
+            market_open = _is_market_open(datetime.now(self.tz))
+            rows = [_snapshot_row(row) for row in self.contracts.values()]
             rows.sort(key=lambda row: (row.get("strike", 0.0), row.get("option_type", "")))
             return {
                 "service": "PSYGRID",
-                "symbol": MIDCPNIFTY_DEPTH_SYMBOL,
+                "symbol": self.spec.symbol,
                 "status": self.status,
                 "market_status": "OPEN" if market_open else "CLOSED",
                 "market_open": market_open,
                 "data_source": "DHAN_FULL_MARKET_DEPTH_WEBSOCKET",
-                "underlying_security_id": MIDCPNIFTY_DEPTH_SECURITY_ID,
-                "exchange_segment": MIDCPNIFTY_DEPTH_EXCHANGE_SEGMENT,
-                "instrument": MIDCPNIFTY_DEPTH_INSTRUMENT,
-                "depth_levels": MIDCPNIFTY_DEPTH_LEVELS,
+                "underlying_security_id": self.spec.security_id,
+                "exchange_segment": self.spec.fno_segment,
+                "instrument": DEPTH_INSTRUMENT,
+                "depth_levels": DEPTH_LEVELS,
                 "underlying_ltp": self.underlying_ltp,
                 "expiry": self.expiry,
                 "contract_count": len(rows),
@@ -128,117 +141,144 @@ class MidcapNiftyDepthState:
                 "packet_count": self.packet_count,
                 "synthetic_data": False,
                 "storage": "RAM_ONLY",
-                "quote_refresh_seconds": MIDCPNIFTY_DEPTH_QUOTE_REFRESH_SECONDS,
+                "quote_refresh_seconds": DEPTH_QUOTE_REFRESH_SECONDS,
                 **({"error": self.last_error} if self.last_error else {}),
             }
 
 
-def _is_market_open(now: datetime) -> bool:
-    return now.weekday() < 5 and MIDCPNIFTY_MARKET_OPEN <= now.time() < MIDCPNIFTY_MARKET_CLOSE
+def _snapshot_row(row: dict) -> dict:
+    """Copy a contract row and flag a crossed book (top bid above top ask)."""
+    cleaned = {}
+    for key, value in row.items():
+        if key in ("bid", "ask"):
+            cleaned[key] = list(value)
+        elif key == "ohlc" and isinstance(value, dict):
+            cleaned[key] = dict(value)
+        else:
+            cleaned[key] = value
+    bids = cleaned.get("bid") or []
+    asks = cleaned.get("ask") or []
+    top_bid = bids[0].get("price") if bids else None
+    top_ask = asks[0].get("price") if asks else None
+    cleaned["crossed_book"] = top_bid is not None and top_ask is not None and top_bid > top_ask
+    return cleaned
 
 
-def _select_contracts(option_state) -> tuple[list[MidcapNiftyDepthContract], str | None, float | None]:
+def _select_contracts(option_state) -> tuple[list[DepthContract], str | None, float | None]:
+    """Pick CE and PE contracts for the strikes nearest the underlying, capped at Dhan's 50 instruments."""
     snapshot = option_state.snapshot()
     expiry = snapshot.get("expiry")
     underlying_ltp = snapshot.get("underlying_ltp")
-    strikes = snapshot.get("strikes", [])
     if not expiry or not isinstance(underlying_ltp, (int, float)):
         return [], expiry, underlying_ltp
-    normalized = []
-    for row in strikes:
-        if not isinstance(row, dict):
+    ltp = float(underlying_ltp)
+    candidates: list[tuple[float, str, str]] = []
+    for row in snapshot.get("strikes", []):
+        if not isinstance(row, dict) or not isinstance(row.get("strike"), (int, float)):
             continue
-        strike = row.get("strike")
-        if not isinstance(strike, (int, float)):
-            continue
+        strike = float(row["strike"])
         for option_type, key in (("CE", "ce"), ("PE", "pe")):
             contract = row.get(key)
             security_id = contract.get("security_id") if isinstance(contract, dict) else None
             if security_id:
-                normalized.append((abs(float(strike) - float(underlying_ltp)), float(strike), option_type, str(security_id)))
-    if not normalized:
-        return [], expiry, float(underlying_ltp)
-    strikes_sorted = sorted({item[1] for item in normalized}, key=lambda strike: (abs(strike - float(underlying_ltp)), strike))
-    selected_strikes = set(strikes_sorted[:25])
-    contracts = [MidcapNiftyDepthContract(security_id=item[3], strike=item[1], option_type=item[2], expiry=str(expiry)) for item in normalized if item[1] in selected_strikes]
-    contracts.sort(key=lambda item: (abs(item.strike - float(underlying_ltp)), item.strike, item.option_type))
-    return contracts[:MIDCPNIFTY_DEPTH_MAX_INSTRUMENTS], str(expiry), float(underlying_ltp)
+                candidates.append((strike, option_type, str(security_id)))
+    if not candidates:
+        return [], expiry, ltp
+    nearest = sorted({strike for strike, _, _ in candidates}, key=lambda strike: (abs(strike - ltp), strike))
+    selected = set(nearest[:DEPTH_NEAREST_STRIKES])
+    contracts = [
+        DepthContract(security_id=security_id, strike=strike, option_type=option_type, expiry=str(expiry))
+        for strike, option_type, security_id in candidates
+        if strike in selected
+    ]
+    contracts.sort(key=lambda item: (abs(item.strike - ltp), item.strike, item.option_type))
+    return contracts[:DEPTH_MAX_INSTRUMENTS], str(expiry), ltp
 
 
 def _parse_depth_message(data: bytes) -> list[tuple[str, str, list[dict]]]:
+    """Decode Dhan 20-depth binary frames into ``(security_id, side, levels)`` tuples."""
     messages = []
     offset = 0
-    while offset + 12 <= len(data):
+    while offset + _HEADER_BYTES <= len(data):
         message_length = struct.unpack_from("<H", data, offset)[0]
-        if message_length < 12 or offset + message_length > len(data):
+        if message_length < _HEADER_BYTES or offset + message_length > len(data):
             break
         response_code = data[offset + 2]
         security_id = str(struct.unpack_from("<i", data, offset + 4)[0])
-        if response_code in (41, 51) and message_length >= 332:
-            side = "bid" if response_code == 41 else "ask"
+        if response_code in (_BID_RESPONSE_CODE, _ASK_RESPONSE_CODE) and message_length >= _SIDE_PACKET_BYTES:
+            side = "bid" if response_code == _BID_RESPONSE_CODE else "ask"
+            base = offset + _HEADER_BYTES
             levels = []
-            base = offset + 12
-            for index in range(MIDCPNIFTY_DEPTH_LEVELS):
-                price, quantity, orders = struct.unpack_from("<dII", data, base + index * 16)
-                levels.append({"level": index + 1, "price": float(price), "quantity": int(quantity), "orders": int(orders)})
+            for index in range(DEPTH_LEVELS):
+                price, quantity, orders = struct.unpack_from(_LEVEL_STRUCT, data, base + index * _LEVEL_BYTES)
+                levels.append(
+                    {"level": index + 1, "price": float(price), "quantity": int(quantity), "orders": int(orders)}
+                )
             messages.append((security_id, side, levels))
         offset += message_length
     return messages
 
 
-class MidcapNiftyDepthManager:
-    """Maintains real-time 20-level premium depth for the nearest 25 MIDCPNIFTY strikes."""
+class IndexDepthManager:
+    """Maintain 20-level premium depth for one index's nearest strikes."""
 
-    def __init__(self, settings, dhan_api, option_manager):
+    def __init__(self, settings, dhan_api, option_manager, spec: IndexDerivativesSpec):
         self.settings = settings
         self.dhan_api = dhan_api
         self.option_manager = option_manager
-        self.state = MidcapNiftyDepthState(settings)
+        self.spec = spec
+        self.state = IndexDepthState(settings, spec)
         self.stop_event = threading.Event()
         self.thread: threading.Thread | None = None
         self.ws = None
-        self._contracts: list[MidcapNiftyDepthContract] = []
+        self._contracts: list[DepthContract] = []
         self._expiry: str | None = None
 
     def start(self) -> None:
         if self.thread and self.thread.is_alive():
             return
         self.stop_event.clear()
-        self.thread = threading.Thread(target=self._loop, daemon=True, name="psygrid-midcpnifty-depth")
+        self.thread = threading.Thread(target=self._loop, daemon=True, name=f"psygrid-{self.spec.key}-depth")
         self.thread.start()
 
     def stop(self) -> None:
         self.stop_event.set()
-        if self.ws is not None:
-            try:
-                self.ws.close()
-            except Exception:
-                pass
+        self._close_socket()
         if self.thread and self.thread is not threading.current_thread():
             self.thread.join(timeout=8)
         self.thread = None
         self.ws = None
 
+    def _close_socket(self) -> None:
+        ws = self.ws
+        if ws is None:
+            return
+        with contextlib.suppress(Exception):
+            ws.close()
+
     def _refresh_contracts(self) -> bool:
+        """Re-select contracts from the option chain; return True if the subscription set changed."""
         contracts, expiry, underlying_ltp = _select_contracts(self.option_manager.state)
         if not contracts or not expiry:
             return False
+        self.state.set_underlying_ltp(underlying_ltp)
         ids = {contract.security_id for contract in contracts}
         current_ids = {contract.security_id for contract in self._contracts}
-        if expiry != self._expiry or ids != current_ids:
-            self._contracts = contracts
-            self._expiry = expiry
-            self.state.set_contracts(contracts, expiry)
-            self.state.set_underlying_ltp(underlying_ltp)
-            return True
-        self.state.set_underlying_ltp(underlying_ltp)
-        return False
+        if expiry == self._expiry and ids == current_ids:
+            return False
+        self._contracts = contracts
+        self._expiry = expiry
+        self.state.set_contracts(contracts, expiry)
+        return True
 
     def _ws_url(self) -> str:
-        return f"wss://depth-api-feed.dhan.co/twentydepth?token={self.settings.access_token}&clientId={self.settings.client_id}&authType=2"
+        return f"{DEPTH_WS_URL}?token={self.settings.access_token}&clientId={self.settings.client_id}&authType=2"
 
     def _subscribe_payload(self) -> str:
-        instruments = [{"ExchangeSegment": MIDCPNIFTY_DEPTH_EXCHANGE_SEGMENT, "SecurityId": contract.security_id} for contract in self._contracts]
+        instruments = [
+            {"ExchangeSegment": self.spec.fno_segment, "SecurityId": contract.security_id}
+            for contract in self._contracts
+        ]
         return json.dumps({"RequestCode": 23, "InstrumentCount": len(instruments), "InstrumentList": instruments})
 
     def _run_socket(self) -> None:
@@ -257,19 +297,18 @@ class MidcapNiftyDepthManager:
                 continue
             for security_id, side, levels in _parse_depth_message(raw):
                 self.state.update_depth(security_id, side, levels)
-        try:
-            self.ws.close()
-        except Exception:
-            pass
+        self._close_socket()
 
     def _quote_loop(self) -> None:
         while not self.stop_event.is_set():
             try:
                 contracts, expiry, underlying_ltp = _select_contracts(self.option_manager.state)
                 if contracts:
-                    instruments = [type("DepthInstrument", (), {"security_id": c.security_id, "exchange_segment": MIDCPNIFTY_DEPTH_EXCHANGE_SEGMENT})() for c in contracts]
-                    quotes = self.dhan_api.quote_snapshot(instruments)
-                    self.state.update_quotes(quotes)
+                    instruments = [
+                        SimpleNamespace(security_id=c.security_id, exchange_segment=self.spec.fno_segment)
+                        for c in contracts
+                    ]
+                    self.state.update_quotes(self.dhan_api.quote_snapshot(instruments))
                     self.state.set_underlying_ltp(underlying_ltp)
                     if expiry and expiry != self._expiry:
                         self._contracts = contracts
@@ -277,10 +316,12 @@ class MidcapNiftyDepthManager:
                         self.state.set_contracts(contracts, expiry)
             except Exception as exc:
                 self.state.set_error(f"{type(exc).__name__}: {exc}")
-            self.stop_event.wait(MIDCPNIFTY_DEPTH_QUOTE_REFRESH_SECONDS)
+            self.stop_event.wait(DEPTH_QUOTE_REFRESH_SECONDS)
 
     def _loop(self) -> None:
-        quote_thread = threading.Thread(target=self._quote_loop, daemon=True, name="psygrid-midcpnifty-depth-quotes")
+        quote_thread = threading.Thread(
+            target=self._quote_loop, daemon=True, name=f"psygrid-{self.spec.key}-depth-quotes"
+        )
         quote_thread.start()
         while not self.stop_event.is_set():
             try:
@@ -289,17 +330,14 @@ class MidcapNiftyDepthManager:
                     self.state.status = "STARTING"
                     self.stop_event.wait(1.0)
                     continue
-                if changed and self.ws is not None:
-                    try:
-                        self.ws.close()
-                    except Exception:
-                        pass
+                if changed:
+                    self._close_socket()
                 self._run_socket()
             except Exception as exc:
                 self.state.set_error(f"{type(exc).__name__}: {exc}")
-                self.stop_event.wait(MIDCPNIFTY_DEPTH_RECONNECT_SECONDS)
+                self.stop_event.wait(DEPTH_RECONNECT_SECONDS)
         quote_thread.join(timeout=2)
 
 
-def midcpnifty_depth_json(state: MidcapNiftyDepthState) -> dict:
+def index_depth_json(state: IndexDepthState) -> dict:
     return state.snapshot()

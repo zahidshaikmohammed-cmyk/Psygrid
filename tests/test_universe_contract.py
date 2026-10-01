@@ -1,18 +1,18 @@
 import json
+from itertools import pairwise
 from pathlib import Path
 from types import SimpleNamespace
 
-from output import market_live_json
 from app import SHARD_RANGES
+from output import market_live_json
 from state import PsygridState
-
 
 EXPECTED = 989
 EXPECTED_KEYS = {"symbol", "security_id", "previous_close", "today_open", "candles_1m"}
 EXPECTED_CANDLE_KEYS = {"timestamp", "open", "high", "low", "close", "volume"}
 
 
-def test_canonical_stock_universe_is_exactly_990_and_unique():
+def test_canonical_stock_universe_has_exact_size_and_is_unique():
     payload = json.loads(Path("stocks.json").read_text(encoding="utf-8"))
     symbols = payload["symbols"]
     assert payload["universe"] == "PSYGRID_989"
@@ -28,7 +28,7 @@ def test_shards_are_exactly_22_disjoint_blocks_covering_the_full_universe():
     assert tuple(end - start for _, start, end in SHARD_RANGES) == (45,) * 21 + (44,)
     assert SHARD_RANGES[0][1:] == (0, 45)
     assert SHARD_RANGES[-1][1:] == (945, 989)
-    for left, right in zip(SHARD_RANGES, SHARD_RANGES[1:]):
+    for left, right in pairwise(SHARD_RANGES):
         assert left[2] == right[1]
     ranges = [(start, end) for _, start, end in SHARD_RANGES]
     flattened = [index for start, end in ranges for index in range(start, end)]

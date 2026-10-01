@@ -1,19 +1,16 @@
-from midcpnifty_options import (
-    MIDCPNIFTY_OPTIONS_EXCHANGE_SEGMENT,
-    MIDCPNIFTY_OPTIONS_INSTRUMENT,
-    MIDCPNIFTY_OPTIONS_SECURITY_ID,
-    MIDCPNIFTY_OPTIONS_SYMBOL,
-    MidcapNiftyOptionsState,
-    _normalize_chain,
-)
-from midcpnifty_depth import _parse_depth_message, _select_contracts
+from index_depth import _parse_depth_message, _select_contracts
+from index_options import MIDCPNIFTY, IndexOptionsState, _normalize_chain
 
 
 def test_midcpnifty_options_identity():
-    assert MIDCPNIFTY_OPTIONS_SYMBOL == "MIDCPNIFTY"
-    assert MIDCPNIFTY_OPTIONS_SECURITY_ID == "442"
-    assert MIDCPNIFTY_OPTIONS_EXCHANGE_SEGMENT == "IDX_I"
-    assert MIDCPNIFTY_OPTIONS_INSTRUMENT == "INDEX"
+    class Settings:
+        timezone = "Asia/Kolkata"
+
+    snapshot = IndexOptionsState(Settings(), MIDCPNIFTY).snapshot()
+    assert snapshot["symbol"] == "MIDCPNIFTY"
+    assert snapshot["security_id"] == "442"
+    assert snapshot["exchange_segment"] == "IDX_I"
+    assert snapshot["instrument"] == "INDEX"
 
 
 def test_midcpnifty_chain_sorting():
@@ -26,7 +23,7 @@ def test_midcpnifty_state_is_ram_only_and_non_synthetic():
     class Settings:
         timezone = "Asia/Kolkata"
 
-    state = MidcapNiftyOptionsState(Settings())
+    state = IndexOptionsState(Settings(), MIDCPNIFTY)
     snapshot = state.snapshot()
     assert snapshot["storage"] == "RAM_ONLY"
     assert snapshot["synthetic_data"] is False
@@ -40,7 +37,11 @@ def test_midcpnifty_depth_selects_nearest_25_strikes_and_ce_pe():
                 "expiry": "2026-09-29",
                 "underlying_ltp": 1000.0,
                 "strikes": [
-                    {"strike": float(900 + i * 10), "ce": {"security_id": str(1000 + i)}, "pe": {"security_id": str(2000 + i)} }
+                    {
+                        "strike": float(900 + i * 10),
+                        "ce": {"security_id": str(1000 + i)},
+                        "pe": {"security_id": str(2000 + i)},
+                    }
                     for i in range(31)
                 ],
             }

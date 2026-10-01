@@ -1,11 +1,14 @@
+"""Equity market-session lifecycle: authenticate at 09:15, bootstrap 1m history, wipe state at 15:15."""
+
 from __future__ import annotations
 
+import contextlib
 import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, time as dt_time
-from typing import Optional
+from datetime import datetime
+from datetime import time as dt_time
 from zoneinfo import ZoneInfo
 
 from backfill import HistoricalBackfill
@@ -29,12 +32,12 @@ class SessionManager:
         self.tz = ZoneInfo(settings.timezone)
         self.stop_event = threading.Event()
         self.history_stop = threading.Event()
-        self.thread: Optional[threading.Thread] = None
-        self.history_thread: Optional[threading.Thread] = None
+        self.thread: threading.Thread | None = None
+        self.history_thread: threading.Thread | None = None
         self._lock = threading.RLock()
         self._auth_refresh_lock = threading.Lock()
         self._last_auth_refresh_epoch = 0.0
-        self._started_for_date: Optional[str] = None
+        self._started_for_date: str | None = None
         self._auth_retry_at = 0.0
         self._last_reconnect_seen = 0
         self.backfill = HistoricalBackfill(settings, state, dhan_api, instruments)
@@ -42,7 +45,7 @@ class SessionManager:
     def now(self) -> datetime:
         return datetime.now(self.tz)
 
-    def in_market(self, now: Optional[datetime] = None) -> bool:
+    def in_market(self, now: datetime | None = None) -> bool:
         now = now or self.now()
         sh, sm = map(int, self.settings.market_start.split(":"))
         eh, em = map(int, self.settings.market_end.split(":"))
@@ -58,14 +61,10 @@ class SessionManager:
     def stop(self) -> None:
         self.stop_event.set()
         self.history_stop.set()
-        try:
+        with contextlib.suppress(Exception):
             self.feed.stop()
-        except Exception:
-            pass
-        try:
+        with contextlib.suppress(Exception):
             self.backfill.close()
-        except Exception:
-            pass
         if self.history_thread and self.history_thread is not threading.current_thread():
             self.history_thread.join(timeout=10)
         self.history_thread = None
@@ -118,7 +117,10 @@ class SessionManager:
     @staticmethod
     def _looks_like_auth_failure(exc: Exception) -> bool:
         text = str(exc).lower()
-        return any(x in text for x in ("401", "807", "808", "809", "expired", "invalid token", "authentication failed", "unauthorized"))
+        return any(
+            x in text
+            for x in ("401", "807", "808", "809", "expired", "invalid token", "authentication failed", "unauthorized")
+        )
 
     def _start_session(self, now: datetime) -> None:
         with self._lock:
@@ -126,7 +128,9 @@ class SessionManager:
             if self._started_for_date == session_date:
                 return
             if now.timestamp() < self._auth_retry_at:
-                self.state.set_feed_status("AUTH_WAITING", f"Dhan token generation retry in {int(self._auth_retry_at - now.timestamp())}s")
+                self.state.set_feed_status(
+                    "AUTH_WAITING", f"Dhan token generation retry in {int(self._auth_retry_at - now.timestamp())}s"
+                )
                 return
 
             self.history_stop.clear()
@@ -143,14 +147,18 @@ class SessionManager:
                 except Exception as first_exc:
                     if not self._looks_like_auth_failure(first_exc):
                         raise
-                    self.state.set_feed_status("TOKEN_REFRESHING", "Dhan token expired/invalid; generating one fresh token")
+                    self.state.set_feed_status(
+                        "TOKEN_REFRESHING", "Dhan token expired/invalid; generating one fresh token"
+                    )
                     self._refresh_auth_once()
                     profile = self.dhan_api.verify_data_access()
                 self.state.set_profile(profile)
             except DhanTokenRateLimited as exc:
                 self._auth_retry_at = now.timestamp() + exc.retry_after
                 self.state.session_status = "AUTH_WAITING"
-                self.state.set_feed_status("AUTH_WAITING", f"Dhan token generation rate-limited; retrying in {exc.retry_after}s")
+                self.state.set_feed_status(
+                    "AUTH_WAITING", f"Dhan token generation rate-limited; retrying in {exc.retry_after}s"
+                )
                 return
             except Exception as exc:
                 self._auth_retry_at = now.timestamp() + 30
@@ -168,7 +176,9 @@ class SessionManager:
                 self.state.apply_quote_snapshot(snapshot)
                 for item in self.instruments:
                     row = snapshot.get(str(item.security_id), snapshot.get(item.security_id, {}))
-                    self.state.seed_cumulative_volume(int(item.security_id), int(row.get("volume", 0) or 0) if isinstance(row, dict) else 0)
+                    self.state.seed_cumulative_volume(
+                        int(item.security_id), int(row.get("volume", 0) or 0) if isinstance(row, dict) else 0
+                    )
             except Exception as exc:
                 self.state.last_feed_error = f"snapshot:{exc}"
 
@@ -182,7 +192,7 @@ class SessionManager:
             self.history_thread.start()
 
     def _load_one_1m_history(self, item) -> bool:
-        last_exc: Optional[Exception] = None
+        last_exc: Exception | None = None
         for attempt in range(self.HISTORY_BOOTSTRAP_RETRIES):
             if self.stop_event.is_set() or self.history_stop.is_set() or not self.in_market():
                 return False
@@ -239,10 +249,8 @@ class SessionManager:
     def _end_session(self) -> None:
         with self._lock:
             self.history_stop.set()
-            try:
+            with contextlib.suppress(Exception):
                 self.feed.stop()
-            except Exception:
-                pass
             if self.history_thread and self.history_thread is not threading.current_thread():
                 self.history_thread.join(timeout=10)
             self.history_thread = None

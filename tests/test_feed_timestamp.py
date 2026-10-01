@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 import unittest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 from feed import LiveFeed
@@ -18,9 +18,7 @@ class DhanLttNormalizationTests(unittest.TestCase):
     def test_exchange_wall_clock_epoch_is_corrected_by_timezone_offset(self):
         now = time.time()
         local = datetime.fromtimestamp(now, ZoneInfo("Asia/Kolkata"))
-        wall_clock_epoch = int(
-            local.replace(tzinfo=None).replace(tzinfo=timezone.utc).timestamp()
-        )
+        wall_clock_epoch = int(local.replace(tzinfo=None).replace(tzinfo=UTC).timestamp())
 
         normalized = LiveFeed._parse_ltt(wall_clock_epoch, "Asia/Kolkata")
         self.assertIsNotNone(normalized)

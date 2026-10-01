@@ -1,7 +1,5 @@
-from __future__ import annotations
-
 """Raw market-breadth and sector aggregates computed directly from the
-already-live 990-equity RAM state. No new data source: this only aggregates
+already-live equity RAM state. No new data source: this only aggregates
 numbers Psygrid already holds (LTP, previous close, today's session
 high/low) into counts and medians.
 
@@ -9,15 +7,16 @@ RAW DATA ONLY. No BULLISH/BEARISH/CONFIRMED/STRONG labels — those are for
 a future interpretation layer, not this data-supply layer.
 """
 
+from __future__ import annotations
+
 from datetime import datetime
 from statistics import median
-from typing import Optional
 from zoneinfo import ZoneInfo
 
 from sector_taxonomy import sector_for_symbol
 
 
-def _float(value) -> Optional[float]:
+def _float(value) -> float | None:
     try:
         value = float(value)
         return value if value == value else None  # reject NaN
@@ -25,16 +24,16 @@ def _float(value) -> Optional[float]:
         return None
 
 
-def _session_high_low(state, security_id: str) -> tuple[Optional[float], Optional[float]]:
+def _session_high_low(state, security_id: str) -> tuple[float | None, float | None]:
     with state.lock:
         candles = list(state.live_candles.get(security_id, []))
         current = state.current_1m.get(security_id)
     if current is not None:
-        candles = candles + [current]
+        candles = [*candles, current]
     highs = [_float(c.get("high")) for c in candles if isinstance(c, dict)]
     lows = [_float(c.get("low")) for c in candles if isinstance(c, dict)]
     highs = [h for h in highs if h is not None]
-    lows = [l for l in lows if l is not None]
+    lows = [low for low in lows if low is not None]
     return (max(highs) if highs else None, min(lows) if lows else None)
 
 
@@ -57,19 +56,21 @@ def _constituent_rows(state) -> list[dict]:
         if ltp is not None and previous_close is not None and previous_close > 0:
             change_pct = round(((ltp / previous_close) - 1.0) * 100.0, 4)
 
-        rows.append({
-            "symbol": symbol,
-            "security_id": security_id,
-            "sector": sector_for_symbol(symbol),
-            "ltp": ltp,
-            "previous_close": previous_close,
-            "today_open": today_open,
-            "day_high": day_high,
-            "day_low": day_low,
-            "change_pct": change_pct,
-            "is_new_session_high": bool(ltp is not None and day_high is not None and ltp >= day_high),
-            "is_new_session_low": bool(ltp is not None and day_low is not None and ltp <= day_low),
-        })
+        rows.append(
+            {
+                "symbol": symbol,
+                "security_id": security_id,
+                "sector": sector_for_symbol(symbol),
+                "ltp": ltp,
+                "previous_close": previous_close,
+                "today_open": today_open,
+                "day_high": day_high,
+                "day_low": day_low,
+                "change_pct": change_pct,
+                "is_new_session_high": bool(ltp is not None and day_high is not None and ltp >= day_high),
+                "is_new_session_low": bool(ltp is not None and day_low is not None and ltp <= day_low),
+            }
+        )
     return rows
 
 
@@ -121,18 +122,25 @@ def build_sector_breadth(state) -> dict:
         returns = [r["change_pct"] for r in members if r["change_pct"] is not None]
         advancing = sum(1 for r in members if r["change_pct"] is not None and r["change_pct"] > 0)
         declining = sum(1 for r in members if r["change_pct"] is not None and r["change_pct"] < 0)
-        sectors.append({
-            "sector": sector,
-            "constituent_count": len(members),
-            "coverage_count": len(returns),
-            "advancing": advancing,
-            "declining": declining,
-            "median_change_pct": round(median(returns), 4) if returns else None,
-            "constituents": [
-                {"symbol": r["symbol"], "security_id": r["security_id"], "ltp": r["ltp"], "change_pct": r["change_pct"]}
-                for r in members
-            ],
-        })
+        sectors.append(
+            {
+                "sector": sector,
+                "constituent_count": len(members),
+                "coverage_count": len(returns),
+                "advancing": advancing,
+                "declining": declining,
+                "median_change_pct": round(median(returns), 4) if returns else None,
+                "constituents": [
+                    {
+                        "symbol": r["symbol"],
+                        "security_id": r["security_id"],
+                        "ltp": r["ltp"],
+                        "change_pct": r["change_pct"],
+                    }
+                    for r in members
+                ],
+            }
+        )
     sectors.sort(key=lambda s: s["sector"])
 
     return {

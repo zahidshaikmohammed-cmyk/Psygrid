@@ -53,10 +53,14 @@ class NIFTY50UniverseTests(unittest.TestCase):
 
 class StockOptionStateTests(unittest.TestCase):
     def test_contract_shape(self):
-        state = StockOptionState("RELIANCE", SimpleNamespace(timezone="Asia/Kolkata"), security_id="500", exchange_segment="NSE_EQ")
+        state = StockOptionState(
+            "RELIANCE", SimpleNamespace(timezone="Asia/Kolkata"), security_id="500", exchange_segment="NSE_EQ"
+        )
         state.set_snapshot(
             {"last_price": 3000.0, "oc": _normalize_chain({"oc": {"3000": {"ce": {}, "pe": {}}}})},
-            ["2026-09-30"], "2026-09-30", analytics={"pcr": 1.1},
+            ["2026-09-30"],
+            "2026-09-30",
+            analytics={"pcr": 1.1},
         )
         payload = stock_options_json(SimpleNamespace(snapshot=lambda symbol: state.snapshot()), "RELIANCE")
         self.assertEqual(payload["symbol"], "RELIANCE")
@@ -71,6 +75,7 @@ class StockOptionStateTests(unittest.TestCase):
     def test_market_session_hours(self):
         from datetime import datetime
         from zoneinfo import ZoneInfo
+
         tz = ZoneInfo("Asia/Kolkata")
         self.assertFalse(_is_market_open(datetime(2026, 9, 13, 12, 0, tzinfo=tz)))  # Sunday
         self.assertTrue(_is_market_open(datetime(2026, 9, 14, 9, 15, tzinfo=tz)))
@@ -170,7 +175,7 @@ class StockOptionsManagerAuthRetryTests(unittest.TestCase):
             self.assertTrue(force)
             current_settings.access_token = "fresh"
 
-        with patch("stock_options.refresh_access_token", side_effect=refresh) as refresh_mock:
+        with patch("auth_retry.refresh_access_token", side_effect=refresh) as refresh_mock:
             manager._poll_one("RELIANCE")
 
         self.assertEqual(manager.snapshot("RELIANCE")["status"], "LIVE")
@@ -184,7 +189,7 @@ class StockOptionsManagerAuthRetryTests(unittest.TestCase):
         manager = _manager(api, {"RELIANCE": "500"}, settings=settings)
 
         with patch(
-            "stock_options.refresh_access_token",
+            "auth_retry.refresh_access_token",
             side_effect=DhanTokenRateLimited("rate limited", retry_after=120),
         ):
             manager._poll_one("RELIANCE")

@@ -22,11 +22,51 @@ def _fake_instrument_master_csv() -> str:
     far_month = (dt.date.today() + dt.timedelta(days=35)).isoformat()
     expired = "2020-01-01"
     rows = [
-        {"SEM_EXM_EXCH_ID": "NSE", "SEM_INSTRUMENT_NAME": "FUTIDX", "SEM_TRADING_SYMBOL": f"NIFTY-{next_week}-FUT", "SEM_SMST_SECURITY_ID": "49081", "SEM_EXPIRY_DATE": next_week, "SEM_LOT_UNITS": "75", "SEM_TICK_SIZE": "0.05"},
-        {"SEM_EXM_EXCH_ID": "NSE", "SEM_INSTRUMENT_NAME": "FUTIDX", "SEM_TRADING_SYMBOL": f"NIFTY-{far_month}-FUT", "SEM_SMST_SECURITY_ID": "49082", "SEM_EXPIRY_DATE": far_month, "SEM_LOT_UNITS": "75", "SEM_TICK_SIZE": "0.05"},
-        {"SEM_EXM_EXCH_ID": "NSE", "SEM_INSTRUMENT_NAME": "OPTIDX", "SEM_TRADING_SYMBOL": f"NIFTY-{next_week}-25000-CE", "SEM_SMST_SECURITY_ID": "99999", "SEM_EXPIRY_DATE": next_week, "SEM_LOT_UNITS": "75", "SEM_TICK_SIZE": "0.05"},
-        {"SEM_EXM_EXCH_ID": "NSE", "SEM_INSTRUMENT_NAME": "EQUITY", "SEM_TRADING_SYMBOL": "NIFTYBEES", "SEM_SMST_SECURITY_ID": "11111", "SEM_EXPIRY_DATE": "", "SEM_LOT_UNITS": "", "SEM_TICK_SIZE": ""},
-        {"SEM_EXM_EXCH_ID": "NSE", "SEM_INSTRUMENT_NAME": "FUTIDX", "SEM_TRADING_SYMBOL": f"NIFTY-{expired}-FUT", "SEM_SMST_SECURITY_ID": "40000", "SEM_EXPIRY_DATE": expired, "SEM_LOT_UNITS": "75", "SEM_TICK_SIZE": "0.05"},
+        {
+            "SEM_EXM_EXCH_ID": "NSE",
+            "SEM_INSTRUMENT_NAME": "FUTIDX",
+            "SEM_TRADING_SYMBOL": f"NIFTY-{next_week}-FUT",
+            "SEM_SMST_SECURITY_ID": "49081",
+            "SEM_EXPIRY_DATE": next_week,
+            "SEM_LOT_UNITS": "75",
+            "SEM_TICK_SIZE": "0.05",
+        },
+        {
+            "SEM_EXM_EXCH_ID": "NSE",
+            "SEM_INSTRUMENT_NAME": "FUTIDX",
+            "SEM_TRADING_SYMBOL": f"NIFTY-{far_month}-FUT",
+            "SEM_SMST_SECURITY_ID": "49082",
+            "SEM_EXPIRY_DATE": far_month,
+            "SEM_LOT_UNITS": "75",
+            "SEM_TICK_SIZE": "0.05",
+        },
+        {
+            "SEM_EXM_EXCH_ID": "NSE",
+            "SEM_INSTRUMENT_NAME": "OPTIDX",
+            "SEM_TRADING_SYMBOL": f"NIFTY-{next_week}-25000-CE",
+            "SEM_SMST_SECURITY_ID": "99999",
+            "SEM_EXPIRY_DATE": next_week,
+            "SEM_LOT_UNITS": "75",
+            "SEM_TICK_SIZE": "0.05",
+        },
+        {
+            "SEM_EXM_EXCH_ID": "NSE",
+            "SEM_INSTRUMENT_NAME": "EQUITY",
+            "SEM_TRADING_SYMBOL": "NIFTYBEES",
+            "SEM_SMST_SECURITY_ID": "11111",
+            "SEM_EXPIRY_DATE": "",
+            "SEM_LOT_UNITS": "",
+            "SEM_TICK_SIZE": "",
+        },
+        {
+            "SEM_EXM_EXCH_ID": "NSE",
+            "SEM_INSTRUMENT_NAME": "FUTIDX",
+            "SEM_TRADING_SYMBOL": f"NIFTY-{expired}-FUT",
+            "SEM_SMST_SECURITY_ID": "40000",
+            "SEM_EXPIRY_DATE": expired,
+            "SEM_LOT_UNITS": "75",
+            "SEM_TICK_SIZE": "0.05",
+        },
     ]
     buf = io.StringIO()
     writer = csv.DictWriter(buf, fieldnames=list(rows[0].keys()))
@@ -45,7 +85,11 @@ class FakeDhanAPI:
         self.quote_by_security_id = quote_by_security_id
 
     def quote_snapshot(self, instruments):
-        return {str(i.security_id): self.quote_by_security_id[str(i.security_id)] for i in instruments if str(i.security_id) in self.quote_by_security_id}
+        return {
+            str(i.security_id): self.quote_by_security_id[str(i.security_id)]
+            for i in instruments
+            if str(i.security_id) in self.quote_by_security_id
+        }
 
 
 def test_full_runtime_path_resolves_contract_and_populates_live_quote():
@@ -54,18 +98,20 @@ def test_full_runtime_path_resolves_contract_and_populates_live_quote():
     fake_response.encoding = "utf-8"
     fake_response.raise_for_status = lambda: None
 
-    dhan_api = FakeDhanAPI({
-        "49081": {
-            "last_price": 25100.5,
-            "volume": 128400,
-            "oi": 5000000,
-            "average_price": 25080.0,
-            "buy_quantity": 1200,
-            "sell_quantity": 900,
-            "ohlc": {"open": 25000.0, "high": 25200.0, "low": 24950.0, "close": 25050.0},
-            "depth": {"buy_price": 25099.5, "sell_price": 25101.0},
+    dhan_api = FakeDhanAPI(
+        {
+            "49081": {
+                "last_price": 25100.5,
+                "volume": 128400,
+                "oi": 5000000,
+                "average_price": 25080.0,
+                "buy_quantity": 1200,
+                "sell_quantity": 900,
+                "ohlc": {"open": 25000.0, "high": 25200.0, "low": 24950.0, "close": 25050.0},
+                "depth": {"buy_price": 25099.5, "sell_price": 25101.0},
+            }
         }
-    })
+    )
 
     manager = FuturesManager("NIFTY", SimpleNamespace(timezone="Asia/Kolkata"), dhan_api)
 

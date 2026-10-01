@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 
 from dhanhq import MarketFeed
 
-from index_layer import IndexLayerFeed, IndexInstrument, IndexState
+from index_layer import IndexInstrument, IndexLayerFeed, IndexState
 
 
 def _settings():
@@ -45,10 +45,7 @@ def test_index_layer_subscribes_indices_with_ticker_mode_not_full():
     # _build_feed constructs a real dhanhq MarketFeed, which we don't want
     # to actually connect - inspect the instrument tuples it's built with
     # by re-deriving them the same way _build_feed does.
-    instruments = [
-        (MarketFeed.IDX, s.instrument.security_id, MarketFeed.Ticker)
-        for s in feed.states.values()
-    ]
+    instruments = [(MarketFeed.IDX, s.instrument.security_id, MarketFeed.Ticker) for s in feed.states.values()]
 
     assert instruments == [(MarketFeed.IDX, "13", MarketFeed.Ticker)]
     assert MarketFeed.Ticker != MarketFeed.Full
@@ -81,15 +78,21 @@ def test_on_message_still_processes_quote_and_full_packets_if_ever_sent():
     feed = IndexLayerFeed(_settings(), {"nifty": state})
 
     quote_packet = {
-        "type": "Quote Data", "security_id": 13,
-        "LTP": "25101.00", "LTT": _ltt_now(), "volume": 0,
+        "type": "Quote Data",
+        "security_id": 13,
+        "LTP": "25101.00",
+        "LTT": _ltt_now(),
+        "volume": 0,
     }
     feed._on_message(None, quote_packet)
     assert state.quote_packets == 1
 
     full_packet = {
-        "type": "Full Data", "security_id": 13,
-        "LTP": "25102.00", "LTT": _ltt_now(), "volume": 0,
+        "type": "Full Data",
+        "security_id": 13,
+        "LTP": "25102.00",
+        "LTT": _ltt_now(),
+        "volume": 0,
     }
     feed._on_message(None, full_packet)
     assert state.quote_packets == 2

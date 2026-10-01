@@ -1,3 +1,5 @@
+"""Post-deploy check that a running Psygrid serves the full equity universe with a valid contract."""
+
 from __future__ import annotations
 
 import json
@@ -64,9 +66,11 @@ def validate_payload_contract(payload: dict, label: str, expected_count: int) ->
             timestamp = candle.get("timestamp")
             assert isinstance(timestamp, str), f"{label}/{symbol}: candle timestamp is not a string"
             try:
-                minute_key = int(datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S IST").replace(tzinfo=IST).timestamp()) // 60
-            except (TypeError, ValueError, OSError):
-                raise AssertionError(f"{label}/{symbol}: invalid candle timestamp {timestamp!r}")
+                minute_key = (
+                    int(datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S IST").replace(tzinfo=IST).timestamp()) // 60
+                )
+            except (TypeError, ValueError, OSError) as exc:
+                raise AssertionError(f"{label}/{symbol}: invalid candle timestamp {timestamp!r}") from exc
             minute_keys.append(minute_key)
             for key in ("open", "high", "low", "close"):
                 value = candle.get(key)
@@ -103,7 +107,9 @@ def main() -> int:
         assert full_probe.get("service") == "PSYGRID", "FULL ENDPOINT: invalid service"
         assert full_probe.get("schema_version") == "4.0", "FULL ENDPOINT: invalid schema_version"
         assert full_probe.get("universe_size") == EXPECTED, "FULL ENDPOINT: invalid universe_size"
-        assert full_probe.get("data_policy") == "1M_OHLCV_PLUS_PREVIOUS_CLOSE_AND_TODAY_OPEN", "FULL ENDPOINT: invalid data policy"
+        assert full_probe.get("data_policy") == "1M_OHLCV_PLUS_PREVIOUS_CLOSE_AND_TODAY_OPEN", (
+            "FULL ENDPOINT: invalid data policy"
+        )
         assert full_probe.get("synthetic_candles") is False, "FULL ENDPOINT: synthetic_candles must be false"
     elif endpoint_status != "OK":
         raise AssertionError(f"FULL ENDPOINT: expected OK during market hours, got {endpoint_status!r}")

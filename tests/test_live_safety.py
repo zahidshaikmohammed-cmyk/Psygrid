@@ -60,8 +60,11 @@ def test_future_wall_clock_epoch_is_corrected_only_by_exchange_offset():
 
 def test_genuinely_far_future_epoch_is_rejected():
     now = int(time.time())
-    assert LiveFeed._normalize_future_epoch(
-        now + 40_000,
-        "Asia/Kolkata",
-        float(now),
-    ) is None
+    assert (
+        LiveFeed._normalize_future_epoch(
+            now + 40_000,
+            "Asia/Kolkata",
+            float(now),
+        )
+        is None
+    )

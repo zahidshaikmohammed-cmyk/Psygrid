@@ -10,17 +10,17 @@ Base URL (production): `http://140.245.226.102:10000`
 |---|---|---|---|---|
 | `/` | Service identity, full endpoint index | On request | — | none |
 | `/health` | Liveness probe | On request | — | none |
-| `/ready` | Readiness gate (990-equity fully live) | On request | Equity feed state | equity feed |
+| `/ready` | Readiness gate (full 989-equity universe live) | On request | Equity feed state | equity feed |
 | `/public/health.json` | Aggregated freshness/status of every live feed | On request (reads cached state only) | All managers | all managers below |
 
-## Equity (990 stocks) — sealed
+## Equity (989 stocks) — sealed
 
 | Endpoint | Purpose | Refresh | Data source | Expected records |
 |---|---|---|---|---|
-| `/public/live.json` | Full 990-stock 1m OHLCV | Tick-driven (WebSocket) | Dhan WebSocket Full feed | 990 |
-| `/public/live-{a..v}.json` | 45-stock shards of the same universe | Tick-driven | same | 45 each, 22 shards |
+| `/public/live.json` | Full 989-stock 1m OHLCV | Tick-driven (WebSocket) | Dhan WebSocket Full feed | 989 |
+| `/public/live-{a..v}.json` | 45-stock shards of the same universe | Tick-driven | same | 22 shards: 45 each, last shard 44 |
 | `/public/stock/{symbol}.json` | Single stock | Tick-driven | same | 1 |
-| `/public/indicators.json`, `/public/indicators/{symbol}.json`, `/public/indicators-{shard}.json` | Technical-indicator suite (37 fields) per stock | 1s | Derived from `/public/live.json` | 990 |
+| `/public/indicators.json`, `/public/indicators/{symbol}.json`, `/public/indicators-{shard}.json` | Technical-indicator suite (37 fields) per stock | 1s | Derived from `/public/live.json` | 989 |
 
 ## 16-index layer — sealed
 
@@ -55,13 +55,13 @@ Covers the 50 NIFTY 50 index constituents (a fixed, periodically-reconstituted l
 | `/public/stock-depth.json` | Listing of all 50 stocks' depth rotation status | On request | — |
 | `/public/stock-depth/{SYMBOL}.json` | One stock's 20-level depth, nearest 5 strikes × CE/PE | WebSocket push (depth), 1s (quotes), rotated | Dhan 20-level Depth WebSocket + Market Quote REST |
 
-Dhan's 20-level depth WebSocket allows **at most 50 subscribed instruments per connection** — confirmed by every existing per-underlying depth module in this codebase (NIFTY/BANKNIFTY/MIDCPNIFTY/SENSEX) independently landing on that exact cap. Real-time depth for all 50 NIFTY 50 stocks at 5 strikes × CE/PE each (10 contracts/stock) would need 10 separate connections — instead `StockDepthManager` shares **one** connection and rotates its 50-instrument subscription through the stock universe in batches of 5 stocks every 30s, the same spirit as the option-chain poller's own rotation, rather than opening 10 more WebSocket connections on top of the 6 already running (equity feed, the shared 16-index feed, and the 4 existing per-underlying depth feeds). Each stock's `rotation_status` is `"ACTIVE"` only while its batch is the WebSocket's current subscription; `"IDLE"` the rest of the time, showing its last known depth from its previous turn rather than fabricating anything for the gap. A full rotation across all resolved stocks takes roughly `ceil(resolved_count / 5) × 30s` (~5 minutes for all 50).
+Dhan's 20-level depth WebSocket allows **at most 50 subscribed instruments per connection** — the same cap `index_depth.py` uses for the NIFTY/BANKNIFTY/MIDCPNIFTY/SENSEX depth feeds. Real-time depth for all 50 NIFTY 50 stocks at 5 strikes × CE/PE each (10 contracts/stock) would need 10 separate connections — instead `StockDepthManager` shares **one** connection and rotates its 50-instrument subscription through the stock universe in batches of 5 stocks every 30s, the same spirit as the option-chain poller's own rotation, rather than opening 10 more WebSocket connections on top of the 6 already running (equity feed, the shared 16-index feed, and the 4 existing per-underlying depth feeds). Each stock's `rotation_status` is `"ACTIVE"` only while its batch is the WebSocket's current subscription; `"IDLE"` the rest of the time, showing its last known depth from its previous turn rather than fabricating anything for the gap. A full rotation across all resolved stocks takes roughly `ceil(resolved_count / 5) × 30s` (~5 minutes for all 50).
 
 ## Market-wide aggregates (Tier 1, new)
 
 | Endpoint | Purpose | Refresh | Data source |
 |---|---|---|---|
-| `/public/market-breadth.json` | Raw advance/decline/new-high/new-low counts + full constituent list | On request (computed from live RAM state) | Psygrid's own 990-equity RAM state — no new source |
+| `/public/market-breadth.json` | Raw advance/decline/new-high/new-low counts + full constituent list | On request (computed from live RAM state) | Psygrid's own 989-equity RAM state — no new source |
 | `/public/sectors.json` | Raw per-sector median return/breadth, constituent list | On request | same |
 
 ## Tier 2 — delayed/context data (new, clearly marked)
@@ -79,6 +79,6 @@ GIFT NIFTY, NASDAQ, Dow Jones, Nikkei, Hang Seng, Shanghai, KOSPI, DXY, gold, ge
 
 ## Payload size / weight notes
 
-- `/public/live.json` and `/public/market-breadth.json`/`/public/sectors.json` (full constituent detail) are the largest payloads (~990 rows); all are served behind GZip.
+- `/public/live.json` and `/public/market-breadth.json`/`/public/sectors.json` (full constituent detail) are the largest payloads (~989 rows); all are served behind GZip.
 - `/public/{symbol}-depth.json` carries up to 50 contracts × 20 levels × 2 sides — moderate size, refreshed by push not poll.
 - `/public/health.json` is intentionally the lightest endpoint: it reads cached status fields off every manager, never recomputes or refetches anything.

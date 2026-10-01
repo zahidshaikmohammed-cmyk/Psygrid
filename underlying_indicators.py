@@ -1,20 +1,21 @@
-from __future__ import annotations
-
 """Real technical-indicator suite (EMA/SMA/RSI/MACD/Bollinger/Supertrend/
 ADX/Stochastic/ATR/CCI/MFI/ROC/Momentum/RVOL/CMF/Donchian) for a single
 underlying's own 1-minute OHLCV history.
 
 Reuses the exact same PsygridMasterIndicatorEngine that computes indicators
-for the 990-equity universe: no separate/looser indicator math for
+for the equity universe: no separate/looser indicator math for
 derivatives underlyings. Each instance only reads an already-public 1m
 candle snapshot (from the sealed index layer, or MIDCPNIFTY's own candle
 poller) through a callable; it never mutates or depends on the internals of
 whatever produced those candles.
 """
 
+from __future__ import annotations
+
 import threading
+from collections.abc import Callable
 from datetime import datetime
-from typing import Any, Callable, Optional
+from typing import Any
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -25,7 +26,13 @@ UNDERLYING_INDICATOR_INTERVAL_SECONDS = 5.0
 
 
 class UnderlyingIndicatorRuntime:
-    def __init__(self, symbol: str, candles_source: Callable[[], Optional[list[dict]]], settings, interval_seconds: float = UNDERLYING_INDICATOR_INTERVAL_SECONDS):
+    def __init__(
+        self,
+        symbol: str,
+        candles_source: Callable[[], list[dict] | None],
+        settings,
+        interval_seconds: float = UNDERLYING_INDICATOR_INTERVAL_SECONDS,
+    ):
         self.symbol = symbol
         self.candles_source = candles_source
         self.tz = ZoneInfo(settings.timezone)
@@ -33,10 +40,10 @@ class UnderlyingIndicatorRuntime:
         self.engine = PsygridMasterIndicatorEngine(IndicatorConfig(include_series=False))
         self._lock = threading.RLock()
         self._stop = threading.Event()
-        self._thread: Optional[threading.Thread] = None
-        self._result: Optional[dict[str, Any]] = None
-        self._error: Optional[dict[str, str]] = None
-        self._fingerprint: Optional[tuple] = None
+        self._thread: threading.Thread | None = None
+        self._result: dict[str, Any] | None = None
+        self._error: dict[str, str] | None = None
+        self._fingerprint: tuple | None = None
         self._sync_count = 0
 
     def start(self) -> None:
@@ -58,7 +65,15 @@ class UnderlyingIndicatorRuntime:
         if not candles:
             return (None,)
         c = candles[-1]
-        return (c.get("timestamp"), c.get("open"), c.get("high"), c.get("low"), c.get("close"), c.get("volume"), len(candles))
+        return (
+            c.get("timestamp"),
+            c.get("open"),
+            c.get("high"),
+            c.get("low"),
+            c.get("close"),
+            c.get("volume"),
+            len(candles),
+        )
 
     @staticmethod
     def _sanitize(candles: list[dict]) -> list[dict]:
@@ -105,7 +120,7 @@ class UnderlyingIndicatorRuntime:
                     self._error = {"error_type": type(exc).__name__, "message": str(exc)}
             self._stop.wait(self.interval_seconds)
 
-    def last_updated_at(self) -> Optional[str]:
+    def last_updated_at(self) -> str | None:
         with self._lock:
             return self._result.get("as_of") if self._result else None
 
@@ -124,10 +139,31 @@ class UnderlyingIndicatorRuntime:
                     result["freshness"] = _freshness(now, pd.Timestamp(result["as_of"]), self.engine.config)
                 except Exception:
                     pass
-            payload = {"service": "PSYGRID_MASTER_INDICATOR", "engine_version": "1.0.0", "symbol": self.symbol, "status": "OK", "timeframe": "1m", "sync_count": sync_count, "result": result}
+            payload = {
+                "service": "PSYGRID_MASTER_INDICATOR",
+                "engine_version": "1.0.0",
+                "symbol": self.symbol,
+                "status": "OK",
+                "timeframe": "1m",
+                "sync_count": sync_count,
+                "result": result,
+            }
             if error is not None:
                 payload["last_error"] = error
             return payload
         if error is not None:
-            return {"service": "PSYGRID_MASTER_INDICATOR", "engine_version": "1.0.0", "symbol": self.symbol, "status": "ERROR", "timeframe": "1m", "error": error}
-        return {"service": "PSYGRID_MASTER_INDICATOR", "engine_version": "1.0.0", "symbol": self.symbol, "status": "STARTING", "timeframe": "1m"}
+            return {
+                "service": "PSYGRID_MASTER_INDICATOR",
+                "engine_version": "1.0.0",
+                "symbol": self.symbol,
+                "status": "ERROR",
+                "timeframe": "1m",
+                "error": error,
+            }
+        return {
+            "service": "PSYGRID_MASTER_INDICATOR",
+            "engine_version": "1.0.0",
+            "symbol": self.symbol,
+            "status": "STARTING",
+            "timeframe": "1m",
+        }

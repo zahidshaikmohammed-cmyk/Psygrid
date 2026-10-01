@@ -16,7 +16,7 @@ watchdog and auth-retry gaps were.
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from index_layer import IndexLayerFeed, IndexInstrument, IndexState
+from index_layer import IndexInstrument, IndexLayerFeed, IndexState
 
 
 def _settings():

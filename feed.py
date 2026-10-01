@@ -1,9 +1,11 @@
+"""Dhan Full-mode market-feed WebSocket that builds native 1-minute equity candles from ticks."""
+
 from __future__ import annotations
 
+import contextlib
 import threading
 import time
-from datetime import datetime, timezone, timedelta
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from dhanhq import DhanContext, MarketFeed
@@ -26,9 +28,9 @@ class LiveFeed:
         self.settings = settings
         self.state = state
         self.instruments = instruments
-        self._feed: Optional[MarketFeed] = None
-        self._thread: Optional[threading.Thread] = None
-        self._watchdog: Optional[threading.Thread] = None
+        self._feed: MarketFeed | None = None
+        self._thread: threading.Thread | None = None
+        self._watchdog: threading.Thread | None = None
         self._stop_requested = threading.Event()
         self._connection_stop = threading.Event()
         self._lock = threading.Lock()
@@ -64,7 +66,9 @@ class LiveFeed:
     def _is_rate_limited_error(error) -> bool:
         text = str(error).lower()
         return (
-            "429" in text or "805" in text or "too many requests" in text
+            "429" in text
+            or "805" in text
+            or "too many requests" in text
             or ("too many" in text and "connection" in text)
             or "connection limit" in text
         )
@@ -88,7 +92,7 @@ class LiveFeed:
     def _timezone_offset_seconds(timezone_name: str, now_epoch: float) -> int:
         try:
             tz = ZoneInfo(timezone_name)
-            offset = datetime.fromtimestamp(now_epoch, timezone.utc).astimezone(tz).utcoffset()
+            offset = datetime.fromtimestamp(now_epoch, UTC).astimezone(tz).utcoffset()
             return int(offset.total_seconds()) if offset is not None else 0
         except Exception:
             return 0
@@ -134,7 +138,7 @@ class LiveFeed:
         try:
             parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
             if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=timezone.utc)
+                parsed = parsed.replace(tzinfo=UTC)
             return cls._normalize_future_epoch(int(parsed.timestamp()), timezone_name, now_epoch)
         except ValueError:
             return None
@@ -164,7 +168,9 @@ class LiveFeed:
             return
 
         if packet_type in {"previous close", "prev close", "previous day"}:
-            self.state.set_market_reference(security_id, previous_close=data.get("prev_close", data.get("previous_close")))
+            self.state.set_market_reference(
+                security_id, previous_close=data.get("prev_close", data.get("previous_close"))
+            )
             return
 
         if packet_type not in {"quote data", "quote", "full data", "full"}:
@@ -235,10 +241,8 @@ class LiveFeed:
         if feed is None:
             return
         self._connection_stop.set()
-        try:
+        with contextlib.suppress(Exception):
             feed.close_connection()
-        except Exception:
-            pass
         try:
             if feed.loop and not feed.loop.is_closed():
                 feed.loop.close()
@@ -297,10 +301,8 @@ class LiveFeed:
         with self._lock:
             feed = self._feed
         if feed is not None:
-            try:
+            with contextlib.suppress(Exception):
                 feed.close_connection()
-            except Exception:
-                pass
         if self._thread is not None and self._thread is not threading.current_thread():
             self._thread.join(timeout=8)
         self._thread = None

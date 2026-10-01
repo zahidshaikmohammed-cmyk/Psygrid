@@ -1,3 +1,5 @@
+"""Dhan access-token handling: explicit tokens from the environment or PIN + TOTP auto-generation."""
+
 from __future__ import annotations
 
 import os
@@ -96,9 +98,7 @@ def _rate_limit_seconds(message: str) -> int | None:
 def generate_access_token(client_id: str, pin: str, totp_secret: str) -> tuple[str, str | None]:
     """Generate one fresh Dhan 24-hour token using PIN + TOTP."""
     if not client_id or not pin or not totp_secret:
-        raise RuntimeError(
-            "Dhan automatic token generation requires DHAN_CLIENT_ID, DHAN_PIN and DHAN_TOTP_SECRET"
-        )
+        raise RuntimeError("Dhan automatic token generation requires DHAN_CLIENT_ID, DHAN_PIN and DHAN_TOTP_SECRET")
     normalized_secret = "".join(totp_secret.split()).upper()
     if not normalized_secret:
         raise RuntimeError("Invalid DHAN_TOTP_SECRET")
@@ -121,9 +121,7 @@ def generate_access_token(client_id: str, pin: str, totp_secret: str) -> tuple[s
             retry_after,
         )
     if "totp" in message.lower() and "invalid" in message.lower():
-        raise RuntimeError(
-            "Dhan rejected the current TOTP. Check DHAN_TOTP_SECRET and Dhan TOTP setup."
-        )
+        raise RuntimeError("Dhan rejected the current TOTP. Check DHAN_TOTP_SECRET and Dhan TOTP setup.")
     raise RuntimeError(f"Dhan access-token generation returned no token: {message}")
 
 

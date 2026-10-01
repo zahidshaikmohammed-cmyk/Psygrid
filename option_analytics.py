@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Real options-chain analytics derived from a single Dhan option-chain
 snapshot: no synthetic data, no fabricated history. Computed fresh on every
 option-chain refresh (the same 3.2s cadence the chain itself refreshes on)
@@ -12,16 +10,18 @@ when the underlying is flat, which makes price-based technical indicators
 misleading for options. These are the standard derivatives-desk signals.
 """
 
-from typing import Any, Optional
+from __future__ import annotations
+
+from typing import Any
 
 
-def _num(value: Any) -> Optional[float]:
+def _num(value: Any) -> float | None:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
     return float(value)
 
 
-def _classify_buildup(price_up: Optional[bool], oi_up: Optional[bool]) -> str:
+def _classify_buildup(price_up: bool | None, oi_up: bool | None) -> str:
     if price_up is None or oi_up is None:
         return "INSUFFICIENT_DATA"
     if price_up and oi_up:
@@ -35,7 +35,7 @@ def _classify_buildup(price_up: Optional[bool], oi_up: Optional[bool]) -> str:
 
 def compute_chain_analytics(
     rows: list[dict],
-    underlying_ltp: Optional[float],
+    underlying_ltp: float | None,
     previous: dict[str, dict],
 ) -> tuple[dict, dict[str, dict]]:
     """Pure function: (rows, underlying_ltp, previous-snapshot state) ->
@@ -117,17 +117,19 @@ def compute_chain_analytics(
                 elif prev is not None:
                     next_previous[sid] = prev
 
-            contracts.append({
-                "security_id": security_id,
-                "strike": strike,
-                "option_type": option_type,
-                "moneyness": moneyness,
-                "oi": oi,
-                "volume": volume,
-                "last_price": ltp,
-                "implied_volatility": iv,
-                "oi_change_classification": classification,
-            })
+            contracts.append(
+                {
+                    "security_id": security_id,
+                    "strike": strike,
+                    "option_type": option_type,
+                    "moneyness": moneyness,
+                    "oi": oi,
+                    "volume": volume,
+                    "last_price": ltp,
+                    "implied_volatility": iv,
+                    "oi_change_classification": classification,
+                }
+            )
 
     pcr_oi = (total_put_oi / total_call_oi) if total_call_oi > 0 else None
     pcr_volume = (total_put_volume / total_call_volume) if total_call_volume > 0 else None
@@ -140,12 +142,14 @@ def compute_chain_analytics(
 
     max_pain_strike = None
     if all_strikes:
+
         def _payout(settle: float) -> float:
             total = 0.0
             for k in all_strikes:
                 total += strike_call_oi.get(k, 0.0) * max(settle - k, 0.0)
                 total += strike_put_oi.get(k, 0.0) * max(k - settle, 0.0)
             return total
+
         max_pain_strike = min(all_strikes, key=_payout)
 
     resistance_strikes = [s for s, _ in sorted(strike_call_oi.items(), key=lambda item: item[1], reverse=True)[:3]]
@@ -187,6 +191,6 @@ class ChainAnalyticsTracker:
     def __init__(self) -> None:
         self._previous: dict[str, dict] = {}
 
-    def update(self, rows: list[dict], underlying_ltp: Optional[float]) -> dict:
+    def update(self, rows: list[dict], underlying_ltp: float | None) -> dict:
         analytics, self._previous = compute_chain_analytics(rows, underlying_ltp, self._previous)
         return analytics

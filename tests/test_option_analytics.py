@@ -3,12 +3,21 @@ from option_analytics import ChainAnalyticsTracker, compute_chain_analytics
 
 def _rows():
     return [
-        {"strike": 24900.0, "ce": {"security_id": "C1", "last_price": 150.0, "oi": 1000, "volume": 500, "implied_volatility": 14.2},
-         "pe": {"security_id": "P1", "last_price": 40.0, "oi": 4000, "volume": 2000, "implied_volatility": 15.1}},
-        {"strike": 25000.0, "ce": {"security_id": "C2", "last_price": 90.0, "oi": 6000, "volume": 3000, "implied_volatility": 13.8},
-         "pe": {"security_id": "P2", "last_price": 85.0, "oi": 5500, "volume": 2800, "implied_volatility": 14.5}},
-        {"strike": 25100.0, "ce": {"security_id": "C3", "last_price": 45.0, "oi": 7000, "volume": 4000, "implied_volatility": 13.5},
-         "pe": {"security_id": "P3", "last_price": 150.0, "oi": 1200, "volume": 600, "implied_volatility": 15.9}},
+        {
+            "strike": 24900.0,
+            "ce": {"security_id": "C1", "last_price": 150.0, "oi": 1000, "volume": 500, "implied_volatility": 14.2},
+            "pe": {"security_id": "P1", "last_price": 40.0, "oi": 4000, "volume": 2000, "implied_volatility": 15.1},
+        },
+        {
+            "strike": 25000.0,
+            "ce": {"security_id": "C2", "last_price": 90.0, "oi": 6000, "volume": 3000, "implied_volatility": 13.8},
+            "pe": {"security_id": "P2", "last_price": 85.0, "oi": 5500, "volume": 2800, "implied_volatility": 14.5},
+        },
+        {
+            "strike": 25100.0,
+            "ce": {"security_id": "C3", "last_price": 45.0, "oi": 7000, "volume": 4000, "implied_volatility": 13.5},
+            "pe": {"security_id": "P3", "last_price": 150.0, "oi": 1200, "volume": 600, "implied_volatility": 15.9},
+        },
     ]
 
 

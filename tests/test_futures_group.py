@@ -20,12 +20,19 @@ def _master_csv() -> str:
         ("BSE", "SENSEX-Oct2026-FUT", "103"),
     ]
     buf = io.StringIO()
-    fields = ["SEM_EXM_EXCH_ID", "SEM_INSTRUMENT_NAME", "SEM_TRADING_SYMBOL", "SEM_SMST_SECURITY_ID",
-              "SEM_EXPIRY_DATE", "SEM_LOT_UNITS", "SEM_TICK_SIZE"]
+    fields = [
+        "SEM_EXM_EXCH_ID",
+        "SEM_INSTRUMENT_NAME",
+        "SEM_TRADING_SYMBOL",
+        "SEM_SMST_SECURITY_ID",
+        "SEM_EXPIRY_DATE",
+        "SEM_LOT_UNITS",
+        "SEM_TICK_SIZE",
+    ]
     w = csv.DictWriter(buf, fieldnames=fields)
     w.writeheader()
     for exch, sym, sid in rows:
-        w.writerow(dict(zip(fields, (exch, "FUTIDX", sym, sid, exp, "30", "0.05"))))
+        w.writerow(dict(zip(fields, (exch, "FUTIDX", sym, sid, exp, "30", "0.05"), strict=True)))
     return buf.getvalue()
 
 
@@ -41,8 +48,11 @@ class RecordingAPI:
 
 
 def _group(api):
-    managers = [FuturesManager("NIFTY", SETTINGS, api), FuturesManager("BANKNIFTY", SETTINGS, api),
-                FuturesManager("SENSEX", SETTINGS, api, exchange="BSE")]
+    managers = [
+        FuturesManager("NIFTY", SETTINGS, api),
+        FuturesManager("BANKNIFTY", SETTINGS, api),
+        FuturesManager("SENSEX", SETTINGS, api, exchange="BSE"),
+    ]
     return managers, FuturesGroup(managers, api)
 
 

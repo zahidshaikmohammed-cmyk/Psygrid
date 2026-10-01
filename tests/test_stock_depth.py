@@ -25,14 +25,22 @@ def _strikes_around(center, count=9, step=50):
     rows = []
     for i in range(-count // 2, count // 2 + 1):
         strike = center + i * step
-        rows.append({"strike": float(strike), "ce": {"security_id": str(100000 + strike)}, "pe": {"security_id": str(200000 + strike)}})
+        rows.append(
+            {
+                "strike": float(strike),
+                "ce": {"security_id": str(100000 + strike)},
+                "pe": {"security_id": str(200000 + strike)},
+            }
+        )
     return rows
 
 
 class SafetyInvariantTests(unittest.TestCase):
     def test_a_batch_never_exceeds_dhans_50_instrument_cap(self):
         # The one hard rule this whole module exists to respect.
-        self.assertLessEqual(STOCK_DEPTH_SYMBOLS_PER_BATCH * STOCK_DEPTH_CONTRACTS_PER_SYMBOL, STOCK_DEPTH_MAX_INSTRUMENTS)
+        self.assertLessEqual(
+            STOCK_DEPTH_SYMBOLS_PER_BATCH * STOCK_DEPTH_CONTRACTS_PER_SYMBOL, STOCK_DEPTH_MAX_INSTRUMENTS
+        )
         self.assertEqual(STOCK_DEPTH_CONTRACTS_PER_SYMBOL, STOCK_DEPTH_STRIKES_PER_SYMBOL * 2)
 
 
@@ -61,7 +69,9 @@ class ContractSelectionTests(unittest.TestCase):
         self.assertTrue(all(c.symbol == "RELIANCE" for c in contracts))
 
     def test_returns_nothing_before_the_option_chain_has_resolved(self):
-        contracts, expiry, ltp = _select_contracts_for_symbol("RELIANCE", _option_state([], expiry=None, underlying_ltp=None))
+        contracts, _expiry, _ltp = _select_contracts_for_symbol(
+            "RELIANCE", _option_state([], expiry=None, underlying_ltp=None)
+        )
         self.assertEqual(contracts, [])
 
 

@@ -1,7 +1,8 @@
+"""Equity state extended with freshness tracking for current-quote recovery."""
+
 from __future__ import annotations
 
 import time
-from typing import Optional
 
 from state import PsygridState
 
@@ -44,14 +45,18 @@ class RuntimeFreshnessState(PsygridState):
                 if ltp > 0:
                     self.rest_quote_received[security_id] = now
 
-    def freshness(self, security_id: str, now_epoch: Optional[float] = None) -> dict:
+    def freshness(self, security_id: str, now_epoch: float | None = None) -> dict:
         with self.lock:
             now_epoch = now_epoch or time.time()
             security_id = str(security_id)
             ws = self.last_tick_by_security.get(security_id)
             rest = self.rest_quote_received.get(security_id)
             received, source = max(
-                ((value, src) for value, src in ((ws, "DHAN_WEBSOCKET_FULL"), (rest, "DHAN_REST_QUOTE_RECOVERY")) if value is not None),
+                (
+                    (value, src)
+                    for value, src in ((ws, "DHAN_WEBSOCKET_FULL"), (rest, "DHAN_REST_QUOTE_RECOVERY"))
+                    if value is not None
+                ),
                 key=lambda pair: pair[0],
                 default=(None, None),
             )
@@ -59,9 +64,14 @@ class RuntimeFreshnessState(PsygridState):
                 return {"status": "NO_LIVE_QUOTE", "data_age_seconds": None, "live_data_valid": False, "source": None}
             age = max(0.0, now_epoch - received)
             valid = age <= self.settings.max_live_age_seconds
-            return {"status": "LIVE" if valid else "STALE", "data_age_seconds": round(age, 3), "live_data_valid": valid, "source": source}
+            return {
+                "status": "LIVE" if valid else "STALE",
+                "data_age_seconds": round(age, 3),
+                "live_data_valid": valid,
+                "source": source,
+            }
 
-    def all_live_stale(self, now_epoch: Optional[float] = None) -> bool:
+    def all_live_stale(self, now_epoch: float | None = None) -> bool:
         with self.lock:
             if self.session_status != "LIVE" or not self.instruments:
                 return False
@@ -79,7 +89,9 @@ class RuntimeFreshnessState(PsygridState):
             now = time.time()
             live_count = 0
             for security_id in self.instruments:
-                received = max(self.last_tick_by_security.get(security_id, 0.0), self.rest_quote_received.get(security_id, 0.0))
+                received = max(
+                    self.last_tick_by_security.get(security_id, 0.0), self.rest_quote_received.get(security_id, 0.0)
+                )
                 if received and now - received <= self.settings.max_live_age_seconds:
                     live_count += 1
             snap["live_stock_count"] = live_count

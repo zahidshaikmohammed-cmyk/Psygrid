@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 EXPECTED = 989
 SHARD_NAMES = "abcdefghijklmnopqrstuv"
 
+
 class ShardContractTests(unittest.TestCase):
     def setUp(self):
         payload = json.loads((ROOT / "stocks.json").read_text(encoding="utf-8"))
@@ -27,7 +28,7 @@ class ShardContractTests(unittest.TestCase):
     def test_every_pair_of_shards_is_disjoint(self):
         shards = [self.symbols[start:end] for _, start, end in self.ranges]
         for index, left in enumerate(shards):
-            for right in shards[index + 1:]:
+            for right in shards[index + 1 :]:
                 self.assertTrue(set(left).isdisjoint(right))
 
     def test_shard_union_matches_canonical_universe_exactly(self):
@@ -35,6 +36,7 @@ class ShardContractTests(unittest.TestCase):
         union = {symbol for shard in shards for symbol in shard}
         self.assertEqual(union, set(self.symbols))
         self.assertEqual(len(union), EXPECTED)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,6 +1,6 @@
 import unittest
-from types import SimpleNamespace
 from datetime import datetime
+from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
 from session import SessionManager

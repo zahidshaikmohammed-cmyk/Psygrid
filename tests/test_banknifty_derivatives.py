@@ -1,8 +1,8 @@
+import struct
 from types import SimpleNamespace
 
-from banknifty_options import BankNiftyOptionsState, _normalize_chain
-from banknifty_depth import _parse_depth_message, _select_contracts
-import struct
+from index_depth import _parse_depth_message, _select_contracts
+from index_options import BANKNIFTY, IndexOptionsState, _normalize_chain
 
 
 def settings():
@@ -10,7 +10,7 @@ def settings():
 
 
 def test_banknifty_option_identity_and_ram_state():
-    state = BankNiftyOptionsState(settings())
+    state = IndexOptionsState(settings(), BANKNIFTY)
     payload = {"last_price": 55000.0, "oc": {"55000": {"ce": {"security_id": 1001}, "pe": {"security_id": 1002}}}}
     state.set_snapshot(payload, ["2026-09-24"], "2026-09-24")
     snap = state.snapshot()
@@ -32,8 +32,17 @@ def test_banknifty_chain_sorting():
 def test_banknifty_depth_selects_nearest_25_strikes_and_both_sides():
     strikes = {}
     for strike in range(52000, 54501, 100):
-        strikes[str(strike)] = {"ce": {"security_id": str(100000 + strike)}, "pe": {"security_id": str(200000 + strike)}}
-    option_state = SimpleNamespace(snapshot=lambda: {"expiry": "2026-09-24", "underlying_ltp": 53200.0, "strikes": [{"strike": float(k), **v} for k, v in strikes.items()]})
+        strikes[str(strike)] = {
+            "ce": {"security_id": str(100000 + strike)},
+            "pe": {"security_id": str(200000 + strike)},
+        }
+    option_state = SimpleNamespace(
+        snapshot=lambda: {
+            "expiry": "2026-09-24",
+            "underlying_ltp": 53200.0,
+            "strikes": [{"strike": float(k), **v} for k, v in strikes.items()],
+        }
+    )
     contracts, expiry, ltp = _select_contracts(option_state)
     assert expiry == "2026-09-24"
     assert ltp == 53200.0

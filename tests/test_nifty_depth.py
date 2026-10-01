@@ -2,7 +2,8 @@ import struct
 import unittest
 from types import SimpleNamespace
 
-from nifty_depth import NiftyDepthContract, NiftyDepthState, _parse_depth_message, _select_contracts
+from index_depth import DepthContract, IndexDepthState, _parse_depth_message, _select_contracts
+from index_options import NIFTY
 
 
 class NiftyDepthTests(unittest.TestCase):
@@ -21,11 +22,13 @@ class NiftyDepthTests(unittest.TestCase):
     def test_selects_nearest_25_strikes_and_both_sides(self):
         strikes = []
         for strike in range(22900, 24101, 50):
-            strikes.append({
-                "strike": float(strike),
-                "ce": {"security_id": str(100000 + strike)},
-                "pe": {"security_id": str(200000 + strike)},
-            })
+            strikes.append(
+                {
+                    "strike": float(strike),
+                    "ce": {"security_id": str(100000 + strike)},
+                    "pe": {"security_id": str(200000 + strike)},
+                }
+            )
         state = SimpleNamespace()
         state.snapshot = lambda: {"expiry": "2026-09-17", "underlying_ltp": 23500.0, "strikes": strikes}
         contracts, expiry, ltp = _select_contracts(state)
@@ -37,8 +40,8 @@ class NiftyDepthTests(unittest.TestCase):
 
     def test_state_is_ram_only_and_exposes_depth_metadata(self):
         settings = SimpleNamespace(timezone="Asia/Kolkata")
-        state = NiftyDepthState(settings)
-        contracts = [NiftyDepthContract("49081", 23500.0, "CE", "2026-09-17")]
+        state = IndexDepthState(settings, NIFTY)
+        contracts = [DepthContract("49081", 23500.0, "CE", "2026-09-17")]
         state.set_contracts(contracts, "2026-09-17")
         state.update_depth("49081", "bid", [{"level": 1, "price": 100.0, "quantity": 500, "orders": 3}])
         state.update_quotes({"49081": {"last_price": 101.0, "volume": 1234, "oi": 5678}})
