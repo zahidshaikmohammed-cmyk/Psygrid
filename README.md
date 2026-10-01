@@ -107,6 +107,20 @@ import pandas as pd
 day = pd.read_csv("~/psygrid-data/2026-10-01/equity_1m.csv.gz")
 ```
 
+## Intelligence layer (in development)
+
+`intelligence/` is a separate, read-only layer that will compute observations
+across the whole market. It reads only the daily archive, never calls Dhan,
+and changes nothing in the live service. Today it can replay any archived day
+exactly as it was known minute by minute, with a data-quality record:
+
+```bash
+python -m intelligence days
+python -m intelligence replay 2026-10-02 --until 10:17
+```
+
+The plan, phases and data-rights questions are in `docs/intelligence/`.
+
 ## Development
 
 Requires Python 3.12.
