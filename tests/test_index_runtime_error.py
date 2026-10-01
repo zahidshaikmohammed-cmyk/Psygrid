@@ -1,7 +1,9 @@
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
+
 import app as app_module
+
 
 def test_index_layer_failure_is_explicit_not_silent(monkeypatch):
     # A healthy equity layer with a failed index layer must surface the

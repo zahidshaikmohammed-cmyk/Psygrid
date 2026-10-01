@@ -12,11 +12,11 @@ of string with Asia/Kolkata, not UTC - this ports that exact pattern,
 including its future-timestamp rejection safety net.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
-from index_layer import IndexLayerFeed, IndexState, IndexInstrument
+from index_layer import IndexInstrument, IndexLayerFeed, IndexState
 
 
 def _settings():
@@ -51,7 +51,10 @@ def test_reproduces_the_exact_reported_offset_when_mislabeled_as_utc():
     text = ist_now.strftime("%H:%M:%S")
 
     buggy = datetime.strptime(text, "%H:%M:%S").replace(
-        year=ist_now.year, month=ist_now.month, day=ist_now.day, tzinfo=timezone.utc,
+        year=ist_now.year,
+        month=ist_now.month,
+        day=ist_now.day,
+        tzinfo=UTC,
     )
     ist_offset_seconds = ZoneInfo("Asia/Kolkata").utcoffset(ist_now).total_seconds()
     assert int(buggy.timestamp()) - int(ist_now.timestamp()) == int(ist_offset_seconds) == 19800  # 5:30:00
@@ -59,7 +62,7 @@ def test_reproduces_the_exact_reported_offset_when_mislabeled_as_utc():
 
 def test_numeric_epoch_passes_through_unchanged():
     feed = _feed()
-    now = int(datetime.now(timezone.utc).timestamp())
+    now = int(datetime.now(UTC).timestamp())
 
     assert feed._parse_ltt(now) == now
     assert feed._parse_ltt(str(now)) == now
@@ -67,7 +70,7 @@ def test_numeric_epoch_passes_through_unchanged():
 
 def test_far_future_epoch_is_rejected_not_silently_accepted():
     feed = _feed()
-    far_future = int(datetime.now(timezone.utc).timestamp()) + 3600  # 1 hour ahead, not a tz-offset artifact
+    far_future = int(datetime.now(UTC).timestamp()) + 3600  # 1 hour ahead, not a tz-offset artifact
 
     assert feed._parse_ltt(far_future) is None
 

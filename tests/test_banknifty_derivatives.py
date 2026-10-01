@@ -32,8 +32,17 @@ def test_banknifty_chain_sorting():
 def test_banknifty_depth_selects_nearest_25_strikes_and_both_sides():
     strikes = {}
     for strike in range(52000, 54501, 100):
-        strikes[str(strike)] = {"ce": {"security_id": str(100000 + strike)}, "pe": {"security_id": str(200000 + strike)}}
-    option_state = SimpleNamespace(snapshot=lambda: {"expiry": "2026-09-24", "underlying_ltp": 53200.0, "strikes": [{"strike": float(k), **v} for k, v in strikes.items()]})
+        strikes[str(strike)] = {
+            "ce": {"security_id": str(100000 + strike)},
+            "pe": {"security_id": str(200000 + strike)},
+        }
+    option_state = SimpleNamespace(
+        snapshot=lambda: {
+            "expiry": "2026-09-24",
+            "underlying_ltp": 53200.0,
+            "strikes": [{"strike": float(k), **v} for k, v in strikes.items()],
+        }
+    )
     contracts, expiry, ltp = _select_contracts(option_state)
     assert expiry == "2026-09-24"
     assert ltp == 53200.0

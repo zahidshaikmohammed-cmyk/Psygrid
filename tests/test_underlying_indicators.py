@@ -13,8 +13,17 @@ def _candles(n=25, start_price=25000.0):
         o = price
         c = price + (1 if i % 2 == 0 else -1) * 3.5
         h = max(o, c) + 1.0
-        l = min(o, c) - 1.0
-        candles.append({"timestamp": ts, "open": round(o, 2), "high": round(h, 2), "low": round(l, 2), "close": round(c, 2), "volume": 1000 + i * 10})
+        low = min(o, c) - 1.0
+        candles.append(
+            {
+                "timestamp": ts,
+                "open": round(o, 2),
+                "high": round(h, 2),
+                "low": round(low, 2),
+                "close": round(c, 2),
+                "volume": 1000 + i * 10,
+            }
+        )
         price = c
     return candles
 
@@ -67,7 +76,7 @@ def test_bad_candles_report_error_not_crash():
 
 def test_duplicate_and_unordered_candles_do_not_freeze_indicators():
     candles = _candles()
-    messy = candles[:10] + [dict(candles[5])] + candles[12:] + [candles[11], candles[10]]
+    messy = [*candles[:10], dict(candles[5]), *candles[12:], candles[11], candles[10]]
     rt = UnderlyingIndicatorRuntime("NIFTY", lambda: messy, SimpleNamespace(timezone="Asia/Kolkata"))
     rt._sync_once()
     snap = rt.snapshot()
@@ -90,7 +99,10 @@ def test_error_after_a_good_result_is_exposed():
     state = {"candles": good}
     rt = UnderlyingIndicatorRuntime("NIFTY", lambda: state["candles"], SimpleNamespace(timezone="Asia/Kolkata"))
     rt._sync_once()
-    state["candles"] = good + [{"timestamp": "2026-09-21 09:40:00 IST", "open": 1, "high": 0, "low": 2, "close": 1, "volume": 1}]
+    state["candles"] = [
+        *good,
+        {"timestamp": "2026-09-21 09:40:00 IST", "open": 1, "high": 0, "low": 2, "close": 1, "volume": 1},
+    ]
     rt._sync_once()
     snap = rt.snapshot()
     assert snap["status"] == "OK" and "invalid OHLC" in snap["last_error"]["message"]

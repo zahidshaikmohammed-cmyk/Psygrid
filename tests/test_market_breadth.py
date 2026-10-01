@@ -46,6 +46,7 @@ def test_no_bullish_bearish_labels_anywhere():
     state = _fake_state()
     payload = build_market_breadth(state)
     import json
+
     text = json.dumps(payload).upper()
     for forbidden in ("BULLISH", "BEARISH", "CONFIRMED", "SIGNAL", "BUY", "SELL"):
         assert forbidden not in text
@@ -67,6 +68,7 @@ def test_sector_breadth_groups_by_sector_and_stays_raw():
     it_sector = next(s for s in payload["sectors"] if s["sector"] == "INFORMATION_TECHNOLOGY")
     assert it_sector["constituent_count"] == 2
     import json
+
     assert "BULLISH" not in json.dumps(payload).upper()
 
 

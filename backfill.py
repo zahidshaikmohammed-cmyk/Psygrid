@@ -5,7 +5,6 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
-from typing import Optional
 
 
 class HistoricalBackfill:
@@ -36,13 +35,13 @@ class HistoricalBackfill:
                 time.sleep(wait)
             self._last_request = time.monotonic()
 
-    def _last_completed_epoch(self, security_id: str) -> Optional[int]:
+    def _last_completed_epoch(self, security_id: str) -> int | None:
         with self.state.lock:
             rows = self.state.live_candles.get(security_id, [])
             completed = [int(c.get("epoch", c["timestamp"])) for c in rows if c.get("complete", True)]
             return max(completed) if completed else None
 
-    def enqueue_gap(self, now: Optional[datetime] = None) -> int:
+    def enqueue_gap(self, now: datetime | None = None) -> int:
         """Queue the exact missing 1m interval; the WebSocket remains independent."""
         if self._closed or not self.instruments:
             return 0
@@ -87,7 +86,7 @@ class HistoricalBackfill:
                         rate_limited = "429" in text or "too many" in text or "rate limit" in text
                         if not rate_limited or attempt >= self.MAX_RETRIES - 1:
                             raise
-                        time.sleep(min(10.0, 0.75 * (2 ** attempt)))
+                        time.sleep(min(10.0, 0.75 * (2**attempt)))
                 if rows:
                     self.state.merge_today_1m_history(item.security_id, rows)
             except Exception as exc:

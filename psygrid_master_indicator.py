@@ -23,9 +23,9 @@ Dependencies: numpy, pandas (standard scientific Python stack).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Dict, Optional
 import math
+from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -94,16 +94,14 @@ def _normalise_candles(candles: list[dict]) -> pd.DataFrame:
             if not np.isfinite(v):
                 raise ValueError(f"{k} is non-finite at {c['timestamp']}")
             vals.append(float(v))
-        o, h, l, cl, vol = vals
-        if h < max(o, cl) or l > min(o, cl) or h < l:
+        o, h, lo, cl, vol = vals
+        if h < max(o, cl) or lo > min(o, cl) or h < lo:
             raise ValueError(f"invalid OHLC relationship at {c['timestamp']}")
         if vol < 0:
             raise ValueError(f"negative volume at {c['timestamp']}")
-        rows.append([ts, o, h, l, cl, vol])
+        rows.append([ts, o, h, lo, cl, vol])
     if not rows:
-        return pd.DataFrame(columns=REQUIRED_CANDLE_COLUMNS).set_index(
-            pd.DatetimeIndex([], name="timestamp")
-        )
+        return pd.DataFrame(columns=REQUIRED_CANDLE_COLUMNS).set_index(pd.DatetimeIndex([], name="timestamp"))
     df = pd.DataFrame(rows, columns=REQUIRED_CANDLE_COLUMNS)
     if df["timestamp"].duplicated().any():
         raise ValueError("duplicate 1-minute timestamps detected")
@@ -112,13 +110,13 @@ def _normalise_candles(candles: list[dict]) -> pd.DataFrame:
     return df.set_index("timestamp")
 
 
-def _last(series: pd.Series) -> Optional[float]:
+def _last(series: pd.Series) -> float | None:
     if len(series) == 0 or pd.isna(series.iloc[-1]):
         return None
     return float(series.iloc[-1])
 
 
-def _pct_change(a: Optional[float], b: Optional[float]) -> Optional[float]:
+def _pct_change(a: float | None, b: float | None) -> float | None:
     if a is None or b is None or b == 0:
         return None
     return float((a / b - 1.0) * 100.0)
@@ -224,9 +222,7 @@ def stochastic(df: pd.DataFrame, k_p: int, k_smooth: int, d_p: int):
 def cci(df: pd.DataFrame, p: int):
     tp = (df["high"] + df["low"] + df["close"]) / 3.0
     mean = tp.rolling(p, min_periods=p).mean()
-    mad = tp.rolling(p, min_periods=p).apply(
-        lambda x: np.mean(np.abs(x - np.mean(x))), raw=True
-    )
+    mad = tp.rolling(p, min_periods=p).apply(lambda x: np.mean(np.abs(x - np.mean(x))), raw=True)
     return (tp - mean) / (0.015 * mad.replace(0, np.nan))
 
 
@@ -303,15 +299,17 @@ def supertrend(df: pd.DataFrame, atr_p: int, mult: float):
     return st, direction
 
 
-def calculate_indicators(df: pd.DataFrame, cfg: IndicatorConfig) -> Dict[str, pd.Series]:
+def calculate_indicators(df: pd.DataFrame, cfg: IndicatorConfig) -> dict[str, pd.Series]:
     close, high, low, volume = df["close"], df["high"], df["low"], df["volume"]
-    out: Dict[str, pd.Series] = {}
+    out: dict[str, pd.Series] = {}
     out["sma_20"] = sma(close, cfg.sma)
     out["ema_9"] = ema_sma_seed(close, cfg.ema_fast)
     out["ema_20"] = ema_sma_seed(close, cfg.ema_slow)
     tp = (high + low + close) / 3.0
     out["vwap"] = (tp * volume).cumsum() / volume.cumsum().replace(0, np.nan)
-    out["vwma_20"] = ((close * volume).rolling(cfg.sma, min_periods=cfg.sma).sum() / volume.rolling(cfg.sma, min_periods=cfg.sma).sum().replace(0, np.nan))
+    out["vwma_20"] = (close * volume).rolling(cfg.sma, min_periods=cfg.sma).sum() / volume.rolling(
+        cfg.sma, min_periods=cfg.sma
+    ).sum().replace(0, np.nan)
     mid = sma(close, cfg.bollinger)
     sd = close.rolling(cfg.bollinger, min_periods=cfg.bollinger).std(ddof=0)
     upper, lower = mid + cfg.bollinger_std * sd, mid - cfg.bollinger_std * sd
@@ -351,29 +349,45 @@ def calculate_indicators(df: pd.DataFrame, cfg: IndicatorConfig) -> Dict[str, pd
     return out
 
 
-def _freshness(endpoint_current_time: Optional[str], last_ts: pd.Timestamp, cfg: IndicatorConfig):
+def _freshness(endpoint_current_time: str | None, last_ts: pd.Timestamp, cfg: IndicatorConfig):
     if not endpoint_current_time:
-        return {"status": "UNKNOWN", "age_seconds": None, "reason": "endpoint session.current_time_ist was not supplied"}
+        return {
+            "status": "UNKNOWN",
+            "age_seconds": None,
+            "reason": "endpoint session.current_time_ist was not supplied",
+        }
     now = _parse_ist_timestamp(endpoint_current_time)
     age = (now - last_ts).total_seconds()
     if age < 0:
-        return {"status": "TIME_ERROR", "age_seconds": age, "reason": "latest candle is in the future relative to endpoint clock"}
+        return {
+            "status": "TIME_ERROR",
+            "age_seconds": age,
+            "reason": "latest candle is in the future relative to endpoint clock",
+        }
     if age > cfg.stale_after_seconds:
-        return {"status": "STALE", "age_seconds": age, "reason": f"latest observed candle is older than {cfg.stale_after_seconds}s"}
+        return {
+            "status": "STALE",
+            "age_seconds": age,
+            "reason": f"latest observed candle is older than {cfg.stale_after_seconds}s",
+        }
     return {"status": "FRESH", "age_seconds": age, "reason": None}
 
 
-def _series_readiness(series: pd.Series, required: int) -> Dict[str, Any]:
+def _series_readiness(series: pd.Series, required: int) -> dict[str, Any]:
     valid_count = int(series.notna().sum())
     last_valid = pd.notna(series.iloc[-1]) if len(series) else False
-    return {"ready": bool(valid_count >= required and last_valid), "valid_observations": valid_count, "required_observations": required}
+    return {
+        "ready": bool(valid_count >= required and last_valid),
+        "valid_observations": valid_count,
+        "required_observations": required,
+    }
 
 
 class PsygridMasterIndicatorEngine:
-    def __init__(self, config: Optional[IndicatorConfig] = None):
+    def __init__(self, config: IndicatorConfig | None = None):
         self.config = config or IndicatorConfig()
 
-    def compute_stock(self, stock_payload: Dict[str, Any], endpoint_current_time: Optional[str]) -> Dict[str, Any]:
+    def compute_stock(self, stock_payload: dict[str, Any], endpoint_current_time: str | None) -> dict[str, Any]:
         symbol = stock_payload.get("symbol")
         if not symbol:
             raise ValueError("stock payload missing symbol")
@@ -381,17 +395,19 @@ class PsygridMasterIndicatorEngine:
         if candles is None:
             raise ValueError(f"{symbol}: candles_1m missing")
         df = _normalise_candles(candles)
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "symbol": symbol,
             "security_id": stock_payload.get("security_id"),
             "previous_close": stock_payload.get("previous_close"),
             "today_open": stock_payload.get("today_open"),
             "timeframe": "1m",
             "synthetic_candles": False,
-            "bar_count": int(len(df)),
+            "bar_count": len(df),
         }
         if df.empty:
-            result.update({"status": "NO_DATA", "as_of": None, "freshness": None, "indicators": {}, "indicator_status": {}})
+            result.update(
+                {"status": "NO_DATA", "as_of": None, "freshness": None, "indicators": {}, "indicator_status": {}}
+            )
             return result
         last_ts = df.index[-1]
         freshness = _freshness(endpoint_current_time, last_ts, self.config)
@@ -399,19 +415,48 @@ class PsygridMasterIndicatorEngine:
         result["freshness"] = freshness
         series = calculate_indicators(df, self.config)
         required = {
-            "sma_20": 20, "ema_9": 9, "ema_20": 20, "vwap": 1, "vwma_20": 20,
-            "bb_middle_20": 20, "bb_upper_20": 20, "bb_lower_20": 20, "bb_width_20": 20,
-            "bb_percent_b_20": 20, "true_range": 1, "atr_14": 14, "natr_14": 14,
-            "rsi_14": 15, "macd_line": 26, "macd_signal": 34, "macd_histogram": 34,
-            "stoch_raw_k": 14, "stoch_k": 16, "stoch_d": 18, "cci_20": 20, "roc_12": 13,
-            "momentum_10": 11, "williams_r_14": 14, "adx_14": 27, "plus_di_14": 14,
-            "minus_di_14": 14, "obv": 1, "cmf_20": 20, "mfi_14": 15, "rvol_20": 21,
-            "donchian_upper_20": 21, "donchian_lower_20": 21, "donchian_middle_20": 21,
-            "keltner_middle": 20, "keltner_upper": 20, "keltner_lower": 20,
-            "supertrend": 10, "supertrend_direction": 10,
+            "sma_20": 20,
+            "ema_9": 9,
+            "ema_20": 20,
+            "vwap": 1,
+            "vwma_20": 20,
+            "bb_middle_20": 20,
+            "bb_upper_20": 20,
+            "bb_lower_20": 20,
+            "bb_width_20": 20,
+            "bb_percent_b_20": 20,
+            "true_range": 1,
+            "atr_14": 14,
+            "natr_14": 14,
+            "rsi_14": 15,
+            "macd_line": 26,
+            "macd_signal": 34,
+            "macd_histogram": 34,
+            "stoch_raw_k": 14,
+            "stoch_k": 16,
+            "stoch_d": 18,
+            "cci_20": 20,
+            "roc_12": 13,
+            "momentum_10": 11,
+            "williams_r_14": 14,
+            "adx_14": 27,
+            "plus_di_14": 14,
+            "minus_di_14": 14,
+            "obv": 1,
+            "cmf_20": 20,
+            "mfi_14": 15,
+            "rvol_20": 21,
+            "donchian_upper_20": 21,
+            "donchian_lower_20": 21,
+            "donchian_middle_20": 21,
+            "keltner_middle": 20,
+            "keltner_upper": 20,
+            "keltner_lower": 20,
+            "supertrend": 10,
+            "supertrend_direction": 10,
         }
-        indicator_values: Dict[str, Any] = {}
-        indicator_status: Dict[str, Any] = {}
+        indicator_values: dict[str, Any] = {}
+        indicator_status: dict[str, Any] = {}
         stale = freshness["status"] != "FRESH"
         for name, s in series.items():
             st = _series_readiness(s, required.get(name, 1))
@@ -422,17 +467,22 @@ class PsygridMasterIndicatorEngine:
         result["price_change_from_previous_close_pct"] = _pct_change(last_close, stock_payload.get("previous_close"))
         result["price_change_from_today_open_pct"] = _pct_change(last_close, stock_payload.get("today_open"))
         result["latest_bar"] = {
-            "timestamp": last_ts.isoformat(), "open": float(df["open"].iloc[-1]),
-            "high": float(df["high"].iloc[-1]), "low": float(df["low"].iloc[-1]),
-            "close": last_close, "volume": float(df["volume"].iloc[-1]),
+            "timestamp": last_ts.isoformat(),
+            "open": float(df["open"].iloc[-1]),
+            "high": float(df["high"].iloc[-1]),
+            "low": float(df["low"].iloc[-1]),
+            "close": last_close,
+            "volume": float(df["volume"].iloc[-1]),
         }
         result["indicators"] = indicator_values
         result["indicator_status"] = indicator_status
         if self.config.include_series:
-            result["series"] = {name: [None if pd.isna(v) else float(v) for v in s.tolist()] for name, s in series.items()}
+            result["series"] = {
+                name: [None if pd.isna(v) else float(v) for v in s.tolist()] for name, s in series.items()
+            }
         return _clean_dict(result)
 
-    def compute_universe(self, endpoint_payload: Dict[str, Any]) -> Dict[str, Any]:
+    def compute_universe(self, endpoint_payload: dict[str, Any]) -> dict[str, Any]:
         if endpoint_payload.get("service") != "PSYGRID":
             raise ValueError("unexpected endpoint service; expected PSYGRID")
         if endpoint_payload.get("status") != "OK":
@@ -451,34 +501,42 @@ class PsygridMasterIndicatorEngine:
                 results[symbol] = self.compute_stock(stock, endpoint_now)
             except Exception as exc:
                 errors[symbol] = {"error_type": type(exc).__name__, "message": str(exc)}
-        return _clean_dict({
-            "service": "PSYGRID_MASTER_INDICATOR", "engine_version": "1.0.0",
-            "source_service": endpoint_payload.get("service"),
-            "source_schema_version": endpoint_payload.get("schema_version"),
-            "timeframe": "1m",
-            "timezone": endpoint_payload.get("session", {}).get("timezone", "Asia/Kolkata"),
-            "endpoint_current_time_ist": endpoint_now,
-            "source_universe_size": endpoint_payload.get("universe_size"),
-            "processed_count": len(results), "error_count": len(errors),
-            "fresh_count": sum(v.get("freshness", {}).get("status") == "FRESH" for v in results.values()),
-            "stale_count": sum(v.get("freshness", {}).get("status") == "STALE" for v in results.values()),
-            "results": results, "errors": errors,
-        })
+        return _clean_dict(
+            {
+                "service": "PSYGRID_MASTER_INDICATOR",
+                "engine_version": "1.0.0",
+                "source_service": endpoint_payload.get("service"),
+                "source_schema_version": endpoint_payload.get("schema_version"),
+                "timeframe": "1m",
+                "timezone": endpoint_payload.get("session", {}).get("timezone", "Asia/Kolkata"),
+                "endpoint_current_time_ist": endpoint_now,
+                "source_universe_size": endpoint_payload.get("universe_size"),
+                "processed_count": len(results),
+                "error_count": len(errors),
+                "fresh_count": sum(v.get("freshness", {}).get("status") == "FRESH" for v in results.values()),
+                "stale_count": sum(v.get("freshness", {}).get("status") == "STALE" for v in results.values()),
+                "results": results,
+                "errors": errors,
+            }
+        )
 
 
-def run_psygrid(endpoint_payload: Dict[str, Any], include_series: bool = False) -> Dict[str, Any]:
-    return PsygridMasterIndicatorEngine(IndicatorConfig(include_series=include_series)).compute_universe(endpoint_payload)
+def run_psygrid(endpoint_payload: dict[str, Any], include_series: bool = False) -> dict[str, Any]:
+    return PsygridMasterIndicatorEngine(IndicatorConfig(include_series=include_series)).compute_universe(
+        endpoint_payload
+    )
 
 
 if __name__ == "__main__":
     import argparse
     import json
+
     parser = argparse.ArgumentParser(description="PSYGRID master 1-minute indicator engine")
     parser.add_argument("input_json", help="PSYGRID endpoint JSON file")
     parser.add_argument("-o", "--output", help="output JSON file", default=None)
     parser.add_argument("--series", action="store_true", help="include full indicator series")
     args = parser.parse_args()
-    with open(args.input_json, "r", encoding="utf-8") as f:
+    with open(args.input_json, encoding="utf-8") as f:
         payload = json.load(f)
     output = run_psygrid(payload, include_series=args.series)
     if args.output:

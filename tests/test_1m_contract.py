@@ -16,16 +16,18 @@ def test_public_market_payload_is_1m_only():
     state = PsygridState(_settings())
     state.begin("2026-09-16", [_instrument()])
     state.set_market_reference("1", previous_close=100.0, today_open=101.0)
-    state.live_candles["1"].append({
-        "timestamp": 1778989500,
-        "epoch": 1778989500,
-        "open": 101.0,
-        "high": 102.0,
-        "low": 100.5,
-        "close": 101.5,
-        "volume": 123,
-        "complete": True,
-    })
+    state.live_candles["1"].append(
+        {
+            "timestamp": 1778989500,
+            "epoch": 1778989500,
+            "open": 101.0,
+            "high": 102.0,
+            "low": 100.5,
+            "close": 101.5,
+            "volume": 123,
+            "complete": True,
+        }
+    )
 
     payload = market_live_json(state)
     stock = payload["stocks"]["AAA"]
@@ -51,24 +53,38 @@ def test_stock_endpoint_matches_1m_contract():
     assert payload["previous_close"] == 99.5
     assert payload["today_open"] == 100.0
     assert payload["candles_1m"] == []
-    assert set(payload) == {"service", "schema_version", "status", "symbol", "security_id", "previous_close", "today_open", "candles_1m"}
+    assert set(payload) == {
+        "service",
+        "schema_version",
+        "status",
+        "symbol",
+        "security_id",
+        "previous_close",
+        "today_open",
+        "candles_1m",
+    }
 
 
 def test_completed_minute_is_unique_when_history_and_websocket_overlap():
     state = PsygridState(_settings())
     state.begin("2026-09-16", [_instrument()])
     minute = 1778989500
-    state.merge_today_1m_history("1", [{
-        "timestamp": minute,
-        "epoch": minute,
-        "open": 100.0,
-        "high": 103.0,
-        "low": 99.0,
-        "close": 102.0,
-        "volume": 500,
-        "source": "DHAN_HISTORICAL_API",
-        "complete": True,
-    }])
+    state.merge_today_1m_history(
+        "1",
+        [
+            {
+                "timestamp": minute,
+                "epoch": minute,
+                "open": 100.0,
+                "high": 103.0,
+                "low": 99.0,
+                "close": 102.0,
+                "volume": 500,
+                "source": "DHAN_HISTORICAL_API",
+                "complete": True,
+            }
+        ],
+    )
     state.current_1m["1"] = {
         "timestamp": minute,
         "epoch": minute,
@@ -92,9 +108,39 @@ def test_merge_history_replaces_duplicate_minutes_and_keeps_them_sorted():
     state.begin("2026-09-16", [_instrument()])
     base = 1778989500
     rows = [
-        {"timestamp": base + 120, "epoch": base + 120, "open": 102, "high": 103, "low": 101, "close": 102, "volume": 20, "source": "DHAN_HISTORICAL_API", "complete": True},
-        {"timestamp": base, "epoch": base, "open": 100, "high": 101, "low": 99, "close": 100, "volume": 10, "source": "DHAN_HISTORICAL_API", "complete": True},
-        {"timestamp": base, "epoch": base, "open": 100, "high": 102, "low": 98, "close": 101, "volume": 15, "source": "DHAN_HISTORICAL_API", "complete": True},
+        {
+            "timestamp": base + 120,
+            "epoch": base + 120,
+            "open": 102,
+            "high": 103,
+            "low": 101,
+            "close": 102,
+            "volume": 20,
+            "source": "DHAN_HISTORICAL_API",
+            "complete": True,
+        },
+        {
+            "timestamp": base,
+            "epoch": base,
+            "open": 100,
+            "high": 101,
+            "low": 99,
+            "close": 100,
+            "volume": 10,
+            "source": "DHAN_HISTORICAL_API",
+            "complete": True,
+        },
+        {
+            "timestamp": base,
+            "epoch": base,
+            "open": 100,
+            "high": 102,
+            "low": 98,
+            "close": 101,
+            "volume": 15,
+            "source": "DHAN_HISTORICAL_API",
+            "complete": True,
+        },
     ]
     state.merge_today_1m_history("1", rows)
     candles = state.live_candles["1"]

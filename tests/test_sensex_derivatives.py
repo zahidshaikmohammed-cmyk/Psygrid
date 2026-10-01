@@ -38,8 +38,17 @@ def test_sensex_depth_uses_bse_fno_segment():
 def test_sensex_depth_selects_nearest_25_strikes_and_both_sides():
     strikes = {}
     for strike in range(80000, 84001, 100):
-        strikes[str(strike)] = {"ce": {"security_id": str(300000 + strike)}, "pe": {"security_id": str(400000 + strike)}}
-    option_state = SimpleNamespace(snapshot=lambda: {"expiry": "2026-09-30", "underlying_ltp": 82000.0, "strikes": [{"strike": float(k), **v} for k, v in strikes.items()]})
+        strikes[str(strike)] = {
+            "ce": {"security_id": str(300000 + strike)},
+            "pe": {"security_id": str(400000 + strike)},
+        }
+    option_state = SimpleNamespace(
+        snapshot=lambda: {
+            "expiry": "2026-09-30",
+            "underlying_ltp": 82000.0,
+            "strikes": [{"strike": float(k), **v} for k, v in strikes.items()],
+        }
+    )
     contracts, expiry, ltp = _select_contracts(option_state)
     assert expiry == "2026-09-30"
     assert ltp == 82000.0

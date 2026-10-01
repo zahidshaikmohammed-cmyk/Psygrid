@@ -37,7 +37,11 @@ def test_midcpnifty_depth_selects_nearest_25_strikes_and_ce_pe():
                 "expiry": "2026-09-29",
                 "underlying_ltp": 1000.0,
                 "strikes": [
-                    {"strike": float(900 + i * 10), "ce": {"security_id": str(1000 + i)}, "pe": {"security_id": str(2000 + i)} }
+                    {
+                        "strike": float(900 + i * 10),
+                        "ce": {"security_id": str(1000 + i)},
+                        "pe": {"security_id": str(2000 + i)},
+                    }
                     for i in range(31)
                 ],
             }

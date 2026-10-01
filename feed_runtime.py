@@ -27,14 +27,20 @@ class LiveFeed(BaseLiveFeed):
         return self.state.session_status == "LIVE"
 
     async def _resubscribe_one(self, feed, item) -> None:
-        await feed.ws.send(json.dumps({
-            "RequestCode": 21,
-            "InstrumentCount": 1,
-            "InstrumentList": [{
-                "ExchangeSegment": item.exchange_segment,
-                "SecurityId": str(item.security_id),
-            }],
-        }))
+        await feed.ws.send(
+            json.dumps(
+                {
+                    "RequestCode": 21,
+                    "InstrumentCount": 1,
+                    "InstrumentList": [
+                        {
+                            "ExchangeSegment": item.exchange_segment,
+                            "SecurityId": str(item.security_id),
+                        }
+                    ],
+                }
+            )
+        )
 
     def _health_pass(self, feed) -> None:
         if not self._market_hours() or self._stop_requested.is_set():

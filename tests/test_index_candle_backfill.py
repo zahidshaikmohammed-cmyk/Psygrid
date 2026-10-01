@@ -14,8 +14,16 @@ def _settings():
 
 
 def _candle(ts, close=25000.0):
-    return {"timestamp": ts, "open": close, "high": close + 5, "low": close - 5, "close": close,
-            "volume": 0, "source": "DHAN_HISTORICAL_API", "complete": True}
+    return {
+        "timestamp": ts,
+        "open": close,
+        "high": close + 5,
+        "low": close - 5,
+        "close": close,
+        "volume": 0,
+        "source": "DHAN_HISTORICAL_API",
+        "complete": True,
+    }
 
 
 class FakeDhan:
@@ -53,7 +61,20 @@ def test_backfill_grows_series_without_any_websocket_ticks():
     assert [c["timestamp"] for c in m.states["nifty"].live_candles] == [T0 - 60, T0, T0 + 60]
     assert len(m.states["sensex"].live_candles) == 1
     # only the derivatives underlyings are backfilled, not every index
-    assert sorted(api.calls) == [("13", 1), ("13", 5), ("13", 15), ("13", 60), ("25", 1), ("25", 5), ("25", 15), ("25", 60), ("51", 1), ("51", 5), ("51", 15), ("51", 60)]
+    assert sorted(api.calls) == [
+        ("13", 1),
+        ("13", 5),
+        ("13", 15),
+        ("13", 60),
+        ("25", 1),
+        ("25", 5),
+        ("25", 15),
+        ("25", 60),
+        ("51", 1),
+        ("51", 5),
+        ("51", 15),
+        ("51", 60),
+    ]
     assert m.states["niftyit"].live_candles == []
 
 
@@ -69,11 +90,13 @@ def test_backfill_uses_the_whole_trading_day_not_just_a_short_lookback():
 
 
 def test_backfill_fills_5m_15m_1h_history():
-    api = FakeDhan(rows_by_interval={
-        ("13", 5): [_candle(T0)],
-        ("13", 15): [_candle(T0)],
-        ("13", 60): [_candle(T0)],
-    })
+    api = FakeDhan(
+        rows_by_interval={
+            ("13", 5): [_candle(T0)],
+            ("13", 15): [_candle(T0)],
+            ("13", 60): [_candle(T0)],
+        }
+    )
     m = _manager(api, keys=("nifty",))
     assert m.states["nifty"].historical.get("5m", []) == []
     m.backfill_recent_candles()
@@ -101,9 +124,9 @@ def test_backfill_failure_keeps_series_and_records_error():
 
 def test_websocket_rollover_never_duplicates_a_backfilled_minute():
     st = _manager(FakeDhan(), keys=("nifty",)).states["nifty"]
-    st.update_quote(25000.0, T0 + 10, 0, 0)          # websocket builds minute T0
+    st.update_quote(25000.0, T0 + 10, 0, 0)  # websocket builds minute T0
     st.merge_today_1m([_candle(T0, close=25001.0)])  # backfill already has T0
-    st.update_quote(25010.0, T0 + 65, 0, 0)          # rollover into T0+60
+    st.update_quote(25010.0, T0 + 65, 0, 0)  # rollover into T0+60
     ts = [c["timestamp"] for c in st.live_candles]
     assert ts == [T0] and st.live_candles[0]["close"] == 25001.0  # official candle kept
     st.finalize_current()

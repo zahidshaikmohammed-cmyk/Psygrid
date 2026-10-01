@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Real NIFTY/BANKNIFTY index-futures data (front-month contract), sourced
 from Dhan's own instrument master (contract identity) and market-quote API
 (LTP/OHLC/volume/OI/bid/ask), using the exact same credentials and rate
@@ -9,10 +7,13 @@ RAW DATA ONLY: no rollover recommendation, no basis/premium interpretation,
 no trading signal. Just the contract's current published quote.
 """
 
+from __future__ import annotations
+
 import threading
 import time
 from dataclasses import dataclass
-from datetime import datetime, time as datetime_time
+from datetime import datetime
+from datetime import time as datetime_time
 from zoneinfo import ZoneInfo
 
 from derivatives_instruments import (
@@ -117,7 +118,9 @@ class FuturesState:
                     "high": _num(ohlc.get("high")),
                     "low": _num(ohlc.get("low")),
                     "close": _num(ohlc.get("close")),
-                } if ohlc else None,
+                }
+                if ohlc
+                else None,
                 "volume": _num(self.quote.get("volume")),
                 "oi": _num(self.quote.get("oi")),
                 "oi_change": self.oi_change,
@@ -150,7 +153,7 @@ class FuturesManager:
         self.stop_event = threading.Event()
         self.thread: threading.Thread | None = None
         self._contract_resolved_at = 0.0
-        self.group: "FuturesGroup | None" = None
+        self.group: FuturesGroup | None = None
 
     def start(self) -> None:
         if self.group is not None:
@@ -182,10 +185,15 @@ class FuturesManager:
     def _loop(self) -> None:
         while not self.stop_event.is_set():
             try:
-                if self.state.contract is None or time.monotonic() - self._contract_resolved_at >= FUTURES_CONTRACT_REFRESH_SECONDS:
+                if (
+                    self.state.contract is None
+                    or time.monotonic() - self._contract_resolved_at >= FUTURES_CONTRACT_REFRESH_SECONDS
+                ):
                     self._resolve_contract()
                 contract = self.state.contract
-                instrument = _QuoteInstrument(security_id=contract.security_id, exchange_segment=contract.exchange_segment)
+                instrument = _QuoteInstrument(
+                    security_id=contract.security_id, exchange_segment=contract.exchange_segment
+                )
                 quotes = self.dhan_api.quote_snapshot([instrument])
                 row = quotes.get(str(contract.security_id))
                 if not isinstance(row, dict):
@@ -225,7 +233,9 @@ class FuturesGroup:
             if self.quote_thread and self.quote_thread.is_alive():
                 return
             self.stop_event.clear()
-            self.contract_thread = threading.Thread(target=self._contract_loop, daemon=True, name="psygrid-futures-contracts")
+            self.contract_thread = threading.Thread(
+                target=self._contract_loop, daemon=True, name="psygrid-futures-contracts"
+            )
             self.quote_thread = threading.Thread(target=self._quote_loop, daemon=True, name="psygrid-futures-quotes")
             self.contract_thread.start()
             self.quote_thread.start()
@@ -258,8 +268,12 @@ class FuturesGroup:
         live = [m for m in self.managers if m.state.contract is not None]
         if not live:
             return
-        instruments = [_QuoteInstrument(security_id=m.state.contract.security_id,
-                                        exchange_segment=m.state.contract.exchange_segment) for m in live]
+        instruments = [
+            _QuoteInstrument(
+                security_id=m.state.contract.security_id, exchange_segment=m.state.contract.exchange_segment
+            )
+            for m in live
+        ]
         try:
             quotes = self.dhan_api.quote_snapshot(instruments)
         except Exception as exc:

@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import threading
 from collections import defaultdict
-from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 
@@ -14,32 +13,32 @@ class PsygridState:
         self.settings = settings
         self.tz = ZoneInfo(settings.timezone)
         self.lock = threading.RLock()
-        self.session_date: Optional[str] = None
+        self.session_date: str | None = None
         self.session_status = "CLOSED"
         self.feed_status = "STOPPED"
         self.last_feed_error = ""
-        self.last_tick_at: Optional[str] = None
-        self.last_tick_epoch: Optional[float] = None
-        self.last_tick_received_epoch: Optional[float] = None
-        self.last_tick_by_security: Dict[str, float] = {}
-        self.last_ltp_by_security: Dict[str, float] = {}
-        self.last_ltt_by_security: Dict[str, int] = {}
+        self.last_tick_at: str | None = None
+        self.last_tick_epoch: float | None = None
+        self.last_tick_received_epoch: float | None = None
+        self.last_tick_by_security: dict[str, float] = {}
+        self.last_ltp_by_security: dict[str, float] = {}
+        self.last_ltt_by_security: dict[str, int] = {}
         self.data_plan_status = "UNKNOWN"
         self.data_validity = None
         self.token_validity = None
-        self.instruments: Dict[str, dict] = {}
-        self.live_candles: Dict[str, List[dict]] = defaultdict(list)
-        self.current_1m: Dict[str, Optional[dict]] = {}
-        self.prev_cumulative_volume: Dict[str, int] = {}
-        self.last_trade_key: Dict[str, tuple] = {}
-        self.market_reference: Dict[str, dict] = {}
+        self.instruments: dict[str, dict] = {}
+        self.live_candles: dict[str, list[dict]] = defaultdict(list)
+        self.current_1m: dict[str, dict | None] = {}
+        self.prev_cumulative_volume: dict[str, int] = {}
+        self.last_trade_key: dict[str, tuple] = {}
+        self.market_reference: dict[str, dict] = {}
         self.feed_messages = 0
         self.quote_packets = 0
         self.live_quotes = 0
         self.websocket_reconnects = 0
-        self.last_message_type: Optional[str] = None
-        self.last_message_at: Optional[str] = None
-        self.websocket_connected_at: Optional[str] = None
+        self.last_message_type: str | None = None
+        self.last_message_at: str | None = None
+        self.websocket_connected_at: str | None = None
         self.subscribed_count = 0
 
     def reset(self) -> None:
@@ -126,7 +125,7 @@ class PsygridState:
     def mark_websocket_connected(self, subscribed_count: int) -> None:
         with self.lock:
             self.feed_status = "CONNECTED"
-            self.websocket_connected_at = datetime.now(timezone.utc).isoformat()
+            self.websocket_connected_at = datetime.now(UTC).isoformat()
             self.last_feed_error = ""
             self.subscribed_count = int(subscribed_count)
 
@@ -147,7 +146,7 @@ class PsygridState:
                 return
             self.feed_messages += 1
             self.last_message_type = packet_type
-            self.last_message_at = datetime.now(timezone.utc).isoformat()
+            self.last_message_at = datetime.now(UTC).isoformat()
             if packet_type.lower() in {"quote data", "quote", "full data", "full"}:
                 self.quote_packets += 1
 
@@ -189,16 +188,16 @@ class PsygridState:
             security_id = str(security_id)
             if self.session_status != "LIVE" or security_id not in self.instruments:
                 return
-            received_now = datetime.now(timezone.utc).timestamp()
+            received_now = datetime.now(UTC).timestamp()
             self.live_quotes += 1
             self.last_tick_epoch = float(ltt_epoch)
-            self.last_tick_at = datetime.fromtimestamp(ltt_epoch, timezone.utc).isoformat()
+            self.last_tick_at = datetime.fromtimestamp(ltt_epoch, UTC).isoformat()
             self.last_tick_received_epoch = received_now
             self.last_tick_by_security[security_id] = received_now
             self.last_ltt_by_security[security_id] = int(ltt_epoch)
 
     @staticmethod
-    def _minute_key(candle: dict) -> Optional[int]:
+    def _minute_key(candle: dict) -> int | None:
         try:
             return int(candle.get("epoch", candle["timestamp"])) // 60
         except (KeyError, TypeError, ValueError):
@@ -227,10 +226,10 @@ class PsygridState:
             rows.append(dict(candle))
         rows.sort(key=lambda row: self._minute_key(row) or 0)
 
-    def merge_today_1m_history(self, security_id: str, candles: List[dict]) -> None:
+    def merge_today_1m_history(self, security_id: str, candles: list[dict]) -> None:
         security_id = str(security_id)
         with self.lock:
-            existing: Dict[int, dict] = {}
+            existing: dict[int, dict] = {}
             for candle in self.live_candles.get(security_id, []):
                 if not isinstance(candle, dict) or not candle.get("complete", True):
                     continue
@@ -326,20 +325,30 @@ class PsygridState:
                     self._append_completed_1m_locked(security_id, item)
                     self.current_1m[security_id] = None
 
-    def freshness(self, security_id: str, now_epoch: Optional[float] = None) -> dict:
+    def freshness(self, security_id: str, now_epoch: float | None = None) -> dict:
         with self.lock:
-            now_epoch = now_epoch or datetime.now(timezone.utc).timestamp()
+            now_epoch = now_epoch or datetime.now(UTC).timestamp()
             last = self.last_tick_by_security.get(str(security_id))
             if last is None:
                 return {"status": "NO_LIVE_QUOTE", "data_age_seconds": None, "live_data_valid": False, "source": None}
             age = max(0.0, now_epoch - last)
             valid = age <= self.settings.max_live_age_seconds
-            return {"status": "LIVE" if valid else "STALE", "data_age_seconds": round(age, 3), "live_data_valid": valid, "source": "DHAN_WEBSOCKET_FULL"}
+            return {
+                "status": "LIVE" if valid else "STALE",
+                "data_age_seconds": round(age, 3),
+                "live_data_valid": valid,
+                "source": "DHAN_WEBSOCKET_FULL",
+            }
 
     def snapshot(self) -> dict:
         with self.lock:
-            now_epoch = datetime.now(timezone.utc).timestamp()
-            live_count = sum(1 for security_id in self.instruments if security_id in self.last_tick_by_security and now_epoch - self.last_tick_by_security[security_id] <= self.settings.max_live_age_seconds)
+            now_epoch = datetime.now(UTC).timestamp()
+            live_count = sum(
+                1
+                for security_id in self.instruments
+                if security_id in self.last_tick_by_security
+                and now_epoch - self.last_tick_by_security[security_id] <= self.settings.max_live_age_seconds
+            )
             if self.session_status == "LIVE" and live_count == 0:
                 stream_health = "CONNECTED_NO_LIVE_QUOTES" if self.feed_status == "CONNECTED" else self.feed_status
             elif self.session_status == "LIVE" and live_count == len(self.instruments) and self.instruments:
@@ -355,7 +364,9 @@ class PsygridState:
                 "stream_health": stream_health,
                 "last_feed_error": self.last_feed_error,
                 "last_tick_at": self.last_tick_at,
-                "last_tick_age_seconds": round(now_epoch - self.last_tick_received_epoch, 3) if self.last_tick_received_epoch else None,
+                "last_tick_age_seconds": round(now_epoch - self.last_tick_received_epoch, 3)
+                if self.last_tick_received_epoch
+                else None,
                 "max_live_age_seconds": self.settings.max_live_age_seconds,
                 "live_stock_count": live_count,
                 "subscribed_count": self.subscribed_count,

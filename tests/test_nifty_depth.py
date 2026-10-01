@@ -22,11 +22,13 @@ class NiftyDepthTests(unittest.TestCase):
     def test_selects_nearest_25_strikes_and_both_sides(self):
         strikes = []
         for strike in range(22900, 24101, 50):
-            strikes.append({
-                "strike": float(strike),
-                "ce": {"security_id": str(100000 + strike)},
-                "pe": {"security_id": str(200000 + strike)},
-            })
+            strikes.append(
+                {
+                    "strike": float(strike),
+                    "ce": {"security_id": str(100000 + strike)},
+                    "pe": {"security_id": str(200000 + strike)},
+                }
+            )
         state = SimpleNamespace()
         state.snapshot = lambda: {"expiry": "2026-09-17", "underlying_ltp": 23500.0, "strikes": strikes}
         contracts, expiry, ltp = _select_contracts(state)

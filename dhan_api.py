@@ -3,7 +3,6 @@ from __future__ import annotations
 import threading
 import time
 from datetime import datetime, timedelta
-from typing import Dict, List
 from zoneinfo import ZoneInfo
 
 import requests
@@ -28,7 +27,12 @@ class DhanAPI:
 
     @property
     def headers(self) -> dict:
-        return {"Accept":"application/json","Content-Type":"application/json","access-token":self.settings.access_token,"client-id":self.settings.client_id}
+        return {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "access-token": self.settings.access_token,
+            "client-id": self.settings.client_id,
+        }
 
     @classmethod
     def _throttle_post(cls, minimum_interval: float = DATA_API_MIN_INTERVAL) -> None:
@@ -36,7 +40,7 @@ class DhanAPI:
             return
         with cls._rate_lock:
             now = time.monotonic()
-            wait = max(minimum_interval-(now-cls._last_post_at), cls._cooldown_until-now, 0.0)
+            wait = max(minimum_interval - (now - cls._last_post_at), cls._cooldown_until - now, 0.0)
             if wait > 0:
                 time.sleep(wait)
             cls._last_post_at = time.monotonic()
@@ -46,45 +50,59 @@ class DhanAPI:
         if seconds <= 0:
             return
         with cls._rate_lock:
-            cls._cooldown_until = max(cls._cooldown_until, time.monotonic()+seconds)
+            cls._cooldown_until = max(cls._cooldown_until, time.monotonic() + seconds)
 
     @staticmethod
     def _retry_after_seconds(response) -> float:
         value = response.headers.get("Retry-After")
         try:
-            return max(0.0,min(30.0,float(value))) if value is not None else 2.0
-        except (TypeError,ValueError):
+            return max(0.0, min(30.0, float(value))) if value is not None else 2.0
+        except (TypeError, ValueError):
             return 2.0
 
-    def _post(self, path: str, payload: dict, include_client_id: bool=False, minimum_interval: float=DATA_API_MIN_INTERVAL) -> dict:
-        headers = self.headers if include_client_id else {"Accept":"application/json","Content-Type":"application/json","access-token":self.settings.access_token}
+    def _post(
+        self, path: str, payload: dict, include_client_id: bool = False, minimum_interval: float = DATA_API_MIN_INTERVAL
+    ) -> dict:
+        headers = (
+            self.headers
+            if include_client_id
+            else {
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "access-token": self.settings.access_token,
+            }
+        )
         last_error = None
         for attempt in range(10):
             try:
                 self._throttle_post(minimum_interval)
-                response = self.session.post(BASE_URL+path, headers=headers, json=payload, timeout=30)
+                response = self.session.post(BASE_URL + path, headers=headers, json=payload, timeout=30)
                 if response.status_code == 429:
-                    retry_after=self._retry_after_seconds(response)
+                    retry_after = self._retry_after_seconds(response)
                     self._set_rate_cooldown(retry_after)
-                    last_error=RuntimeError("Dhan API HTTP 429 rate limit")
+                    last_error = RuntimeError("Dhan API HTTP 429 rate limit")
                     if attempt < 9:
-                        time.sleep(min(retry_after,30.0)); continue
+                        time.sleep(min(retry_after, 30.0))
+                        continue
                     raise last_error
                 if response.status_code >= 500:
-                    last_error=RuntimeError(f"Dhan API HTTP {response.status_code}")
+                    last_error = RuntimeError(f"Dhan API HTTP {response.status_code}")
                     if attempt < 9:
-                        time.sleep(min(8.0,1.0*(2**min(attempt,3)))); continue
+                        time.sleep(min(8.0, 1.0 * (2 ** min(attempt, 3))))
+                        continue
                     raise last_error
                 response.raise_for_status()
-                data=response.json()
-                if isinstance(data,dict) and str(data.get("status","")).lower()=="failure":
+                data = response.json()
+                if isinstance(data, dict) and str(data.get("status", "")).lower() == "failure":
                     raise RuntimeError(str(data))
-                if not isinstance(data,dict): raise RuntimeError("Dhan API returned a non-object response")
+                if not isinstance(data, dict):
+                    raise RuntimeError("Dhan API returned a non-object response")
                 return data
-            except (requests.Timeout,requests.ConnectionError) as exc:
-                last_error=exc
+            except (requests.Timeout, requests.ConnectionError) as exc:
+                last_error = exc
                 if attempt < 9:
-                    time.sleep(min(8.0,1.0*(2**min(attempt,3)))); continue
+                    time.sleep(min(8.0, 1.0 * (2 ** min(attempt, 3))))
+                    continue
                 raise RuntimeError(f"Dhan API network failure: {exc}") from exc
             except requests.HTTPError as exc:
                 raise RuntimeError(f"Dhan API HTTP error: {exc}") from exc
@@ -111,88 +129,190 @@ class DhanAPI:
         )
 
     def profile(self) -> dict:
-        response=self.session.get(BASE_URL+"/profile",headers={"Accept":"application/json","access-token":self.settings.access_token},timeout=20)
-        response.raise_for_status(); data=response.json()
-        if not isinstance(data,dict): raise RuntimeError("Invalid Dhan profile response")
+        response = self.session.get(
+            BASE_URL + "/profile",
+            headers={"Accept": "application/json", "access-token": self.settings.access_token},
+            timeout=20,
+        )
+        response.raise_for_status()
+        data = response.json()
+        if not isinstance(data, dict):
+            raise RuntimeError("Invalid Dhan profile response")
         return data
 
     def verify_data_access(self) -> dict:
-        profile=self.profile()
-        if str(profile.get("dataPlan","")).strip().lower() != "active": raise RuntimeError("DHAN_DATA_PLAN_NOT_ACTIVE")
+        profile = self.profile()
+        if str(profile.get("dataPlan", "")).strip().lower() != "active":
+            raise RuntimeError("DHAN_DATA_PLAN_NOT_ACTIVE")
         return profile
 
-    def quote_snapshot(self,instruments) -> Dict[str,dict]:
-        grouped: Dict[str,List[int]]={}
-        for item in instruments: grouped.setdefault(item.exchange_segment,[]).append(int(item.security_id))
-        raw=self._post("/marketfeed/quote",grouped,include_client_id=True,minimum_interval=1.0)
-        result: Dict[str,dict]={}
-        for _segment,rows in raw.get("data",{}).items():
-            if isinstance(rows,dict):
-                for security_id,row in rows.items():
-                    if isinstance(row,dict): result[str(security_id)]=row
+    def quote_snapshot(self, instruments) -> dict[str, dict]:
+        grouped: dict[str, list[int]] = {}
+        for item in instruments:
+            grouped.setdefault(item.exchange_segment, []).append(int(item.security_id))
+        raw = self._post("/marketfeed/quote", grouped, include_client_id=True, minimum_interval=1.0)
+        result: dict[str, dict] = {}
+        for _segment, rows in raw.get("data", {}).items():
+            if isinstance(rows, dict):
+                for security_id, row in rows.items():
+                    if isinstance(row, dict):
+                        result[str(security_id)] = row
         return result
 
     @staticmethod
-    def _candles_from_arrays(data: dict) -> List[dict]:
-        if not isinstance(data,dict): return []
-        keys=("timestamp","open","high","low","close","volume")
-        arrays=[data.get(k) for k in keys]
-        if not all(isinstance(a,list) for a in arrays): return []
-        length=len(arrays[0])
-        if any(len(a)!=length for a in arrays): raise RuntimeError("Dhan historical response arrays have inconsistent lengths")
-        candles=[]
+    def _candles_from_arrays(data: dict) -> list[dict]:
+        if not isinstance(data, dict):
+            return []
+        keys = ("timestamp", "open", "high", "low", "close", "volume")
+        arrays = [data.get(k) for k in keys]
+        if not all(isinstance(a, list) for a in arrays):
+            return []
+        length = len(arrays[0])
+        if any(len(a) != length for a in arrays):
+            raise RuntimeError("Dhan historical response arrays have inconsistent lengths")
+        candles = []
         for i in range(length):
             try:
-                timestamp=int(arrays[0][i]); open_price=float(arrays[1][i]); high=float(arrays[2][i]); low=float(arrays[3][i]); close=float(arrays[4][i]); volume=int(arrays[5][i])
-            except (TypeError,ValueError): continue
-            if timestamp<=0 or min(open_price,high,low,close)<=0 or volume<0: continue
-            if high<max(open_price,close) or low>min(open_price,close) or low<=0 or high<=0: continue
-            candles.append({"timestamp":timestamp,"open":open_price,"high":high,"low":low,"close":close,"volume":volume,"source":"DHAN_HISTORICAL_API","complete":True})
+                timestamp = int(arrays[0][i])
+                open_price = float(arrays[1][i])
+                high = float(arrays[2][i])
+                low = float(arrays[3][i])
+                close = float(arrays[4][i])
+                volume = int(arrays[5][i])
+            except (TypeError, ValueError):
+                continue
+            if timestamp <= 0 or min(open_price, high, low, close) <= 0 or volume < 0:
+                continue
+            if high < max(open_price, close) or low > min(open_price, close) or low <= 0 or high <= 0:
+                continue
+            candles.append(
+                {
+                    "timestamp": timestamp,
+                    "open": open_price,
+                    "high": high,
+                    "low": low,
+                    "close": close,
+                    "volume": volume,
+                    "source": "DHAN_HISTORICAL_API",
+                    "complete": True,
+                }
+            )
         return candles
 
-    def intraday(self,item,interval:int,from_dt:datetime,to_dt:datetime)->List[dict]:
-        payload={"securityId":item.security_id,"exchangeSegment":item.exchange_segment,"instrument":item.instrument,"interval":str(interval),"oi":False,"fromDate":from_dt.strftime("%Y-%m-%d %H:%M:%S"),"toDate":to_dt.strftime("%Y-%m-%d %H:%M:%S")}
-        return self._candles_from_arrays(self._post("/charts/intraday",payload,minimum_interval=INTRADAY_MIN_INTERVAL))
+    def intraday(self, item, interval: int, from_dt: datetime, to_dt: datetime) -> list[dict]:
+        payload = {
+            "securityId": item.security_id,
+            "exchangeSegment": item.exchange_segment,
+            "instrument": item.instrument,
+            "interval": str(interval),
+            "oi": False,
+            "fromDate": from_dt.strftime("%Y-%m-%d %H:%M:%S"),
+            "toDate": to_dt.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        return self._candles_from_arrays(
+            self._post("/charts/intraday", payload, minimum_interval=INTRADAY_MIN_INTERVAL)
+        )
 
-    def load_recent_completed_intraday(self,item,interval:int,lookback_intervals:int=4)->List[dict]:
-        now=datetime.now(self.tz)
-        start=now-timedelta(minutes=max(1,int(interval))*max(2,int(lookback_intervals)))
-        rows=self.intraday(item,interval,start,now)
-        now_epoch=int(now.timestamp())
-        today=now.date()
-        completed=[r for r in rows if datetime.fromtimestamp(r["timestamp"],self.tz).date()==today and int(r["timestamp"])+int(interval)*60<=now_epoch]
-        completed.sort(key=lambda r:r["timestamp"])
+    def load_recent_completed_intraday(self, item, interval: int, lookback_intervals: int = 4) -> list[dict]:
+        now = datetime.now(self.tz)
+        start = now - timedelta(minutes=max(1, int(interval)) * max(2, int(lookback_intervals)))
+        rows = self.intraday(item, interval, start, now)
+        now_epoch = int(now.timestamp())
+        today = now.date()
+        completed = [
+            r
+            for r in rows
+            if datetime.fromtimestamp(r["timestamp"], self.tz).date() == today
+            and int(r["timestamp"]) + int(interval) * 60 <= now_epoch
+        ]
+        completed.sort(key=lambda r: r["timestamp"])
         return completed
 
-    def load_today_completed_intraday(self,item,interval:int)->List[dict]:
-        now=datetime.now(self.tz)
+    def load_today_completed_intraday(self, item, interval: int) -> list[dict]:
+        now = datetime.now(self.tz)
         # Start one minute early so a provider boundary rule cannot drop the
         # genuine 09:15 opening candle. We still filter strictly to today's data.
-        start=now.replace(hour=9,minute=14,second=0,microsecond=0)
-        if now<=start:return []
-        rows=self.intraday(item,interval,start,now); now_epoch=int(now.timestamp()); today=now.date(); candle_seconds=interval*60
-        completed=[r for r in rows if datetime.fromtimestamp(r["timestamp"],self.tz).date()==today and int(r["timestamp"])+candle_seconds<=now_epoch]
-        completed.sort(key=lambda r:r["timestamp"]); return completed
+        start = now.replace(hour=9, minute=14, second=0, microsecond=0)
+        if now <= start:
+            return []
+        rows = self.intraday(item, interval, start, now)
+        now_epoch = int(now.timestamp())
+        today = now.date()
+        candle_seconds = interval * 60
+        completed = [
+            r
+            for r in rows
+            if datetime.fromtimestamp(r["timestamp"], self.tz).date() == today
+            and int(r["timestamp"]) + candle_seconds <= now_epoch
+        ]
+        completed.sort(key=lambda r: r["timestamp"])
+        return completed
 
-    def load_intraday_window(self,item,interval:int,days:int)->tuple[List[dict],List[dict]]:
-        now=datetime.now(self.tz); start=now-timedelta(days=max(days,1)); rows=self.intraday(item,interval,start,now); today=now.date(); now_epoch=int(now.timestamp()); candle_seconds=int(interval)*60
-        previous=[r for r in rows if datetime.fromtimestamp(r["timestamp"],self.tz).date()<today]
-        current=[r for r in rows if datetime.fromtimestamp(r["timestamp"],self.tz).date()==today and int(r["timestamp"])+candle_seconds<=now_epoch]
-        previous.sort(key=lambda r:r["timestamp"]); current.sort(key=lambda r:r["timestamp"]); return previous,current
+    def load_intraday_window(self, item, interval: int, days: int) -> tuple[list[dict], list[dict]]:
+        now = datetime.now(self.tz)
+        start = now - timedelta(days=max(days, 1))
+        rows = self.intraday(item, interval, start, now)
+        today = now.date()
+        now_epoch = int(now.timestamp())
+        candle_seconds = int(interval) * 60
+        previous = [r for r in rows if datetime.fromtimestamp(r["timestamp"], self.tz).date() < today]
+        current = [
+            r
+            for r in rows
+            if datetime.fromtimestamp(r["timestamp"], self.tz).date() == today
+            and int(r["timestamp"]) + candle_seconds <= now_epoch
+        ]
+        previous.sort(key=lambda r: r["timestamp"])
+        current.sort(key=lambda r: r["timestamp"])
+        return previous, current
 
-    def load_previous_daily(self,item,lookback:int)->List[dict]:
-        now=datetime.now(self.tz); warmup=max(self.settings.daily_indicator_warmup,self.settings.ma_period,self.settings.ema_period,self.settings.rsi_period+1); calendar_days=max((lookback+warmup)*2,90); rows=self.daily(item,now-timedelta(days=calendar_days),now); today=now.date(); rows=[r for r in rows if datetime.fromtimestamp(r["timestamp"],self.tz).date()<today]; rows.sort(key=lambda r:r["timestamp"]); return rows[-(lookback+warmup):]
+    def load_previous_daily(self, item, lookback: int) -> list[dict]:
+        now = datetime.now(self.tz)
+        warmup = max(
+            self.settings.daily_indicator_warmup,
+            self.settings.ma_period,
+            self.settings.ema_period,
+            self.settings.rsi_period + 1,
+        )
+        calendar_days = max((lookback + warmup) * 2, 90)
+        rows = self.daily(item, now - timedelta(days=calendar_days), now)
+        today = now.date()
+        rows = [r for r in rows if datetime.fromtimestamp(r["timestamp"], self.tz).date() < today]
+        rows.sort(key=lambda r: r["timestamp"])
+        return rows[-(lookback + warmup) :]
 
-    def daily(self,item,from_date:datetime,to_date:datetime)->List[dict]:
-        payload={"securityId":item.security_id,"exchangeSegment":item.exchange_segment,"instrument":item.instrument,"expiryCode":0,"oi":False,"fromDate":from_date.strftime("%Y-%m-%d"),"toDate":to_date.strftime("%Y-%m-%d")}
-        return self._candles_from_arrays(self._post("/charts/historical",payload,minimum_interval=DATA_API_MIN_INTERVAL))
+    def daily(self, item, from_date: datetime, to_date: datetime) -> list[dict]:
+        payload = {
+            "securityId": item.security_id,
+            "exchangeSegment": item.exchange_segment,
+            "instrument": item.instrument,
+            "expiryCode": 0,
+            "oi": False,
+            "fromDate": from_date.strftime("%Y-%m-%d"),
+            "toDate": to_date.strftime("%Y-%m-%d"),
+        }
+        return self._candles_from_arrays(
+            self._post("/charts/historical", payload, minimum_interval=DATA_API_MIN_INTERVAL)
+        )
 
-    def load_today_intraday(self,item,interval:int)->List[dict]:
-        now=datetime.now(self.tz); start=now.replace(hour=9,minute=15,second=0,microsecond=0)
-        if now<start:return []
-        rows=self.intraday(item,interval,start,now); today=now.date(); rows=[r for r in rows if datetime.fromtimestamp(r["timestamp"],self.tz).date()==today]; rows.sort(key=lambda r:r["timestamp"]); return rows
+    def load_today_intraday(self, item, interval: int) -> list[dict]:
+        now = datetime.now(self.tz)
+        start = now.replace(hour=9, minute=15, second=0, microsecond=0)
+        if now < start:
+            return []
+        rows = self.intraday(item, interval, start, now)
+        today = now.date()
+        rows = [r for r in rows if datetime.fromtimestamp(r["timestamp"], self.tz).date() == today]
+        rows.sort(key=lambda r: r["timestamp"])
+        return rows
 
-    def load_previous_intraday(self,item,interval:int,days:int)->List[dict]:
-        now=datetime.now(self.tz); rows=self.intraday(item,interval,now-timedelta(days=max(days,1)),now); today=now.date(); rows=[r for r in rows if datetime.fromtimestamp(r["timestamp"],self.tz).date()<today]; rows.sort(key=lambda r:r["timestamp"]); return rows
+    def load_previous_intraday(self, item, interval: int, days: int) -> list[dict]:
+        now = datetime.now(self.tz)
+        rows = self.intraday(item, interval, now - timedelta(days=max(days, 1)), now)
+        today = now.date()
+        rows = [r for r in rows if datetime.fromtimestamp(r["timestamp"], self.tz).date() < today]
+        rows.sort(key=lambda r: r["timestamp"])
+        return rows
 
-    def load_today_1m(self,item)->List[dict]: return self.load_today_intraday(item,1)
+    def load_today_1m(self, item) -> list[dict]:
+        return self.load_today_intraday(item, 1)

@@ -28,7 +28,7 @@ class NiftyOptionsAuthTests(unittest.TestCase):
             self.assertTrue(force)
             current_settings.access_token = "fresh"
 
-        with patch("index_options.refresh_access_token", side_effect=refresh) as refresh_mock:
+        with patch("auth_retry.refresh_access_token", side_effect=refresh) as refresh_mock:
             expiries = manager._load_expiries()
 
         self.assertEqual(expiries, ["2026-09-17"])
@@ -42,7 +42,7 @@ class NiftyOptionsAuthTests(unittest.TestCase):
         manager = IndexOptionsManager(settings, api, NIFTY)
 
         with patch(
-            "index_options.refresh_access_token",
+            "auth_retry.refresh_access_token",
             side_effect=DhanTokenRateLimited("rate limited", retry_after=120),
         ) as refresh_mock:
             with self.assertRaises(DhanTokenRateLimited):

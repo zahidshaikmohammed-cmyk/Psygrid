@@ -12,14 +12,16 @@ def _payload(*, current_time="2026-09-17 09:54:30 IST", candles=None):
         for i in range(40):
             ts = start + timedelta(minutes=i)
             price = 100.0 + i * 0.1
-            candles.append({
-                "timestamp": ts.strftime("%Y-%m-%d %H:%M:%S IST"),
-                "open": price,
-                "high": price + 0.2,
-                "low": price - 0.1,
-                "close": price + 0.1,
-                "volume": 100 + i,
-            })
+            candles.append(
+                {
+                    "timestamp": ts.strftime("%Y-%m-%d %H:%M:%S IST"),
+                    "open": price,
+                    "high": price + 0.2,
+                    "low": price - 0.1,
+                    "close": price + 0.1,
+                    "volume": 100 + i,
+                }
+            )
 
     return {
         "service": "PSYGRID",
@@ -72,9 +74,7 @@ def test_stale_stock_suppresses_numeric_indicators():
 
 def test_duplicate_minute_is_rejected_for_that_stock():
     payload = _payload()
-    payload["stocks"]["TEST"]["candles_1m"].append(
-        dict(payload["stocks"]["TEST"]["candles_1m"][-1])
-    )
+    payload["stocks"]["TEST"]["candles_1m"].append(dict(payload["stocks"]["TEST"]["candles_1m"][-1]))
 
     out = run_psygrid(payload)
 

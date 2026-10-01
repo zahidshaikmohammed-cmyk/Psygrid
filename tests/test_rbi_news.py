@@ -1,6 +1,5 @@
 from rbi_news import _parse_rss
 
-
 SAMPLE_RSS = """<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
 <channel>
@@ -32,6 +31,7 @@ def test_parses_rss_items_with_all_fields():
 def test_never_classifies_bullish_bearish():
     items = _parse_rss(SAMPLE_RSS, "press_releases")
     import json
+
     text = json.dumps(items).upper()
     for forbidden in ("BULLISH", "BEARISH", "SIGNAL", "BUY", "SELL"):
         assert forbidden not in text

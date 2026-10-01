@@ -10,7 +10,7 @@ bug only surfaces once real historical candles are present.
 
 from types import SimpleNamespace
 
-from index_layer import IndexLayerManager, IndexInstrument, IndexState
+from index_layer import IndexInstrument, IndexLayerManager, IndexState
 
 
 def _settings():
@@ -28,9 +28,15 @@ def _manager_with_populated_history():
     state.session_date = "2026-09-24"
     state.feed_status = "CONNECTED"
     candle = {
-        "timestamp": 1758700200, "epoch": 1758700200,
-        "open": 25000.0, "high": 25050.0, "low": 24980.0, "close": 25020.0,
-        "volume": 0, "source": "DHAN_HISTORICAL_API", "complete": True,
+        "timestamp": 1758700200,
+        "epoch": 1758700200,
+        "open": 25000.0,
+        "high": 25050.0,
+        "low": 24980.0,
+        "close": 25020.0,
+        "volume": 0,
+        "source": "DHAN_HISTORICAL_API",
+        "complete": True,
     }
     state.historical = {"5m": [dict(candle)], "15m": [dict(candle)], "1h": [dict(candle)]}
     state.live_candles = [dict(candle, source="DHAN_WEBSOCKET_FULL")]

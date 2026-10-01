@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Aggregates freshness/status across every Psygrid live feed into one
 lightweight endpoint. Never recomputes or refetches upstream data itself —
 it only reads what each manager/state object already knows about itself
@@ -7,16 +5,17 @@ it only reads what each manager/state object already knows about itself
 count), so it stays cheap regardless of how many feeds exist.
 """
 
-from datetime import datetime, timezone
-from typing import Optional
+from __future__ import annotations
+
+from datetime import UTC, datetime
 
 
-def _parse_updated_at(value) -> Optional[datetime]:
+def _parse_updated_at(value) -> datetime | None:
     if value in (None, ""):
         return None
     try:
         if isinstance(value, (int, float)):
-            return datetime.fromtimestamp(float(value), timezone.utc)
+            return datetime.fromtimestamp(float(value), UTC)
         text = str(value).strip()
         if text.endswith(" IST"):
             # Best-effort: treat naive IST-labelled strings as needing no
@@ -27,7 +26,7 @@ def _parse_updated_at(value) -> Optional[datetime]:
             text = text[:-1] + "+00:00"
         parsed = datetime.fromisoformat(text)
         if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
+            parsed = parsed.replace(tzinfo=UTC)
         return parsed
     except (TypeError, ValueError):
         return None
@@ -36,14 +35,14 @@ def _parse_updated_at(value) -> Optional[datetime]:
 def component_health(
     *,
     name: str,
-    status: Optional[str],
+    status: str | None,
     updated_at,
     expected_refresh_seconds: float,
     now: datetime,
     last_error: str = "",
-    record_count: Optional[int] = None,
-    expected_record_count: Optional[int] = None,
-    extra: Optional[dict] = None,
+    record_count: int | None = None,
+    expected_record_count: int | None = None,
+    extra: dict | None = None,
 ) -> dict:
     parsed = _parse_updated_at(updated_at)
     age_seconds = None

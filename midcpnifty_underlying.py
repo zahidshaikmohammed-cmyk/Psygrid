@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Real (non-synthetic) 1-minute OHLCV history for the MIDCPNIFTY index
 itself, independent of the option-chain/depth domain.
 
@@ -11,6 +9,8 @@ completed-candle historical API on the same instrument identity already
 used by the MIDCPNIFTY option chain (security_id 442, IDX_I, INDEX). Candles
 are never fabricated: only what Dhan reports as completed is kept.
 """
+
+from __future__ import annotations
 
 import threading
 from datetime import datetime

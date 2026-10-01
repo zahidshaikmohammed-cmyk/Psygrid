@@ -14,13 +14,18 @@ day. That's what a real production instance surfaced: feed.status stuck at
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from index_layer import IndexLayerManager, IndexInstrument, IndexState
+from index_layer import IndexInstrument, IndexLayerManager, IndexState
 
 
 def _settings():
     return SimpleNamespace(
-        timezone="Asia/Kolkata", market_start="09:15", market_end="15:15",
-        client_id="x", access_token="stale", token_expiry=None, token_source="TEST",
+        timezone="Asia/Kolkata",
+        market_start="09:15",
+        market_end="15:15",
+        client_id="x",
+        access_token="stale",
+        token_expiry=None,
+        token_source="TEST",
     )
 
 
@@ -36,7 +41,7 @@ def _manager_with_one_state():
 
 
 def test_start_session_proactively_refreshes_the_token_before_bootstrapping():
-    manager, state = _manager_with_one_state()
+    manager, _state = _manager_with_one_state()
     manager.dhan_api.quote_snapshot.return_value = {}
     manager.dhan_api.load_today_completed_intraday.return_value = []
 
@@ -59,7 +64,9 @@ def test_start_session_force_refreshes_once_on_a_401_and_still_starts_the_feed()
     # First call is the unconditional proactive refresh, second is the
     # forced retry triggered by recognizing the 401 as an auth failure.
     assert fake_refresh.call_count == 2
-    assert fake_refresh.call_args_list[1].kwargs.get("force") is True or fake_refresh.call_args_list[1].args[1:] == (True,)
+    assert fake_refresh.call_args_list[1].kwargs.get("force") is True or fake_refresh.call_args_list[1].args[1:] == (
+        True,
+    )
     # The feed still starts afterwards - a bootstrap failure never blocks
     # the live WebSocket connection from being attempted with the (now
     # hopefully fresh) token.
@@ -68,7 +75,7 @@ def test_start_session_force_refreshes_once_on_a_401_and_still_starts_the_feed()
 
 
 def test_start_session_only_force_refreshes_once_even_with_many_states_failing():
-    manager, state = _manager_with_one_state()
+    manager, _state = _manager_with_one_state()
     instrument2 = IndexInstrument(security_id="25", exchange_segment="IDX_I")
     state2 = IndexState(manager.settings, "banknifty", "BANKNIFTY", instrument2)
     manager.states["banknifty"] = state2

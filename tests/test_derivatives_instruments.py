@@ -1,4 +1,4 @@
-from derivatives_instruments import _parse_expiry, _float_or_none, _int_or_none
+from derivatives_instruments import _float_or_none, _int_or_none, _parse_expiry
 
 
 def test_parse_expiry_handles_common_formats():
@@ -32,12 +32,29 @@ def test_fetch_front_month_futures_respects_exchange_parameter():
     import datetime as dt
     import io
     from unittest.mock import MagicMock, patch
+
     from derivatives_instruments import fetch_front_month_index_futures
 
     next_week = (dt.date.today() + dt.timedelta(days=7)).isoformat() + " 14:30:00"
     rows = [
-        {"SEM_EXM_EXCH_ID": "NSE", "SEM_INSTRUMENT_NAME": "FUTIDX", "SEM_TRADING_SYMBOL": f"NIFTY-{next_week}-FUT", "SEM_SMST_SECURITY_ID": "1", "SEM_EXPIRY_DATE": next_week, "SEM_LOT_UNITS": "75", "SEM_TICK_SIZE": "0.05"},
-        {"SEM_EXM_EXCH_ID": "BSE", "SEM_INSTRUMENT_NAME": "FUTIDX", "SEM_TRADING_SYMBOL": f"SENSEX-{next_week}-FUT", "SEM_SMST_SECURITY_ID": "2", "SEM_EXPIRY_DATE": next_week, "SEM_LOT_UNITS": "10", "SEM_TICK_SIZE": "0.05"},
+        {
+            "SEM_EXM_EXCH_ID": "NSE",
+            "SEM_INSTRUMENT_NAME": "FUTIDX",
+            "SEM_TRADING_SYMBOL": f"NIFTY-{next_week}-FUT",
+            "SEM_SMST_SECURITY_ID": "1",
+            "SEM_EXPIRY_DATE": next_week,
+            "SEM_LOT_UNITS": "75",
+            "SEM_TICK_SIZE": "0.05",
+        },
+        {
+            "SEM_EXM_EXCH_ID": "BSE",
+            "SEM_INSTRUMENT_NAME": "FUTIDX",
+            "SEM_TRADING_SYMBOL": f"SENSEX-{next_week}-FUT",
+            "SEM_SMST_SECURITY_ID": "2",
+            "SEM_EXPIRY_DATE": next_week,
+            "SEM_LOT_UNITS": "10",
+            "SEM_TICK_SIZE": "0.05",
+        },
     ]
     buf = io.StringIO()
     writer = csv.DictWriter(buf, fieldnames=list(rows[0].keys()))

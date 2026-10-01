@@ -18,14 +18,16 @@ class NiftyOptionsTests(unittest.TestCase):
         state.set_snapshot(
             {
                 "last_price": 25000.0,
-                "oc": _normalize_chain({
-                    "oc": {
-                        "25000.000000": {
-                            "ce": {"last_price": 120.0, "oi": 1000, "volume": 2000, "security_id": 101},
-                            "pe": {"last_price": 110.0, "oi": 900, "volume": 1800, "security_id": 102},
+                "oc": _normalize_chain(
+                    {
+                        "oc": {
+                            "25000.000000": {
+                                "ce": {"last_price": 120.0, "oi": 1000, "volume": 2000, "security_id": 101},
+                                "pe": {"last_price": 110.0, "oi": 900, "volume": 1800, "security_id": 102},
+                            }
                         }
                     }
-                }),
+                ),
             },
             ["2026-09-17", "2026-09-24"],
             "2026-09-17",
@@ -56,12 +58,14 @@ class NiftyOptionsTests(unittest.TestCase):
         self.assertFalse(_is_market_open(datetime(2026, 9, 14, 15, 30, tzinfo=tz)))
 
     def test_normalize_chain_sorts_strikes(self):
-        rows = _normalize_chain({
-            "oc": {
-                "25100": {"ce": {}, "pe": {}},
-                "24900": {"ce": {}, "pe": {}},
+        rows = _normalize_chain(
+            {
+                "oc": {
+                    "25100": {"ce": {}, "pe": {}},
+                    "24900": {"ce": {}, "pe": {}},
+                }
             }
-        })
+        )
         self.assertEqual([row["strike"] for row in rows], [24900.0, 25100.0])
 
 

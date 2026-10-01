@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import threading
-from typing import Any, Optional
+from typing import Any
 
 from config import UNIVERSE_SIZE
 from psygrid_master_indicator import (
@@ -22,13 +22,13 @@ class IndicatorRuntime:
         self.engine = PsygridMasterIndicatorEngine(IndicatorConfig(include_series=False))
         self._lock = threading.RLock()
         self._stop = threading.Event()
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
         self._results: dict[str, dict[str, Any]] = {}
         self._fingerprints: dict[str, tuple[Any, ...]] = {}
         self._errors: dict[str, dict[str, str]] = {}
         self._source_meta: dict[str, Any] = {}
         self._sync_count = 0
-        self._last_error: Optional[str] = None
+        self._last_error: str | None = None
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -116,7 +116,7 @@ class IndicatorRuntime:
                     self._last_error = f"{type(exc).__name__}: {exc}"
             self._stop.wait(self.interval_seconds)
 
-    def snapshot(self, stock_range: Optional[tuple[int, int]] = None) -> dict[str, Any]:
+    def snapshot(self, stock_range: tuple[int, int] | None = None) -> dict[str, Any]:
         with self._lock:
             results = dict(self._results)
             errors = dict(self._errors)
@@ -127,7 +127,7 @@ class IndicatorRuntime:
         ordered_symbols = list(source.get("stocks", {}).keys())
         expected_count = UNIVERSE_SIZE if stock_range is None else (stock_range[1] - stock_range[0])
         if stock_range is not None:
-            ordered_symbols = ordered_symbols[stock_range[0]:stock_range[1]]
+            ordered_symbols = ordered_symbols[stock_range[0] : stock_range[1]]
         selected = {symbol: results[symbol] for symbol in ordered_symbols if symbol in results}
         selected_errors = {symbol: errors[symbol] for symbol in ordered_symbols if symbol in errors}
         fresh_count = sum(v.get("freshness", {}).get("status") == "FRESH" for v in selected.values())
@@ -158,7 +158,29 @@ class IndicatorRuntime:
             result = self._results.get(symbol)
             error = self._errors.get(symbol)
         if result is not None:
-            return {"service": "PSYGRID_MASTER_INDICATOR", "engine_version": "1.0.0", "status": "OK", "source_endpoint": "/public/live.json", "timeframe": "1m", "result": result}
+            return {
+                "service": "PSYGRID_MASTER_INDICATOR",
+                "engine_version": "1.0.0",
+                "status": "OK",
+                "source_endpoint": "/public/live.json",
+                "timeframe": "1m",
+                "result": result,
+            }
         if error is not None:
-            return {"service": "PSYGRID_MASTER_INDICATOR", "engine_version": "1.0.0", "status": "ERROR", "source_endpoint": "/public/live.json", "timeframe": "1m", "symbol": symbol, "error": error}
-        return {"service": "PSYGRID_MASTER_INDICATOR", "engine_version": "1.0.0", "status": "NOT_FOUND", "source_endpoint": "/public/live.json", "timeframe": "1m", "symbol": symbol}
+            return {
+                "service": "PSYGRID_MASTER_INDICATOR",
+                "engine_version": "1.0.0",
+                "status": "ERROR",
+                "source_endpoint": "/public/live.json",
+                "timeframe": "1m",
+                "symbol": symbol,
+                "error": error,
+            }
+        return {
+            "service": "PSYGRID_MASTER_INDICATOR",
+            "engine_version": "1.0.0",
+            "status": "NOT_FOUND",
+            "source_endpoint": "/public/live.json",
+            "timeframe": "1m",
+            "symbol": symbol,
+        }

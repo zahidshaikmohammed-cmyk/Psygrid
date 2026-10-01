@@ -7,6 +7,7 @@ connection cap), plus a REST quote poll for LTP/volume/OI on the same contracts.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import struct
 import threading
@@ -210,7 +211,9 @@ def _parse_depth_message(data: bytes) -> list[tuple[str, str, list[dict]]]:
             levels = []
             for index in range(DEPTH_LEVELS):
                 price, quantity, orders = struct.unpack_from(_LEVEL_STRUCT, data, base + index * _LEVEL_BYTES)
-                levels.append({"level": index + 1, "price": float(price), "quantity": int(quantity), "orders": int(orders)})
+                levels.append(
+                    {"level": index + 1, "price": float(price), "quantity": int(quantity), "orders": int(orders)}
+                )
             messages.append((security_id, side, levels))
         offset += message_length
     return messages
@@ -250,10 +253,8 @@ class IndexDepthManager:
         ws = self.ws
         if ws is None:
             return
-        try:
+        with contextlib.suppress(Exception):
             ws.close()
-        except Exception:
-            pass
 
     def _refresh_contracts(self) -> bool:
         """Re-select contracts from the option chain; return True if the subscription set changed."""
@@ -274,7 +275,10 @@ class IndexDepthManager:
         return f"{DEPTH_WS_URL}?token={self.settings.access_token}&clientId={self.settings.client_id}&authType=2"
 
     def _subscribe_payload(self) -> str:
-        instruments = [{"ExchangeSegment": self.spec.fno_segment, "SecurityId": contract.security_id} for contract in self._contracts]
+        instruments = [
+            {"ExchangeSegment": self.spec.fno_segment, "SecurityId": contract.security_id}
+            for contract in self._contracts
+        ]
         return json.dumps({"RequestCode": 23, "InstrumentCount": len(instruments), "InstrumentList": instruments})
 
     def _run_socket(self) -> None:
@@ -300,7 +304,10 @@ class IndexDepthManager:
             try:
                 contracts, expiry, underlying_ltp = _select_contracts(self.option_manager.state)
                 if contracts:
-                    instruments = [SimpleNamespace(security_id=c.security_id, exchange_segment=self.spec.fno_segment) for c in contracts]
+                    instruments = [
+                        SimpleNamespace(security_id=c.security_id, exchange_segment=self.spec.fno_segment)
+                        for c in contracts
+                    ]
                     self.state.update_quotes(self.dhan_api.quote_snapshot(instruments))
                     self.state.set_underlying_ltp(underlying_ltp)
                     if expiry and expiry != self._expiry:
@@ -312,7 +319,9 @@ class IndexDepthManager:
             self.stop_event.wait(DEPTH_QUOTE_REFRESH_SECONDS)
 
     def _loop(self) -> None:
-        quote_thread = threading.Thread(target=self._quote_loop, daemon=True, name=f"psygrid-{self.spec.key}-depth-quotes")
+        quote_thread = threading.Thread(
+            target=self._quote_loop, daemon=True, name=f"psygrid-{self.spec.key}-depth-quotes"
+        )
         quote_thread.start()
         while not self.stop_event.is_set():
             try:

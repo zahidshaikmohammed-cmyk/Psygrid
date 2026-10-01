@@ -14,8 +14,7 @@ from datetime import datetime
 from datetime import time as datetime_time
 from zoneinfo import ZoneInfo
 
-from config import refresh_access_token
-from dhan_auth import DhanTokenRateLimited
+from auth_retry import AuthRetryGuard
 from option_analytics import ChainAnalyticsTracker
 
 OPTION_CHAIN_REFRESH_SECONDS = 3.2
@@ -25,8 +24,6 @@ MARKET_CLOSE = datetime_time(15, 30)
 
 UNDERLYING_EXCHANGE_SEGMENT = "IDX_I"
 UNDERLYING_INSTRUMENT = "INDEX"
-
-_AUTH_FAILURE_MARKERS = ("401", "807", "808", "809", "810", "expired", "invalid token", "authentication failed", "unauthorized")
 
 
 @dataclass(frozen=True)
@@ -164,8 +161,7 @@ class IndexOptionsManager:
         self.stop_event = threading.Event()
         self.thread: threading.Thread | None = None
         self._expiry_loaded_at = 0.0
-        self._auth_retry_at = 0.0
-        self._auth_lock = threading.Lock()
+        self._auth = AuthRetryGuard(settings, dhan_api)
         self._analytics_tracker = ChainAnalyticsTracker()
 
     def start(self) -> None:
@@ -181,51 +177,18 @@ class IndexOptionsManager:
             self.thread.join(timeout=8)
         self.thread = None
 
-    @staticmethod
-    def _looks_like_auth_failure(exc: Exception) -> bool:
-        text = str(exc).lower()
-        return any(marker in text for marker in _AUTH_FAILURE_MARKERS)
-
-    def _call_with_auth_retry(self, operation):
-        """Run ``operation``; on an auth failure refresh the Dhan token once and retry.
-
-        A token-generation rate limit puts the manager into a cooldown during which
-        calls fail fast instead of hammering Dhan's token endpoint.
-        """
-        now = time.monotonic()
-        with self._auth_lock:
-            if now < self._auth_retry_at:
-                raise RuntimeError(f"Dhan authentication refresh cooldown active: {int(self._auth_retry_at - now)}s")
-        try:
-            return operation()
-        except Exception as first_exc:
-            if not self._looks_like_auth_failure(first_exc):
-                raise
-            now = time.monotonic()
-            with self._auth_lock:
-                if now < self._auth_retry_at:
-                    raise RuntimeError(f"Dhan authentication refresh cooldown active: {int(self._auth_retry_at - now)}s") from first_exc
-                try:
-                    refresh_access_token(self.settings, force=True)
-                except DhanTokenRateLimited as exc:
-                    self._auth_retry_at = time.monotonic() + exc.retry_after
-                    raise
-                self.dhan_api.settings = self.settings
-                self._auth_retry_at = 0.0
-            return operation()
-
     def _error_code(self, reason: str) -> str:
         return f"DHAN_{self.spec.symbol}_OPTIONS_{reason}"
 
     def _load_expiries(self) -> list[str]:
-        expiries = self._call_with_auth_retry(lambda: self.dhan_api.option_expiry_list(self.instrument))
+        expiries = self._auth.call(lambda: self.dhan_api.option_expiry_list(self.instrument))
         if not expiries:
             raise RuntimeError(self._error_code("NO_ACTIVE_EXPIRIES"))
         self._expiry_loaded_at = time.monotonic()
         return expiries
 
     def _load_chain(self, expiry: str) -> dict:
-        return self._call_with_auth_retry(lambda: self.dhan_api.option_chain(self.instrument, expiry))
+        return self._auth.call(lambda: self.dhan_api.option_chain(self.instrument, expiry))
 
     def _loop(self) -> None:
         expiries: list[str] = []
