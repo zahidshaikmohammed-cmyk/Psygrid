@@ -27,7 +27,7 @@ Status values:
 | Global context: SP500, VIXCLS, DGS10, DCOILWTICO, DEXINUS | FRED (St. Louis Fed) | FRED API with `FRED_API_KEY` | RAM | `/public/global-context.json` | UNVERIFIED |
 | RBI press releases, notifications, speeches | Reserve Bank of India | RBI RSS feeds on `www.rbi.org.in` | RAM | `/public/rbi-news.json` | UNVERIFIED |
 | Sector taxonomy, NIFTY 50 constituent list | Maintained by hand in `sector_taxonomy.py`, `stock_options.py` | Repository | Repository | Inside breadth and stock-option payloads | OWN USE (own work; constituent membership is public information) |
-| Intelligence outputs (features, anomalies, events, similarity) | Derived from Dhan data | Planned | Planned | Planned `/v2` | UNVERIFIED (derived data; see question 3) |
+| Intelligence outputs (features, anomalies, relationships, events, similarity) | Derived from the archived Dhan data above | Computed by the separate `psygrid-intelligence` service | Event store, baselines and similarity caches under `~/psygrid-intelligence` | `/v2` on port 10001, localhost by default, API key required | UNVERIFIED (derived data; see question 3). Keys are for the account holder's own engines only until question 3 is answered |
 
 ## Open questions
 

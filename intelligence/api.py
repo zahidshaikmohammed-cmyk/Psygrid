@@ -423,8 +423,12 @@ def create_app(settings: Settings, runner: LiveRunner | None = None, start_live:
         except (WebSocketDisconnect, RuntimeError):
             pass
         finally:
-            if receiver is not None and not receiver.done():
-                receiver.cancel()
+            if receiver is not None:
+                if receiver.done():
+                    if not receiver.cancelled():
+                        receiver.exception()  # the client's disconnect: retrieved so it is not logged as an error
+                else:
+                    receiver.cancel()
             with streams_lock:
                 streams[key_id] -= 1
                 if streams[key_id] <= 0:
