@@ -5,12 +5,13 @@ Live, machine-readable Indian market data built on the DhanHQ v2 Data APIs.
 Psygrid streams a 989-stock NSE equity universe, 16 NSE/BSE indices, index and
 NIFTY 50 stock option chains with 20-level depth, and index futures. It serves
 everything as JSON over HTTP from process memory, with no database and no
-fabricated data.
+fabricated data. Each day's completed 1-minute candles are also archived to
+disk, building a history for backtesting.
 
 ## Design principles
 
 - **Genuine data only.** Psygrid never interpolates, gap-fills or invents candles, quotes or option rows. A missing value is reported as missing.
-- **RAM only.** Psygrid stores no market data on disk or in a database. Session state is wiped after the 15:15 IST close.
+- **RAM-only serving.** Endpoints are served from memory, with no database. Session state is wiped after the 15:15 IST close, once the day has been archived (see [Daily archive](#daily-archive)).
 - **Native candles.** Live 1-minute candles are built from Dhan WebSocket ticks and cumulative-volume deltas. Higher timeframes come from Dhan's own historical endpoints.
 - **Isolated domains.** The equity feed, the index layer and each derivatives feed run in independent managers. A failure in one never takes down another.
 - **Fixed configuration.** Session times, universe size and indicator periods are constants in `config.py`. Environment variables cannot change market-data behaviour.
@@ -48,6 +49,7 @@ app.py                      FastAPI service; starts every manager, serves the en
 ├── index_layer.py          16 indices on one shared WebSocket
 ├── index_options.py        NIFTY/BANKNIFTY/MIDCPNIFTY/SENSEX option chains
 ├── index_depth.py          20-level depth for those chains
+├── daily_archive.py        on-disk copy of each day's 1m candles
 ├── futures_layer.py        front-month index futures (derivatives_instruments.py)
 ├── stock_options.py        NIFTY 50 stock option chains, round-robin
 ├── stock_depth.py          NIFTY 50 stock depth, one rotating WebSocket
@@ -71,10 +73,39 @@ config.py                   fixed configuration and the stocks.json universe
 | `FRED_API_KEY` | no | Enables `/public/global-context.json`. Without it, the endpoint reports an error. |
 | `PORT` | no | HTTP port (default `10000`) |
 | `PSYGRID_STOCKS_FILE` | no | Path to the universe file (default `stocks.json`) |
+| `PSYGRID_ARCHIVE_DIR` | no | Where daily archives are written (default `~/psygrid-data`) |
 
 Never commit credentials. The equity universe lives in `stocks.json`. Each
 symbol's Dhan security id is resolved at startup from Dhan's instrument
 master, never hard-coded.
+
+## Daily archive
+
+Every trading day, Psygrid saves its completed 1-minute candles to
+`$PSYGRID_ARCHIVE_DIR/YYYY-MM-DD/` (default `~/psygrid-data`):
+
+| File | Columns |
+|---|---|
+| `equity_1m.csv.gz` | `symbol, security_id, timestamp, open, high, low, close, volume` |
+| `equity_reference.csv.gz` | `symbol, security_id, previous_close, today_open` |
+| `index_1m.csv.gz` | `index, symbol, timestamp, open, high, low, close, volume` |
+| `manifest.json` | row count and write time per file |
+
+Values are exactly what `/public/live.json` and the index endpoints serve: IST
+timestamps and completed candles only, never synthetic. The archive is saved
+every 5 minutes during the session, at the 15:15 close (after the final candle
+closes and before memory is wiped), and when the service stops. A full day is
+about 6 MB.
+
+Archiving is best-effort and isolated: a failure is reported under `archive`
+in `/public/health.json` and never affects the live feeds. A save never
+replaces an existing file that holds more rows, so a restart part-way through
+the day cannot overwrite a fuller earlier save.
+
+```python
+import pandas as pd
+day = pd.read_csv("~/psygrid-data/2026-10-01/equity_1m.csv.gz")
+```
 
 ## Development
 
@@ -97,6 +128,8 @@ needs network access to `images.dhan.co`.
 
 Production runs on an Oracle Cloud VM as the `psygrid` systemd service from
 `/home/ubuntu/Psygrid`, using the `.venv` virtualenv and listening on port 10000.
+Daily archives live outside the repository (`~/psygrid-data` by default), so
+deploys never touch them.
 
 Every push to `main` triggers `.github/workflows/deploy-oracle.yml`:
 

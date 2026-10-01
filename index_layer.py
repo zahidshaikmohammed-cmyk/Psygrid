@@ -7,6 +7,7 @@ import csv
 import io
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from datetime import time as dt_time
@@ -562,6 +563,8 @@ class IndexLayerManager:
         self.feed = IndexLayerFeed(settings, self.states)
         self.stop_event = threading.Event()
         self.thread: threading.Thread | None = None
+        # Called after every index's final candle is closed and before state is wiped.
+        self.on_session_end: Callable[[], None] | None = None
 
     def _in_market(self, now: datetime) -> bool:
         sh, sm = map(int, self.settings.market_start.split(":"))
@@ -684,6 +687,10 @@ class IndexLayerManager:
         self.feed.stop()
         for state in self.states.values():
             state.finalize_current()
+        if self.on_session_end is not None:
+            with contextlib.suppress(Exception):
+                self.on_session_end()
+        for state in self.states.values():
             state.reset()
 
     def snapshot(self, key: str) -> dict:

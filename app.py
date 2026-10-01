@@ -14,6 +14,7 @@ from fastapi import FastAPI, Response
 from starlette.middleware.gzip import GZipMiddleware
 
 from config import UNIVERSE_SIZE, load_instruments, load_settings
+from daily_archive import ArchiveManager, DailyArchive, archive_dir_from_environment
 from dhan_api import DhanAPI
 from feed_runtime import LiveFeed
 from futures_layer import FuturesGroup, FuturesManager, futures_json
@@ -45,6 +46,7 @@ nifty_futures_manager = banknifty_futures_manager = sensex_futures_manager = Non
 global_context_manager = rbi_news_manager = None
 stock_options_manager = None
 stock_depth_manager = None
+archive_manager = None
 config_error = ""
 indicator_error = ""
 index_error = ""
@@ -96,7 +98,7 @@ def startup() -> None:
         banknifty_underlying_indicators, \
         midcpnifty_underlying_indicators
     global nifty_futures_manager, banknifty_futures_manager, global_context_manager, rbi_news_manager
-    global stock_options_manager, stock_depth_manager
+    global stock_options_manager, stock_depth_manager, archive_manager
     config_error = ""
     indicator_error = ""
     index_error = ""
@@ -146,6 +148,20 @@ def startup() -> None:
         except Exception as exc:
             index_manager = None
             index_error = f"{type(exc).__name__}: {exc}"
+
+        # Daily archive: a best-effort copy of each session's completed 1m
+        # candles on disk for backtesting. Live serving stays RAM-only and an
+        # archive failure never affects the feeds.
+        try:
+            archive_manager = ArchiveManager(
+                DailyArchive(archive_dir_from_environment(), settings.timezone), state, lambda: index_manager
+            )
+            manager.on_session_end = archive_manager.archive_equity
+            if index_manager is not None:
+                index_manager.on_session_end = archive_manager.archive_indices
+            archive_manager.start()
+        except Exception:
+            archive_manager = None
 
         # Additive derived-data layer. It consumes the exact same canonical
         # PSYGRID live payload builder used by /public/live.json, so the core
@@ -279,7 +295,7 @@ def startup() -> None:
 
 
 def shutdown() -> None:
-    global manager, indicator_runtime, index_manager
+    global manager, indicator_runtime, index_manager, archive_manager
     global \
         nifty_options_manager, \
         nifty_depth_manager, \
@@ -287,6 +303,11 @@ def shutdown() -> None:
         banknifty_depth_manager, \
         midcpnifty_options_manager, \
         midcpnifty_depth_manager
+    # Snapshot before any state is wiped, so a mid-session restart keeps the day so far.
+    if archive_manager is not None:
+        archive_manager.archive_now()
+        archive_manager.stop()
+        archive_manager = None
     if indicator_runtime is not None:
         indicator_runtime.stop()
         indicator_runtime = None
@@ -1000,7 +1021,11 @@ def _build_health_payload() -> dict:
         )
 
     market_status = "OPEN" if (state is not None and state.session_status == "LIVE") else "CLOSED"
-    return build_health(components, market_status)
+    payload = build_health(components, market_status)
+    # Reported alongside, not as a component: the archive is idle outside
+    # market hours by design and must not count against feed health.
+    payload["archive"] = archive_manager.status() if archive_manager is not None else {"status": "DISABLED"}
+    return payload
 
 
 @app.get("/public/health.json", response_class=Response)
