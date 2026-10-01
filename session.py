@@ -6,6 +6,7 @@ import contextlib
 import os
 import threading
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from datetime import time as dt_time
@@ -41,6 +42,8 @@ class SessionManager:
         self._auth_retry_at = 0.0
         self._last_reconnect_seen = 0
         self.backfill = HistoricalBackfill(settings, state, dhan_api, instruments)
+        # Called after the final candle is closed and before state is wiped.
+        self.on_session_end: Callable[[], None] | None = None
 
     def now(self) -> datetime:
         return datetime.now(self.tz)
@@ -255,6 +258,9 @@ class SessionManager:
                 self.history_thread.join(timeout=10)
             self.history_thread = None
             self.state.finalize_current()
+            if self.on_session_end is not None:
+                with contextlib.suppress(Exception):
+                    self.on_session_end()
             self.state.reset()
             self._started_for_date = None
             self._auth_retry_at = 0.0

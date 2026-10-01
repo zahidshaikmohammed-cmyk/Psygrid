@@ -167,3 +167,23 @@ Series covered: `sp500` (S&P 500 close, `SP500`), `vix` (`VIXCLS`), `us_10y_yiel
 | `items[].country` | string | Always `"IN"` | Static |
 
 No sentiment/classification field exists on any item.
+
+---
+
+## Daily archive (`$PSYGRID_ARCHIVE_DIR/YYYY-MM-DD/`)
+
+On-disk copy of each session's completed 1-minute candles, for backtesting. Values are exactly what the live endpoints serve; nothing is recomputed.
+
+| File | Field | Type | Meaning |
+|---|---|---|---|
+| `equity_1m.csv.gz` | `symbol`, `security_id` | string | Instrument identity, as in `/public/live.json` |
+| | `timestamp` | string | Candle open time, `YYYY-MM-DD HH:MM:SS IST` |
+| | `open`/`high`/`low`/`close` | float | OHLC (INR) |
+| | `volume` | int | Traded volume in the bar |
+| `equity_reference.csv.gz` | `previous_close`, `today_open` | float | Per-stock reference prices for the session |
+| `index_1m.csv.gz` | `index` | string | Index route key (`nifty`, `banknifty`, …) |
+| | `symbol` | string | Index symbol |
+| | candle fields | | As in `equity_1m.csv.gz` |
+| `manifest.json` | `files.{name}.rows`, `files.{name}.written_at` | int, string | Row count and IST write time of each file |
+
+`/public/health.json` reports archive status under `archive`: `archive_dir`, `last_written_at`, `write_count`, `interval_seconds`, and `error` when the most recent save failed.
