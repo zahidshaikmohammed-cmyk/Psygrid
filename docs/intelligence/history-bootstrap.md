@@ -92,8 +92,15 @@ validation.
   (401, `DH-901`/`902`/`903`) stops the run at once.
 - **Tokens.** The bootstrap uses an access token from its environment
   (`DHAN_ACCESS_TOKEN`, or the variable named by `DHAN_TOKEN_VAR`). It never
-  generates one unless run with `--generate-token`, because a newly generated
-  token might expire the one PSYGRID is using.
+  generates one unless run with `--generate-token` (the workflow's
+  `generate_token` input), because a newly generated token might expire the
+  one PSYGRID is using. On the production VM, PSYGRID holds only `DHAN_PIN`
+  and `DHAN_TOTP_SECRET` and generates a token on every start, so the
+  bootstrap needs `generate_token`. Use it outside market hours, ideally
+  before a non-trading day. If Dhan expires PSYGRID's token, PSYGRID's
+  existing auth guard regenerates its own on the next authentication failure.
+  The bootstrap never regenerates mid-run: on an authentication error it stops,
+  and a rerun resumes.
 
 ## Integrity checks (`bootstrap-history verify`)
 
