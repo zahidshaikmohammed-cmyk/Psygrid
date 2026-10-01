@@ -12,7 +12,7 @@ clamped; unparseable ones fall back to the default.
 | `PSYGRID_INTELLIGENCE_DIR` | `~/psygrid-intelligence` | Event store, keys, caches, derivatives snapshots, backups. If changed, also change `ReadWritePaths` in the unit |
 | `PSYGRID_INTELLIGENCE_SOURCE_URL` | `http://127.0.0.1:10000` | PSYGRID, for the read-only derivatives endpoints |
 | `PSYGRID_INTELLIGENCE_HOST` | `127.0.0.1` | Bind address. `0.0.0.0` to accept remote connections (see deployment.md) |
-| `PSYGRID_INTELLIGENCE_PORT` | `10001` | Port |
+| `PSYGRID_INTELLIGENCE_PORT` | `18101` | Port |
 | `PSYGRID_INTELLIGENCE_REQUIRE_KEYS` | `true` | Require an API key on every data route. `false` only for a closed, local setup |
 | `PSYGRID_INTELLIGENCE_RATE_PER_MINUTE` | `120` | Default sustained requests per minute per key |
 | `PSYGRID_INTELLIGENCE_RATE_BURST` | `30` | Bucket size per key |

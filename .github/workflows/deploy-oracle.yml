@@ -104,20 +104,32 @@ jobs:
           cd /home/ubuntu/Psygrid
           mkdir -p /home/ubuntu/psygrid-intelligence
           /home/ubuntu/Psygrid/.venv/bin/python -c "import intelligence.api"
+          # Never compete for a port another process holds: stop our own service, then require the port free.
+          sudo systemctl stop psygrid-intelligence 2>/dev/null || true
+          if sudo ss -ltnpH "( sport = :18101 )" | grep -q .; then
+            echo "Port 18101 is in use by another process; psygrid-intelligence will not be started:"
+            sudo ss -ltnpH "( sport = :18101 )"
+            sudo systemctl disable psygrid-intelligence 2>/dev/null || true
+            exit 1
+          fi
           sudo install -m 0644 deploy/psygrid-intelligence.service /etc/systemd/system/psygrid-intelligence.service
           sudo systemctl daemon-reload
+          sudo systemctl reset-failed psygrid-intelligence 2>/dev/null || true
           sudo systemctl enable psygrid-intelligence
           sudo systemctl restart psygrid-intelligence
           health_ok=0
           for attempt in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:10001/v2/health; then
+            if curl -fsS http://127.0.0.1:18101/v2/health; then
               echo
               health_ok=1
               break
             fi
             sleep 2
           done
-          test "$health_ok" -eq 1
+          if [ "$health_ok" -ne 1 ]; then
+            sudo journalctl -u psygrid-intelligence -n 40 --no-pager || true
+            exit 1
+          fi
           # PSYGRID must still be healthy with the intelligence service running beside it.
           curl -fsS http://127.0.0.1:10000/health
           echo

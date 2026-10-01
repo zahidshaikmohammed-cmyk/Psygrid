@@ -5,7 +5,7 @@
 | Service | Unit | Port | Restarted by a deploy |
 | --- | --- | --- | --- |
 | PSYGRID (unchanged) | `psygrid` | 10000 | yes, as before |
-| Intelligence | `psygrid-intelligence` (`deploy/psygrid-intelligence.service`) | 10001, localhost | yes, after PSYGRID is verified |
+| Intelligence | `psygrid-intelligence` (`deploy/psygrid-intelligence.service`) | 18101, localhost | yes, after PSYGRID is verified |
 
 ## The deploy workflow
 
@@ -17,7 +17,7 @@ check. Only after all of those pass, the new last step:
 1. creates `~/psygrid-intelligence`;
 2. imports `intelligence.api` with the VM's virtualenv (a broken install fails here, before any restart);
 3. installs the unit to `/etc/systemd/system/`, `daemon-reload`, `enable`, `restart psygrid-intelligence`;
-4. waits up to 60 s for `GET 127.0.0.1:10001/v2/health`;
+4. waits up to 60 s for `GET 127.0.0.1:18101/v2/health`;
 5. checks PSYGRID's `/health` again, with the intelligence service running.
 
 The step never restarts or reconfigures `psygrid`. If it fails, PSYGRID is
@@ -44,8 +44,8 @@ After the first deploy that includes the service:
 ```bash
 cd ~/Psygrid
 .venv/bin/python -m intelligence keys create --name "my-engine"   # prints the key once; store it
-curl -s http://127.0.0.1:10001/v2/health | jq .
-curl -s -H "X-API-Key: psg_..." http://127.0.0.1:10001/v2/market | jq '.as_of'
+curl -s http://127.0.0.1:18101/v2/health | jq .
+curl -s -H "X-API-Key: psg_..." http://127.0.0.1:18101/v2/market | jq '.as_of'
 ```
 
 On its first start the service builds per-session summaries for the last 20
@@ -56,11 +56,11 @@ similarity cache a few sessions per minute after the close.
 ## Reaching `/v2` from another machine
 
 By default the service listens on localhost only: engines on the VM use
-`http://127.0.0.1:10001`. To expose it, all of these are needed, and none is
+`http://127.0.0.1:18101`. To expose it, all of these are needed, and none is
 done automatically:
 
 1. `PSYGRID_INTELLIGENCE_HOST=0.0.0.0` in `/etc/psygrid-intelligence.env`;
-2. an iptables rule and an Oracle security-list rule for TCP 10001;
+2. an iptables rule and an Oracle security-list rule for TCP 18101;
 3. TLS in front (for example Caddy or nginx with a free Let's Encrypt
    certificate): API keys must not cross the internet in clear text;
 4. the data-rights questions in [data-rights.md](data-rights.md) answered

@@ -109,7 +109,7 @@ day = pd.read_csv("~/psygrid-data/2026-10-01/equity_1m.csv.gz")
 
 ## Intelligence layer
 
-`intelligence/` is a separate service, `psygrid-intelligence` on port 10001,
+`intelligence/` is a separate service, `psygrid-intelligence` on port 18101,
 that turns the archived market data into features for every instrument,
 contextual anomalies, relationship breaks, events with a searchable history,
 and historical similarity. It reads only the daily archive and a few
