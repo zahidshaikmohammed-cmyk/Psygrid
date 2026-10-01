@@ -617,21 +617,32 @@ class IndexLayerManager:
         self.feed.start()
 
     def backfill_recent_candles(self) -> None:
-        """Merge the last few completed 1m candles from Dhan's intraday API
-        into the live series for CANDLE_BACKFILL_KEYS. Never fabricates a
-        candle; a failed request leaves the series as it was."""
+        """Re-fetch completed 1m/5m/15m/1h candles from Dhan's intraday API
+        for CANDLE_BACKFILL_KEYS and merge them in. The 1m window covers the
+        whole trading day so far (09:14 to now), not just the last few
+        minutes - a lookback_intervals=5 window only recovers a gap younger
+        than 5 minutes, which is exactly how an 11-minute opening-window
+        websocket gap (observed live) stayed permanently unfilled even with
+        this backfill already running every 60s. 5m/15m/1h were previously
+        fetched only once, at _start_session - the single moment Dhan's
+        historical API has nothing yet for any of those timeframes - and
+        never refreshed again, leaving them empty for the entire session.
+        merge_today_1m/merge_history key on candle timestamp, so repeating
+        the whole-day fetch every cycle only ever adds what's genuinely new.
+        Never fabricates a candle; a failed request leaves the series as it
+        was."""
         for key in CANDLE_BACKFILL_KEYS:
             state = self.states.get(key)
             if state is None or state.session_status != "LIVE":
                 continue
             try:
-                rows = self.dhan_api.load_recent_completed_intraday(state.instrument, 1, lookback_intervals=5)
+                state.merge_today_1m(self.dhan_api.load_today_completed_intraday(state.instrument, 1))
+                for interval, tf in ((5, "5m"), (15, "15m"), (60, "1h")):
+                    state.merge_history(self.dhan_api.load_today_completed_intraday(state.instrument, interval), tf)
             except Exception as exc:
                 state.last_backfill_error = f"{type(exc).__name__}: {exc}"
                 continue
             state.last_backfill_error = ""
-            if rows:
-                state.merge_today_1m(rows)
 
     def _end_session(self):
         self.feed.stop()
