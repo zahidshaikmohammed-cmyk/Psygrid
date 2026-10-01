@@ -9,6 +9,9 @@
 Description=PSYGRID intelligence (live engine and /v2 API)
 After=network-online.target psygrid.service
 Wants=network-online.target
+# A service that keeps failing gives up after 5 starts in 5 minutes instead of restarting forever.
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Service]
 Type=simple

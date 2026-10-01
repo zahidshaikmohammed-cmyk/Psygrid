@@ -117,7 +117,7 @@ def main(argv=None) -> int:
         from intelligence.live import LiveRunner
         from intelligence.settings import Settings
 
-        settings = Settings(archive, store, "http://127.0.0.1:9", "127.0.0.1", 10001, True, 100_000, 100_000,
+        settings = Settings(archive, store, "http://127.0.0.1:9", "127.0.0.1", 18101, True, 100_000, 100_000,
                             10, 10, False, False, 60, 2)  # fmt: skip
         runner = LiveRunner(settings)
         runner._publish(engine.step(frame))

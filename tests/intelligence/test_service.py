@@ -44,7 +44,7 @@ def make_settings(tmp_path, market_root, store_root, **overrides):
             shutil.copytree(store_root / name, store / name, dirs_exist_ok=True)
     values = {
         "archive_dir": archive, "store_dir": store, "psygrid_url": "http://psygrid.test", "host": "127.0.0.1",
-        "port": 10001, "require_keys": True, "rate_per_minute": 600, "rate_burst": 100, "max_streams": 3,
+        "port": 18101, "require_keys": True, "rate_per_minute": 600, "rate_burst": 100, "max_streams": 3,
         "max_streams_per_key": 2, "live_enabled": False, "record_derivatives": True, "similarity_lookback": 60,
         "backup_keep": 2,
     }  # fmt: skip
@@ -349,5 +349,5 @@ def test_settings_from_environment(monkeypatch, tmp_path):
     monkeypatch.setenv("PSYGRID_INTELLIGENCE_RATE_PER_MINUTE", "0")
     monkeypatch.setenv("PSYGRID_INTELLIGENCE_REQUIRE_KEYS", "false")
     s = Settings.from_environment()
-    assert s.port == 10001 and s.rate_per_minute == 1 and not s.require_keys and s.host == "127.0.0.1"
+    assert s.port == 18101 and s.rate_per_minute == 1 and not s.require_keys and s.host == "127.0.0.1"
     assert s.events_db == tmp_path / "events.db"

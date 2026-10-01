@@ -60,7 +60,7 @@ class Settings:
             store_dir=store_dir(),
             psygrid_url=os.environ.get("PSYGRID_INTELLIGENCE_SOURCE_URL", "http://127.0.0.1:10000").rstrip("/"),
             host=os.environ.get("PSYGRID_INTELLIGENCE_HOST", "127.0.0.1"),
-            port=_int("PSYGRID_INTELLIGENCE_PORT", 10001, 1, 65535),
+            port=_int("PSYGRID_INTELLIGENCE_PORT", 18101, 1, 65535),
             require_keys=_bool("PSYGRID_INTELLIGENCE_REQUIRE_KEYS", True),
             rate_per_minute=_int("PSYGRID_INTELLIGENCE_RATE_PER_MINUTE", 120, 1, 100_000),
             rate_burst=_int("PSYGRID_INTELLIGENCE_RATE_BURST", 30, 1, 10_000),

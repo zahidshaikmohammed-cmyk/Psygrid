@@ -1,6 +1,6 @@
 # `/v2` API
 
-Served by the `psygrid-intelligence` service on port 10001 (localhost by
+Served by the `psygrid-intelligence` service on port 18101 (localhost by
 default). PSYGRID's `/public` API on port 10000 is unchanged and needs no key.
 Interactive schema: `GET /v2/docs` and `GET /v2/openapi.json`.
 
@@ -58,7 +58,7 @@ cursor. Event objects follow [event-schema.md](event-schema.md).
 ### Example
 
 ```bash
-KEY=psg_...; BASE=http://127.0.0.1:10001
+KEY=psg_...; BASE=http://127.0.0.1:18101
 curl -s -H "X-API-Key: $KEY" "$BASE/v2/market" | jq '.anomaly_counts'
 curl -s -H "X-API-Key: $KEY" "$BASE/v2/events?instrument=TCS&min_severity=MEDIUM&limit=20"
 curl -s -H "X-API-Key: $KEY" "$BASE/v2/observations?keys=TCS,INFY&fields=ret_15m,rvol_15m"
@@ -79,7 +79,7 @@ Bodies are `{"detail": ...}`.
 ## WebSocket stream: `/v2/stream`
 
 ```
-ws://127.0.0.1:10001/v2/stream?api_key=<key>&after_seq=0&event_types=volume_surge,sector_divergence&instruments=TCS,INFY&min_severity=MEDIUM&snapshots=true
+ws://127.0.0.1:18101/v2/stream?api_key=<key>&after_seq=0&event_types=volume_surge,sector_divergence&instruments=TCS,INFY&min_severity=MEDIUM&snapshots=true
 ```
 
 The key can also be sent as an `X-API-Key` or `Authorization` header. All

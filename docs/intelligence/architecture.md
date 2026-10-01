@@ -13,7 +13,7 @@
        read-only HTTP, once a│minute (futures, options)        │ read-only files
                              ▼                                 ▼
              ┌────────────────────────────────────────────────────────┐
-             │  psygrid-intelligence  (port 10001, own systemd unit)  │
+             │  psygrid-intelligence  (port 18101, own systemd unit)  │
              │  LiveRunner ─► IntelligenceEngine.step(frame)          │
              │    quality → features → anomalies → relationships      │
              │    → events (SQLite) ; similarity on request           │
