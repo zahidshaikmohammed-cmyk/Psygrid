@@ -14,7 +14,7 @@ from instrument_master import fetch_nse_equity_security_ids
 
 
 # Psygrid is intentionally a fixed production configuration. Market-data
-# behavior must not change because a stale/leftover Render environment variable
+# behavior must not change because a stale/leftover environment variable
 # is present from an earlier experiment.
 UNIVERSE_SIZE = 989
 TIMEZONE = "Asia/Kolkata"

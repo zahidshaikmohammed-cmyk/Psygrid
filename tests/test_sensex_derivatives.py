@@ -16,7 +16,7 @@ def test_sensex_option_identity_and_ram_state():
     snap = state.snapshot()
     assert snap["symbol"] == "SENSEX"
     assert snap["security_id"] == "51"
-    assert snap["exchange_segment"] == "IDX_I"  # underlying identity, matches sealed sensex.py
+    assert snap["exchange_segment"] == "IDX_I"  # underlying identity, matches index_layer's SENSEX
     assert snap["instrument"] == "INDEX"
     assert snap["status"] == "LIVE"
     assert snap["synthetic_data"] is False

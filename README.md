@@ -5,7 +5,7 @@ Live, machine-readable Dhan Data API service for 90 NSE equities.
 ## Locked architecture
 
 - DhanHQ v2 Data APIs + DhanHQ v2 Quote WebSocket.
-- Free Render web service.
+- Oracle Cloud VM (`psygrid` systemd service, port 10000).
 - GitHub repository: Psygrid.
 - RAM only. No database, Redis, Postgres, SQLite, files, or persistent market-data storage.
 - NSE session: **09:15 to 15:15 Asia/Kolkata**.
@@ -74,7 +74,7 @@ Required:
 - `DHAN_CLIENT_ID`
 - `DHAN_ACCESS_TOKEN`, or the actual daily-token variable name through `DHAN_TOKEN_VAR`
 
-The 90-stock universe is read from `stocks.json`, not from a giant Render environment variable.
+The 90-stock universe is read from `stocks.json`, not from a giant environment variable.
 
 Recommended:
 
@@ -92,17 +92,15 @@ Recommended:
 
 The Dhan access token must never be committed to GitHub.
 
-## Render
+## Oracle VM
 
-Build command:
-
-`pip install -r requirements.txt`
+Psygrid runs on an Oracle Cloud VM as the `psygrid` systemd service from `/home/ubuntu/Psygrid`, using the virtualenv at `.venv` and listening on port 10000.
 
 Start command:
 
 `python app.py`
 
-Render environment variables supply the Dhan client ID and the daily-rotated access token. No market-data persistence service is required.
+The service environment supplies the Dhan client ID and the daily-rotated access token. No market-data persistence service is required.
 
 ## Deployment
 
