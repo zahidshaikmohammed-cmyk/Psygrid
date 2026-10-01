@@ -1,8 +1,8 @@
+import struct
 from types import SimpleNamespace
 
-from banknifty_options import BankNiftyOptionsState, _normalize_chain
-from banknifty_depth import _parse_depth_message, _select_contracts
-import struct
+from index_depth import _parse_depth_message, _select_contracts
+from index_options import BANKNIFTY, IndexOptionsState, _normalize_chain
 
 
 def settings():
@@ -10,7 +10,7 @@ def settings():
 
 
 def test_banknifty_option_identity_and_ram_state():
-    state = BankNiftyOptionsState(settings())
+    state = IndexOptionsState(settings(), BANKNIFTY)
     payload = {"last_price": 55000.0, "oc": {"55000": {"ce": {"security_id": 1001}, "pe": {"security_id": 1002}}}}
     state.set_snapshot(payload, ["2026-09-24"], "2026-09-24")
     snap = state.snapshot()

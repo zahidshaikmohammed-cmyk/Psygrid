@@ -3,21 +3,18 @@ from datetime import datetime
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
-from nifty_options import (
-    NIFTY_OPTIONS_EXCHANGE_SEGMENT,
-    NIFTY_OPTIONS_INSTRUMENT,
-    NIFTY_OPTIONS_SECURITY_ID,
-    NIFTY_OPTIONS_SYMBOL,
-    NiftyOptionsState,
+from index_options import (
+    NIFTY,
+    IndexOptionsState,
     _is_market_open,
     _normalize_chain,
-    nifty_options_json,
+    index_options_json,
 )
 
 
 class NiftyOptionsTests(unittest.TestCase):
     def test_contract_is_isolated_and_native(self):
-        state = NiftyOptionsState(SimpleNamespace(timezone="Asia/Kolkata"))
+        state = IndexOptionsState(SimpleNamespace(timezone="Asia/Kolkata"), NIFTY)
         state.set_snapshot(
             {
                 "last_price": 25000.0,
@@ -33,11 +30,11 @@ class NiftyOptionsTests(unittest.TestCase):
             ["2026-09-17", "2026-09-24"],
             "2026-09-17",
         )
-        payload = nifty_options_json(state)
-        self.assertEqual(payload["symbol"], NIFTY_OPTIONS_SYMBOL)
-        self.assertEqual(payload["security_id"], NIFTY_OPTIONS_SECURITY_ID)
-        self.assertEqual(payload["exchange_segment"], NIFTY_OPTIONS_EXCHANGE_SEGMENT)
-        self.assertEqual(payload["instrument"], NIFTY_OPTIONS_INSTRUMENT)
+        payload = index_options_json(state)
+        self.assertEqual(payload["symbol"], "NIFTY")
+        self.assertEqual(payload["security_id"], "13")
+        self.assertEqual(payload["exchange_segment"], "IDX_I")
+        self.assertEqual(payload["instrument"], "INDEX")
         self.assertEqual(payload["status"], "LIVE")
         self.assertEqual(payload["underlying_ltp"], 25000.0)
         self.assertEqual(payload["expiry"], "2026-09-17")

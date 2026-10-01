@@ -16,7 +16,7 @@ import threading
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from midcpnifty_options import MidcapNiftyOptionsInstrument
+from index_options import MIDCPNIFTY, OptionsInstrument
 from output import _clean_candle, _dedupe_candles
 
 MIDCPNIFTY_UNDERLYING_POLL_SECONDS = 20.0
@@ -68,7 +68,7 @@ class MidcapNiftyUnderlyingManager:
     def __init__(self, settings, dhan_api):
         self.settings = settings
         self.dhan_api = dhan_api
-        self.instrument = MidcapNiftyOptionsInstrument()
+        self.instrument = OptionsInstrument(MIDCPNIFTY.security_id)
         self.state = MidcapNiftyUnderlyingState(settings)
         self.stop_event = threading.Event()
         self.thread: threading.Thread | None = None

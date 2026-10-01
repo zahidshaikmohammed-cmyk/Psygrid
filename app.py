@@ -19,12 +19,8 @@ from session import SessionManager
 from state_runtime import RuntimeFreshnessState
 from indicator_runtime import IndicatorRuntime
 from index_layer import IndexLayerManager
-from nifty_options import NiftyOptionsManager, nifty_options_json
-from nifty_depth import NiftyDepthManager, nifty_depth_json
-from banknifty_options import BankNiftyOptionsManager, banknifty_options_json
-from banknifty_depth import BankNiftyDepthManager, banknifty_depth_json
-from midcpnifty_options import MidcapNiftyOptionsManager, midcpnifty_options_json
-from midcpnifty_depth import MidcapNiftyDepthManager, midcpnifty_depth_json
+from index_options import INDEX_DERIVATIVES, IndexOptionsManager, index_options_json
+from index_depth import IndexDepthManager, index_depth_json
 from midcpnifty_underlying import MidcapNiftyUnderlyingManager
 from underlying_indicators import UnderlyingIndicatorRuntime
 from futures_layer import FuturesGroup, FuturesManager, futures_json
@@ -32,8 +28,6 @@ from market_breadth import build_market_breadth, build_sector_breadth
 from global_context import GlobalContextManager, global_context_json
 from rbi_news import RbiNewsManager, rbi_news_json
 from health_monitor import component_health, build_health
-from sensex_options import SensexOptionsManager, sensex_options_json
-from sensex_depth import SensexDepthManager, sensex_depth_json
 from stock_options import StockOptionsManager, NIFTY50_SYMBOLS, stock_options_json, stock_options_listing_json
 from stock_depth import StockDepthManager, stock_depth_json, stock_depth_listing_json
 
@@ -93,8 +87,7 @@ def _sensex_underlying_candles():
 
 def startup() -> None:
     global settings, state, manager, indicator_runtime, index_manager, config_error, indicator_error, index_error
-    global nifty_options_manager, nifty_depth_manager, banknifty_options_manager, banknifty_depth_manager, midcpnifty_options_manager, midcpnifty_depth_manager
-    global sensex_options_manager, sensex_depth_manager, sensex_underlying_indicators, sensex_futures_manager
+    global sensex_underlying_indicators, sensex_futures_manager
     global midcpnifty_underlying_manager, nifty_underlying_indicators, banknifty_underlying_indicators, midcpnifty_underlying_indicators
     global nifty_futures_manager, banknifty_futures_manager, global_context_manager, rbi_news_manager
     global stock_options_manager, stock_depth_manager
@@ -162,59 +155,27 @@ def startup() -> None:
             indicator_runtime = None
             indicator_error = str(exc)
 
-        # Independent derivatives domain: NIFTY, BANKNIFTY and MIDCPNIFTY
-        # option-chain (Dhan REST) and 20-level market depth (Dhan
-        # WebSocket). Entirely separate from the 990-equity universe and
-        # the 16-index layer above; a failure here never affects either.
-        try:
-            nifty_options_manager = NiftyOptionsManager(settings, dhan_api)
-            nifty_options_manager.start()
-        except Exception:
-            nifty_options_manager = None
-        if nifty_options_manager is not None:
+        # Independent derivatives domain: NIFTY, BANKNIFTY, MIDCPNIFTY and
+        # SENSEX option chains (Dhan REST) and 20-level market depth (Dhan
+        # WebSocket). Entirely separate from the 990-equity universe and the
+        # 16-index layer above; a failure here never affects either. Each
+        # index's managers are published as <key>_options_manager and
+        # <key>_depth_manager for the endpoint and health tables below.
+        for spec in INDEX_DERIVATIVES:
             try:
-                nifty_depth_manager = NiftyDepthManager(settings, dhan_api, nifty_options_manager)
-                nifty_depth_manager.start()
+                options_manager = IndexOptionsManager(settings, dhan_api, spec)
+                options_manager.start()
             except Exception:
-                nifty_depth_manager = None
-
-        try:
-            banknifty_options_manager = BankNiftyOptionsManager(settings, dhan_api)
-            banknifty_options_manager.start()
-        except Exception:
-            banknifty_options_manager = None
-        if banknifty_options_manager is not None:
-            try:
-                banknifty_depth_manager = BankNiftyDepthManager(settings, dhan_api, banknifty_options_manager)
-                banknifty_depth_manager.start()
-            except Exception:
-                banknifty_depth_manager = None
-
-        try:
-            midcpnifty_options_manager = MidcapNiftyOptionsManager(settings, dhan_api)
-            midcpnifty_options_manager.start()
-        except Exception:
-            midcpnifty_options_manager = None
-        if midcpnifty_options_manager is not None:
-            try:
-                midcpnifty_depth_manager = MidcapNiftyDepthManager(settings, dhan_api, midcpnifty_options_manager)
-                midcpnifty_depth_manager.start()
-            except Exception:
-                midcpnifty_depth_manager = None
-
-        # SENSEX options/depth trade on BSE rather than NSE; identity and
-        # rate limits otherwise mirror NIFTY/BANKNIFTY exactly.
-        try:
-            sensex_options_manager = SensexOptionsManager(settings, dhan_api)
-            sensex_options_manager.start()
-        except Exception:
-            sensex_options_manager = None
-        if sensex_options_manager is not None:
-            try:
-                sensex_depth_manager = SensexDepthManager(settings, dhan_api, sensex_options_manager)
-                sensex_depth_manager.start()
-            except Exception:
-                sensex_depth_manager = None
+                options_manager = None
+            depth_manager = None
+            if options_manager is not None:
+                try:
+                    depth_manager = IndexDepthManager(settings, dhan_api, options_manager, spec)
+                    depth_manager.start()
+                except Exception:
+                    depth_manager = None
+            globals()[f"{spec.key}_options_manager"] = options_manager
+            globals()[f"{spec.key}_depth_manager"] = depth_manager
 
         # MIDCPNIFTY has no WebSocket tick feed (it is not one of the sealed
         # 16 index-layer symbols); source its own real 1m candles from
@@ -572,20 +533,20 @@ for route, start, end in SHARD_RANGES:
 
 
 # ---------------------------------------------------------------------------
-# Independent derivatives domain: NIFTY, BANKNIFTY, MIDCPNIFTY option chain
-# (Dhan REST) and 20-level market depth (Dhan WebSocket). Isolated from the
+# Independent derivatives domain: NIFTY, BANKNIFTY, MIDCPNIFTY, SENSEX option
+# chains (Dhan REST) and 20-level market depth (Dhan WebSocket). Isolated from the
 # 990-equity universe and the 16-index layer above.
 # ---------------------------------------------------------------------------
 
 _DERIVATIVES_ROUTES = (
-    ("nifty-options", "nifty_options_manager", nifty_options_json, "NIFTY", "NIFTY_OPTIONS_UNAVAILABLE"),
-    ("nifty-depth", "nifty_depth_manager", nifty_depth_json, "NIFTY", "NIFTY_DEPTH_UNAVAILABLE"),
-    ("banknifty-options", "banknifty_options_manager", banknifty_options_json, "BANKNIFTY", "BANKNIFTY_OPTIONS_UNAVAILABLE"),
-    ("banknifty-depth", "banknifty_depth_manager", banknifty_depth_json, "BANKNIFTY", "BANKNIFTY_DEPTH_UNAVAILABLE"),
-    ("midcpnifty-options", "midcpnifty_options_manager", midcpnifty_options_json, "MIDCPNIFTY", "MIDCPNIFTY_OPTIONS_UNAVAILABLE"),
-    ("midcpnifty-depth", "midcpnifty_depth_manager", midcpnifty_depth_json, "MIDCPNIFTY", "MIDCPNIFTY_DEPTH_UNAVAILABLE"),
-    ("sensex-options", "sensex_options_manager", sensex_options_json, "SENSEX", "SENSEX_OPTIONS_UNAVAILABLE"),
-    ("sensex-depth", "sensex_depth_manager", sensex_depth_json, "SENSEX", "SENSEX_DEPTH_UNAVAILABLE"),
+    ("nifty-options", "nifty_options_manager", index_options_json, "NIFTY", "NIFTY_OPTIONS_UNAVAILABLE"),
+    ("nifty-depth", "nifty_depth_manager", index_depth_json, "NIFTY", "NIFTY_DEPTH_UNAVAILABLE"),
+    ("banknifty-options", "banknifty_options_manager", index_options_json, "BANKNIFTY", "BANKNIFTY_OPTIONS_UNAVAILABLE"),
+    ("banknifty-depth", "banknifty_depth_manager", index_depth_json, "BANKNIFTY", "BANKNIFTY_DEPTH_UNAVAILABLE"),
+    ("midcpnifty-options", "midcpnifty_options_manager", index_options_json, "MIDCPNIFTY", "MIDCPNIFTY_OPTIONS_UNAVAILABLE"),
+    ("midcpnifty-depth", "midcpnifty_depth_manager", index_depth_json, "MIDCPNIFTY", "MIDCPNIFTY_DEPTH_UNAVAILABLE"),
+    ("sensex-options", "sensex_options_manager", index_options_json, "SENSEX", "SENSEX_OPTIONS_UNAVAILABLE"),
+    ("sensex-depth", "sensex_depth_manager", index_depth_json, "SENSEX", "SENSEX_DEPTH_UNAVAILABLE"),
     ("nifty-futures", "nifty_futures_manager", futures_json, "NIFTY", "NIFTY_FUTURES_UNAVAILABLE"),
     ("banknifty-futures", "banknifty_futures_manager", futures_json, "BANKNIFTY", "BANKNIFTY_FUTURES_UNAVAILABLE"),
     ("sensex-futures", "sensex_futures_manager", futures_json, "SENSEX", "SENSEX_FUTURES_UNAVAILABLE"),
