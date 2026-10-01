@@ -62,11 +62,15 @@ def candles(security_id: str, day: date, with_faults: bool):
 
 
 class FakeDhan:
-    def __init__(self, fail_once=("429:1594", "500:1333"), auth_fail=False, stop_after=None):
+    def __init__(self, fail_once=("429:1594", "500:1333"), auth_fail=False, stop_after=None, data_plan="Active"):
+        self.data_plan = data_plan
         self.calls = []
         self.pending_faults = set(fail_once)
         self.auth_fail = auth_fail
         self.stop_after = stop_after
+
+    def profile(self, url, headers):
+        return 200, {"dhanClientId": "1", "dataPlan": self.data_plan, "dataValidity": "2027-01-01 00:00:00.0"}
 
     def __call__(self, url, headers, payload):
         self.calls.append((url.rsplit("/", 1)[-1], payload.get("securityId")))

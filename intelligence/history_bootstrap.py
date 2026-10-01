@@ -189,6 +189,15 @@ class RateLimiter:
             self._next = max(self._next, self._clock() + seconds)
 
 
+def _http_get(url: str, headers: dict, timeout: float = 20.0):
+    response = requests.get(url, headers=headers, timeout=timeout)
+    try:
+        body = response.json()
+    except ValueError:
+        body = {"errorMessage": response.text[:300]}
+    return response.status_code, body
+
+
 def _http_post(url: str, headers: dict, payload: dict, timeout: float = 30.0):
     response = requests.post(url, headers=headers, json=payload, timeout=timeout)
     try:
@@ -199,11 +208,12 @@ def _http_post(url: str, headers: dict, payload: dict, timeout: float = 30.0):
 
 
 class HistoryClient:
-    def __init__(self, client_id: str, token: str, rate: float = DEFAULT_RATE, post=_http_post, sleep=time.sleep):
+    def __init__(self, client_id: str, token: str, rate: float = DEFAULT_RATE, post=_http_post, sleep=time.sleep,
+                 get=_http_get):  # fmt: skip
         self.headers = {"Accept": "application/json", "Content-Type": "application/json",
                         "access-token": token, "client-id": client_id}  # fmt: skip
         self.limiter = RateLimiter(rate, sleep=sleep)
-        self._post, self._sleep = post, sleep
+        self._post, self._sleep, self._get = post, sleep, get
         self.requests = 0
         self._count_lock = threading.Lock()
 
@@ -239,6 +249,21 @@ class HistoryClient:
                 raise RequestFailed(f"HTTP {status} {code}: {(body or {}).get('errorMessage', body)}"[:300])
             return body
         raise RequestFailed(f"gave up after {MAX_ATTEMPTS} attempts: {last}")
+
+    def preflight(self) -> dict:
+        """Dhan's profile: the Data API plan must be active. Costs no Data API request."""
+        status, body = self._get(BASE_URL + "/profile", {"Accept": "application/json",
+                                                         "access-token": self.headers["access-token"]})  # fmt: skip
+        if status != 200 or not isinstance(body, dict):
+            raise BootstrapBlocked(f"Dhan profile request failed ({status}): {str(body)[:200]}")
+        plan = {"dataPlan": body.get("dataPlan"), "dataValidity": body.get("dataValidity"),
+                "activeSegment": body.get("activeSegment")}  # fmt: skip
+        if str(plan["dataPlan"] or "").strip().lower() != "active":
+            raise BootstrapBlocked(
+                f"Dhan Data API plan is not active for this account (dataPlan={plan['dataPlan']!r}, "
+                f"dataValidity={plan['dataValidity']!r}). Historical data needs an active Data API subscription."
+            )
+        return plan
 
     def intraday(self, inst: Instrument, start: datetime, end: datetime) -> dict | None:
         return self.post("/charts/intraday", {
@@ -624,6 +649,8 @@ class Bootstrap:
         reason = market_hours_guard(self.clock())
         if reason and not allow_market_hours:
             raise BootstrapBlocked(reason)
+        plan_info = self.client.preflight()
+        self.log(f"Dhan Data API plan: {plan_info['dataPlan']}, valid until {plan_info['dataValidity']}")
         calendar = self.calendar()
         wanted, missing = self.targets(calendar)
         if not missing:

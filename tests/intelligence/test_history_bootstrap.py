@@ -30,7 +30,7 @@ UNIVERSE = [*sorted(SYMBOLS), "NOTLISTED"]
 
 def make(root, fake=None, sessions=5, now=NOW, workers=2):
     fake = fake or FakeDhan()
-    client = HistoryClient("cid", "token", rate=4.0, post=fake, sleep=lambda s: None)
+    client = HistoryClient("cid", "token", rate=4.0, post=fake, sleep=lambda s: None, get=fake.profile)
     client.limiter = RateLimiter(4.0, sleep=lambda s: None)
     boot = Bootstrap(root, client, sessions=sessions, workers=workers, clock=lambda: now, log=lambda m: None,
                      master_lines=master_lines(), symbols=UNIVERSE)  # fmt: skip
@@ -193,6 +193,13 @@ def test_market_hours_and_auth_failures_block(tmp_path):
     with pytest.raises(BootstrapBlocked, match="credentials"):
         denied.run()
     assert available_days(tmp_path) == []
+
+
+def test_an_inactive_data_plan_blocks_before_any_data_request(tmp_path):
+    boot, fake = make(tmp_path, FakeDhan(data_plan="Deactive"))
+    with pytest.raises(BootstrapBlocked, match="Data API plan is not active"):
+        boot.run()
+    assert fake.calls == [] and available_days(tmp_path) == []
 
 
 def test_credentials_never_generate_a_token_implicitly(tmp_path):
