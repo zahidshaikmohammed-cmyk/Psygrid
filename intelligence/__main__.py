@@ -3,6 +3,11 @@
     python -m intelligence days
     python -m intelligence replay 2026-10-02 --until 10:17
     python -m intelligence replay 2026-10-02 --until 10:17 --json
+    python -m intelligence run 2026-10-02 [--every 1] [--start 09:15 --end 15:15]
+
+``run`` replays a whole session through every engine (features, anomalies,
+relationships, events) exactly as the live process would, storing events in
+the intelligence store, and prints what fired and how long each step took.
 
 ``replay`` shows the market as PSYGRID knew it at ``--until``: how many bars
 had completed, coverage, and the instruments with the worst data quality.
@@ -53,6 +58,23 @@ def _replay(args) -> int:
     return 0
 
 
+def _run(args) -> int:
+    from intelligence.engine import IntelligenceEngine, replay_session
+    from intelligence.event_store import EventStore
+    from intelligence.history import store_dir
+
+    try:
+        day = load_day(args.archive_dir, args.date)
+    except FileNotFoundError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    root = args.store_dir or store_dir()
+    engine = IntelligenceEngine(args.archive_dir, root, event_store=EventStore(root / "events.db"))
+    summary = replay_session(engine, day, args.start, args.end, args.every)
+    print(json.dumps(asdict(summary), indent=2))
+    return 0
+
+
 def _days(args) -> int:
     days = available_days(args.archive_dir)
     print("\n".join(days) if days else f"no archived days under {args.archive_dir}")
@@ -70,6 +92,15 @@ def main(argv: list[str] | None = None) -> int:
     replay.add_argument("--worst", type=int, default=5, help="how many worst-quality instruments to list")
     replay.add_argument("--json", action="store_true", help="print the full data-quality record as JSON")
     replay.set_defaults(run=_replay)
+    run = commands.add_parser("run", help="replay a session through every engine and store its events")
+    run.add_argument("date", help="session date, YYYY-MM-DD")
+    run.add_argument("--start", default="09:15")
+    run.add_argument("--end", default="15:15")
+    run.add_argument("--every", type=int, default=1, help="minutes between steps (events depend on the cadence)")
+    run.add_argument(
+        "--store-dir", type=Path, default=None, help="intelligence store (default PSYGRID_INTELLIGENCE_DIR)"
+    )
+    run.set_defaults(run=_run)
     args = parser.parse_args(argv)
     return args.run(args)
 

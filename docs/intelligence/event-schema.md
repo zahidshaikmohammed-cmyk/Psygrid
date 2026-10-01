@@ -24,8 +24,8 @@ compatible way; renaming, removing or changing the meaning of a field requires
   "bar_epoch": 1789019100,
   "scope": "INSTRUMENT",
   "subject": {"key": "TCS", "kind": "EQUITY"},
-  "magnitude": {"statistic": "robust_z_log_volume", "value": 5.22768, "threshold": 3.0},
-  "severity": "MEDIUM",
+  "magnitude": {"statistic": "robust_z_log_volume", "value": 5.22768, "threshold": 5.0},
+  "severity": "LOW",
   "classification": "EXTREME",
   "novelty": {"lookback_sessions": 20, "prior_occurrences": 0},
   "evidence": {
@@ -68,8 +68,8 @@ compatible way; renaming, removing or changing the meaning of a field requires
 | `bar_time`, `bar_epoch` | string, int | Open time of the latest 1m bar the evidence uses (IST text and Unix seconds). Always before `observed_at`. |
 | `scope` | enum | `INSTRUMENT`, `SECTOR`, `INDEX`, `MARKET`. |
 | `subject` | object | `key` and `kind` (`EQUITY`, `SECTOR`, `INDEX`, `MARKET`); for a pair, also `counterpart` and `counterpart_kind`. |
-| `magnitude` | object | The one statistic the event is about: `statistic` name, signed `value`, and the `threshold` its absolute value crossed (3.0). |
-| `severity` | enum | `LOW`, `MEDIUM`, `HIGH` from `abs(value) / threshold`: below 1.5, below 2.5, otherwise (that is, \|z\| < 4.5, < 7.5, ≥ 7.5). Fixed bands, never judgement. |
+| `magnitude` | object | The one statistic the event is about: `statistic` name, signed `value`, and the `threshold` its absolute value crossed: 5.0 for single-minute findings (anomalies, price/volume disagreements), 3.0 for multi-minute relationship breaks, derivatives and market measures. |
+| `severity` | enum | `LOW`, `MEDIUM`, `HIGH` from `abs(value) / threshold`: below 1.5, below 2.5, otherwise (with threshold 3: \|z\| < 4.5, < 7.5, ≥ 7.5; with threshold 5: < 7.5, < 12.5, ≥ 12.5). Fixed bands, never judgement. |
 | `classification` | enum | `UNUSUAL` (\|z\| ≥ 3) or `EXTREME` (\|z\| ≥ 5), as in the anomaly engine. |
 | `novelty` | object | `prior_occurrences`: times the same `event_type` fired for the same subject in the last `lookback_sessions` sessions held by the store, strictly before this session. |
 | `evidence` | object | `observation` (the measured values), `baseline` (method, kind, centre, scale, sample size) and optional `context` (sector comparison). Enough to recompute `magnitude`. |
@@ -102,17 +102,23 @@ compatible way; renaming, removing or changing the meaning of a field requires
 
 ## Event catalogue
 
+Why two thresholds: with about 1,000 instruments and three per-minute
+measures, a single-minute |z| ≥ 3 is routine (roughly 1% of scores), so those
+findings stay in the anomaly API and only |z| ≥ 5 becomes an event. A
+relationship break is already a 15-minute cumulative statistic and a market
+measure is one number for the whole market, so they fire from |z| ≥ 3.
+
 | `event_type` | Category | Scope | Statistic | Fires when |
 | --- | --- | --- | --- | --- |
-| `volume_surge` / `volume_drought` | ANOMALY | INSTRUMENT | `robust_z_log_volume` | 1m log volume vs its minute-of-day baseline (or earlier minutes today) is ≥ +3 / ≤ −3 |
-| `return_shock` | ANOMALY | INSTRUMENT | `return_sigma_z` | \|1m return\| ≥ 3 typical 1m moves at that minute of day (or vs the cross-section) |
-| `range_expansion` / `range_compression` | ANOMALY | INSTRUMENT | `robust_z_log_range` | 1m high-low range vs its minute-of-day baseline is ≥ +3 / ≤ −3 |
+| `volume_surge` / `volume_drought` | ANOMALY | INSTRUMENT | `robust_z_log_volume` | 1m log volume vs its minute-of-day baseline (or earlier minutes today) is ≥ +5 / ≤ −5 |
+| `return_shock` | ANOMALY | INSTRUMENT | `return_sigma_z` | \|1m return\| ≥ 5 typical 1m moves at that minute of day (or vs the cross-section) |
+| `range_expansion` | ANOMALY | INSTRUMENT | `robust_z_log_range` | 1m high-low range vs its minute-of-day baseline is ≥ +5 (a quiet single bar is not an event) |
 | `sector_divergence` | RELATIONSHIP | INSTRUMENT | `residual_z` | 15-minute cumulative residual vs the leave-one-out sector median, given beta and correlation ≥ 0.3 fitted on the 60 minutes before |
 | `index_divergence` | RELATIONSHIP | INSTRUMENT | `residual_z` | Same, against NIFTY 500 |
 | `sector_index_divergence` | RELATIONSHIP | INSTRUMENT | `residual_z` | Same, against the stock's sector index (e.g. NIFTY IT) |
 | `sector_spread_shift` | RELATIONSHIP | SECTOR | `spread_z` | The 15-minute spread between two sectors' median returns vs its mean and SD earlier today |
-| `volume_without_move` | RELATIONSHIP | INSTRUMENT | `volume_z` | Volume z ≥ 3 while \|return z\| < 1 |
-| `move_without_volume` | RELATIONSHIP | INSTRUMENT | `return_z` | \|Return z\| ≥ 3 while \|volume z\| < 1 |
+| `volume_without_move` | RELATIONSHIP | INSTRUMENT | `volume_z` | Volume z ≥ 5 while \|return z\| < 1 |
+| `move_without_volume` | RELATIONSHIP | INSTRUMENT | `return_z` | \|Return z\| ≥ 5 while \|volume z\| < 1 |
 | `basis_shift` | DERIVATIVES | INDEX | `robust_z` | (futures − spot) / spot vs its earlier values today (≥ 20 snapshots) |
 | `futures_spread_shift` | DERIVATIVES | INDEX | `robust_z` | Futures top-of-book spread vs its earlier values today |
 | `pcr_shift` | DERIVATIVES | INDEX | `robust_z` | Option put-call OI ratio vs its earlier values today |

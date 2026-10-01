@@ -17,7 +17,7 @@ from datetime import datetime
 
 import numpy as np
 
-from intelligence.anomaly import EXTREME, UNUSUAL, UNUSUAL_Z, AnomalyReport
+from intelligence.anomaly import EXTREME, EXTREME_Z, UNUSUAL, UNUSUAL_Z, AnomalyReport
 from intelligence.archive import IST
 from intelligence.event_store import SEVERITY_RANK, EventStore
 from intelligence.features import FEATURE_VERSION, FeatureSet
@@ -32,11 +32,15 @@ NOVELTY_SESSIONS = 20
 BASELINE_WINDOW = 20
 ARCHIVE_REPLAY, LIVE_SNAPSHOT = "ARCHIVE_REPLAY", "LIVE_SNAPSHOT"
 
-# anomaly measure -> (event type when z > 0, event type when z < 0, statistic)
+# Single-minute findings (anomalies and price/volume disagreements) become events only at EXTREME (|z| >= 5):
+# with ~1,000 instruments and three measures, UNUSUAL single minutes are routine and stay visible through
+# the anomaly API instead. Multi-minute relationship breaks and market measures fire from UNUSUAL (|z| >= 3).
+SINGLE_MINUTE_THRESHOLD = EXTREME_Z
+# anomaly measure -> (event type when z > 0, event type when z < 0 or None, statistic)
 ANOMALY_TYPES = {
     "volume": ("volume_surge", "volume_drought", "robust_z_log_volume"),
     "return": ("return_shock", "return_shock", "return_sigma_z"),
-    "range": ("range_expansion", "range_compression", "robust_z_log_range"),
+    "range": ("range_expansion", None, "robust_z_log_range"),  # a quiet single bar is not an event
 }
 MARKET_TYPES = {"breadth": ("breadth_shift", "BREADTH"), "dispersion": ("dispersion_shift", "DISPERSION")}
 # relationship kind -> (event type, category, scope, subject kind, counterpart kind, statistic)
@@ -53,7 +57,7 @@ RELATIONSHIP_TYPES = {
 PRICE_VOLUME_TYPES = {"volume_without_move", "move_without_volume"}
 
 EVENT_TYPES = sorted(
-    {t for pos, neg, _ in ANOMALY_TYPES.values() for t in (pos, neg)}
+    {t for pos, neg, _ in ANOMALY_TYPES.values() for t in (pos, neg) if t}
     | {t for t, _ in MARKET_TYPES.values()}
     | {spec[0] for spec in RELATIONSHIP_TYPES.values()}
     | PRICE_VOLUME_TYPES
@@ -174,7 +178,7 @@ class _Context:
         }
 
     def base(self, event_type, category, scope, subject, kind, counterpart, counterpart_kind, statistic, z, evidence,
-             affected, relationships=(), flags=(), feature_versions=None):  # fmt: skip
+             affected, relationships=(), flags=(), feature_versions=None, threshold=UNUSUAL_Z):  # fmt: skip
         subject_obj = {"key": subject, "kind": kind}
         if counterpart:
             subject_obj["counterpart"] = counterpart
@@ -192,9 +196,9 @@ class _Context:
                 "bar_epoch": self.bar_epoch,
                 "scope": scope,
                 "subject": subject_obj,
-                "magnitude": {"statistic": statistic, "value": float(z), "threshold": UNUSUAL_Z},
-                "severity": severity(z),
-                "classification": EXTREME if abs(z) >= 5 else UNUSUAL,
+                "magnitude": {"statistic": statistic, "value": float(z), "threshold": float(threshold)},
+                "severity": severity(z, threshold),
+                "classification": EXTREME if abs(z) >= EXTREME_Z else UNUSUAL,
                 "novelty": {"lookback_sessions": NOVELTY_SESSIONS, "prior_occurrences": 0},
                 "evidence": evidence,
                 "affected_instruments": sorted(affected),
@@ -227,9 +231,11 @@ class _Context:
 
     def anomaly_events(self) -> list[dict]:
         out = []
-        for anomaly in self.report.anomalies():
+        for anomaly in self.report.anomalies(minimum=EXTREME):
             positive, negative, statistic = ANOMALY_TYPES[anomaly.measure]
             event_type = positive if anomaly.z > 0 else negative
+            if event_type is None:
+                continue
             baseline = anomaly.evidence["baseline"]
             flags = []
             if baseline["kind"] != "HISTORICAL":
@@ -258,6 +264,7 @@ class _Context:
                     evidence,
                     [anomaly.key],
                     flags=flags,
+                    threshold=SINGLE_MINUTE_THRESHOLD,
                 )
             )
         return out
@@ -298,6 +305,8 @@ class _Context:
             if rel.classification not in (UNUSUAL, EXTREME) or rel.z is None:
                 continue
             if rel.kind == "price_volume":
+                if abs(rel.z) < SINGLE_MINUTE_THRESHOLD:
+                    continue
                 evidence = {"observation": dict(rel.evidence), "baseline": {"method": "anomaly engine z-scores"}}
                 out.append(
                     self.base(
@@ -312,6 +321,7 @@ class _Context:
                         rel.z,
                         evidence,
                         [rel.subject],
+                        threshold=SINGLE_MINUTE_THRESHOLD,
                     )
                 )
                 continue

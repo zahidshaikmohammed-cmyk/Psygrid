@@ -161,3 +161,39 @@ def available_days(root: Path) -> list[str]:
     if not root.exists():
         return []
     return sorted(p.name for p in root.iterdir() if (p / EQUITY_FILE).exists())
+
+
+def day_from_payloads(live: dict, index_snapshots: dict[str, dict] | None = None) -> ArchiveDay:
+    """An ``ArchiveDay`` built in memory from PSYGRID's own payloads, validated exactly as archived rows are.
+
+    ``live`` is a ``/public/live.json`` payload and ``index_snapshots`` maps index
+    keys to ``/public/<key>.json`` payloads: the same inputs ``DailyArchive``
+    writes, so a live frame and a replayed frame of the same data are identical.
+    """
+    session_date = (live.get("session") or {}).get("date")
+    if not session_date:
+        raise ValueError("payload has no session date")
+    stocks = live.get("stocks") or {}
+    equity_rows, reference = [], {}
+    for symbol in sorted(stocks):
+        stock = stocks[symbol] or {}
+        reference[symbol] = {
+            "previous_close": _number(stock.get("previous_close")),
+            "today_open": _number(stock.get("today_open")),
+        }
+        for candle in stock.get("candles_1m") or []:
+            equity_rows.append({"symbol": symbol, **{k: candle.get(k) for k in ("timestamp", *BAR_FIELDS)}})
+    index_rows = []
+    for key in sorted(index_snapshots or {}):
+        snap = index_snapshots[key] or {}
+        if (snap.get("session") or {}).get("date") not in (None, session_date):
+            continue  # a stale index snapshot from another day is not today's data
+        for candle in snap.get("1m") or []:
+            index_rows.append({"index": key, "symbol": snap.get("symbol", key), **{k: candle.get(k) for k in ("timestamp", *BAR_FIELDS)}})  # fmt: skip
+    return ArchiveDay(
+        session_date=session_date,
+        equity=_to_bars(equity_rows, "symbol", "symbol"),
+        indices=_to_bars(index_rows, "index", "symbol") if index_rows else None,
+        reference=reference,
+        manifest={"source": "live_payloads"},
+    )
