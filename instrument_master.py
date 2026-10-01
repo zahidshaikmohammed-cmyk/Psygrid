@@ -1,3 +1,5 @@
+"""Resolve NSE equity symbols to Dhan security ids from Dhan's official instrument master."""
+
 from __future__ import annotations
 
 import csv

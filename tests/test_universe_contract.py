@@ -12,7 +12,7 @@ EXPECTED_KEYS = {"symbol", "security_id", "previous_close", "today_open", "candl
 EXPECTED_CANDLE_KEYS = {"timestamp", "open", "high", "low", "close", "volume"}
 
 
-def test_canonical_stock_universe_is_exactly_990_and_unique():
+def test_canonical_stock_universe_has_exact_size_and_is_unique():
     payload = json.loads(Path("stocks.json").read_text(encoding="utf-8"))
     symbols = payload["symbols"]
     assert payload["universe"] == "PSYGRID_989"

@@ -1,3 +1,5 @@
+"""The 16-index layer: one shared Dhan WebSocket for index ticks plus native historical 5m/15m/1h candles."""
+
 from __future__ import annotations
 
 import contextlib

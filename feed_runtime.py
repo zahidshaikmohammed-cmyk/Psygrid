@@ -1,3 +1,5 @@
+"""Production equity feed: the base WebSocket feed plus stale-instrument resubscribe and REST recovery."""
+
 from __future__ import annotations
 
 import asyncio

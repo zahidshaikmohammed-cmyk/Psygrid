@@ -1,3 +1,5 @@
+"""RAM-only equity market state for the canonical 1-minute OHLCV feed."""
+
 from __future__ import annotations
 
 import threading

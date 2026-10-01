@@ -1,3 +1,5 @@
+"""Post-deploy check that a running Psygrid serves the full equity universe with a valid contract."""
+
 from __future__ import annotations
 
 import json

@@ -1,5 +1,5 @@
 """Raw market-breadth and sector aggregates computed directly from the
-already-live 990-equity RAM state. No new data source: this only aggregates
+already-live equity RAM state. No new data source: this only aggregates
 numbers Psygrid already holds (LTP, previous close, today's session
 high/low) into counts and medians.
 

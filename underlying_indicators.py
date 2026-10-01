@@ -3,7 +3,7 @@ ADX/Stochastic/ATR/CCI/MFI/ROC/Momentum/RVOL/CMF/Donchian) for a single
 underlying's own 1-minute OHLCV history.
 
 Reuses the exact same PsygridMasterIndicatorEngine that computes indicators
-for the 990-equity universe: no separate/looser indicator math for
+for the equity universe: no separate/looser indicator math for
 derivatives underlyings. Each instance only reads an already-public 1m
 candle snapshot (from the sealed index layer, or MIDCPNIFTY's own candle
 poller) through a callable; it never mutates or depends on the internals of

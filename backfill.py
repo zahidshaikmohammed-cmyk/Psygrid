@@ -1,3 +1,5 @@
+"""Rate-limited Dhan historical backfill of missing 1-minute equity candles."""
+
 from __future__ import annotations
 
 import queue

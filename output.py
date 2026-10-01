@@ -1,3 +1,5 @@
+"""JSON payload builders for the equity endpoints: candle cleaning, de-duplication and IST timestamps."""
+
 from __future__ import annotations
 
 import json

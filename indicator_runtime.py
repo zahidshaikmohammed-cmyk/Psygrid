@@ -1,3 +1,5 @@
+"""Background runtime computing the equity indicator suite from Psygrid's own live 1m endpoint."""
+
 from __future__ import annotations
 
 import threading

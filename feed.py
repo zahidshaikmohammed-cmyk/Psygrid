@@ -1,3 +1,5 @@
+"""Dhan Full-mode market-feed WebSocket that builds native 1-minute equity candles from ticks."""
+
 from __future__ import annotations
 
 import contextlib

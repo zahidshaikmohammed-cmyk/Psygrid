@@ -1,3 +1,5 @@
+"""Rate-limited client for Dhan's v2 REST Data APIs (quotes, intraday/daily history, option chains)."""
+
 from __future__ import annotations
 
 import threading

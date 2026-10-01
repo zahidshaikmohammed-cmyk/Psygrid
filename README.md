@@ -1,107 +1,109 @@
 # Psygrid
 
-Live, machine-readable Dhan Data API service for 90 NSE equities.
+Live, machine-readable Indian market data built on the DhanHQ v2 Data APIs.
 
-## Locked architecture
+Psygrid streams a 989-stock NSE equity universe, 16 NSE/BSE indices, index and
+NIFTY 50 stock option chains with 20-level depth, and index futures. It serves
+everything as JSON over HTTP from process memory, with no database and no
+fabricated data.
 
-- DhanHQ v2 Data APIs + DhanHQ v2 Quote WebSocket.
-- Oracle Cloud VM (`psygrid` systemd service, port 10000).
-- GitHub repository: Psygrid.
-- RAM only. No database, Redis, Postgres, SQLite, files, or persistent market-data storage.
-- NSE session: **09:15 to 15:15 Asia/Kolkata**.
-- Live acquisition starts at 09:15 and stops at 15:15 exactly.
-- After 15:15, all session candles, indicators and instrument state are wiped from RAM.
-- Before 09:15 there is no live market acquisition.
-- **Synthetic candles are forbidden.** Psygrid never interpolates, fabricates, gap-fills, reconstructs or invents missing OHLCV candles.
-- Live 1-minute candles are formed only from genuine Dhan Quote WebSocket events and cumulative-volume deltas.
-- Historical 5m, 15m and 1h candles come directly from Dhan's native intraday historical endpoint.
-- Historical daily candles come directly from Dhan's native daily historical endpoint. Psygrid loads indicator warmup history internally but returns exactly the previous 7 completed daily candles.
-- Dhan's documented v2 equity historical endpoints expose daily and minute intervals (1, 5, 15, 25, 60), not a native weekly equity candle. Therefore Psygrid **does not synthesize weekly candles**; the 1w field explicitly reports native-weekly unavailability.
-- Dhan's User Profile endpoint is checked at session start so the service can verify that the paid Data API plan is active.
+## Design principles
 
-## 90-stock universe
+- **Genuine data only.** Psygrid never interpolates, gap-fills or invents candles, quotes or option rows. A missing value is reported as missing.
+- **RAM only.** Psygrid stores no market data on disk or in a database. Session state is wiped after the 15:15 IST close.
+- **Native candles.** Live 1-minute candles are built from Dhan WebSocket ticks and cumulative-volume deltas. Higher timeframes come from Dhan's own historical endpoints.
+- **Isolated domains.** The equity feed, the index layer and each derivatives feed run in independent managers. A failure in one never takes down another.
+- **Fixed configuration.** Session times, universe size and indicator periods are constants in `config.py`. Environment variables cannot change market-data behaviour.
 
-`stocks.json` contains the 90-symbol test universe. Psygrid resolves the current Dhan security IDs at runtime from Dhan's official instrument master; IDs are never hard-coded or persisted.
+## Data coverage
 
-## JSON endpoints
+| Domain | Endpoints | Source |
+|---|---|---|
+| Equities (989 stocks) | `/public/live.json`, shards `/public/live-{a..v}.json`, `/public/stock/{SYMBOL}.json` | Dhan Full WebSocket |
+| Equity indicators | `/public/indicators.json`, `/public/indicators-{a..v}.json`, `/public/indicators/{SYMBOL}.json` | Derived from Psygrid's own 1m candles |
+| 16 indices | `/public/{nifty,banknifty,sensex,finnifty,indiavix,…}.json` | Dhan WebSocket + historical API |
+| Index options | `/public/{nifty,banknifty,midcpnifty,sensex}-options.json` | Dhan option-chain API |
+| Index option depth | `/public/{nifty,banknifty,midcpnifty,sensex}-depth.json` | Dhan 20-level depth WebSocket |
+| Underlying indicators | `/public/{nifty,banknifty,midcpnifty,sensex}-indicators.json` | Index 1m candles |
+| Index futures | `/public/{nifty,banknifty,sensex}-futures.json` | Dhan market-quote API |
+| NIFTY 50 stock options | `/public/stock-options.json`, `/public/stock-options/{SYMBOL}.json` | Dhan option-chain API |
+| NIFTY 50 stock depth | `/public/stock-depth.json`, `/public/stock-depth/{SYMBOL}.json` | Dhan 20-level depth WebSocket |
+| Breadth & sectors | `/public/market-breadth.json`, `/public/sectors.json` | Computed from the equity feed |
+| Context (delayed) | `/public/global-context.json`, `/public/rbi-news.json` | FRED, RBI RSS |
+| Service | `/`, `/health`, `/ready`, `/public/health.json` | — |
 
-### All 90 stocks
+See [`ENDPOINT_MAP.md`](ENDPOINT_MAP.md) for refresh rates and dependencies, and
+[`DATA_DICTIONARY.md`](DATA_DICTIONARY.md) for every field. All JSON responses
+are sent with `Cache-Control: no-store`.
 
-`/public/live.json`
+## Architecture
 
-This is the primary machine/AI endpoint. During the live session it exposes all 90 configured stocks, the live 1m candle history from 09:15 onward, and native historical 5m, 15m, 1h and previous-7-day daily context. Each stock also has a `current` object with the latest LTP/candle state.
+```
+app.py                      FastAPI service; starts every manager, serves the endpoints
+├── session.py              equity session lifecycle (09:15 start, 15:15 wipe)
+│   ├── feed_runtime.py     equity WebSocket feed with stale-instrument recovery (feed.py)
+│   ├── state_runtime.py    RAM state + freshness tracking (state.py)
+│   └── backfill.py         rate-limited historical gap backfill
+├── indicator_runtime.py    equity indicator suite (psygrid_master_indicator.py)
+├── index_layer.py          16 indices on one shared WebSocket
+├── index_options.py        NIFTY/BANKNIFTY/MIDCPNIFTY/SENSEX option chains
+├── index_depth.py          20-level depth for those chains
+├── futures_layer.py        front-month index futures (derivatives_instruments.py)
+├── stock_options.py        NIFTY 50 stock option chains, round-robin
+├── stock_depth.py          NIFTY 50 stock depth, one rotating WebSocket
+├── underlying_indicators.py / midcpnifty_underlying.py
+├── market_breadth.py       breadth and sector aggregates (sector_taxonomy.py)
+├── global_context.py / rbi_news.py
+└── health_monitor.py       aggregated freshness across all feeds
 
-### One stock
+dhan_api.py                 rate-limited Dhan REST client
+dhan_auth.py / auth_retry.py  token handling and auth-failure retry
+config.py                   fixed configuration and the stocks.json universe
+```
 
-`/public/stock/RELIANCE.json`
+## Configuration
 
-### One timeframe
+| Variable | Required | Purpose |
+|---|---|---|
+| `DHAN_CLIENT_ID` | yes | Dhan client id |
+| `DHAN_ACCESS_TOKEN` | one of the two auth methods | Explicit access token. Use `DHAN_TOKEN_VAR` to read it from a differently named variable. |
+| `DHAN_PIN`, `DHAN_TOTP_SECRET` | one of the two auth methods | Automatic daily token generation via PIN + TOTP |
+| `FRED_API_KEY` | no | Enables `/public/global-context.json`. Without it, the endpoint reports an error. |
+| `PORT` | no | HTTP port (default `10000`) |
+| `PSYGRID_STOCKS_FILE` | no | Path to the universe file (default `stocks.json`) |
 
-`/public/stock/RELIANCE/1m.json`
-`/public/stock/RELIANCE/5m.json`
-`/public/stock/RELIANCE/15m.json`
-`/public/stock/RELIANCE/1h.json`
-`/public/stock/RELIANCE/1d.json`
-`/public/stock/RELIANCE/1w.json`
+Never commit credentials. The equity universe lives in `stocks.json`. Each
+symbol's Dhan security id is resolved at startup from Dhan's instrument
+master, never hard-coded.
 
-All public JSON responses use `Cache-Control: no-store` so a machine does not receive stale cached market data.
+## Development
 
-## Candle and indicator fields
+Requires Python 3.12.
 
-Every available candle contains:
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements-dev.txt
 
-- timestamp
-- open
-- high
-- low
-- close
-- volume
-- VWAP
-- MA9
-- EMA20
-- RSI14
-- complete
-- source
+ruff check .            # lint
+ruff format .           # format
+python -m pytest -q     # full test suite
+python app.py           # run locally (needs Dhan credentials)
+```
 
-The current 1m candle has `complete=false`; completed candles have `complete=true`.
-
-VWAP is candle-typical-price weighted with a daily/session reset. Historical VWAP is calculated from the genuine Dhan OHLCV candles; no OHLCV values are altered.
-
-## Environment
-
-Required:
-
-- `DHAN_CLIENT_ID`
-- `DHAN_ACCESS_TOKEN`, or the actual daily-token variable name through `DHAN_TOKEN_VAR`
-
-The 90-stock universe is read from `stocks.json`, not from a giant environment variable.
-
-Recommended:
-
-- `TIMEZONE=Asia/Kolkata`
-- `MARKET_START=09:15`
-- `MARKET_END=15:15`
-- `INTRADAY_HISTORY_DAYS=5`
-- `DAILY_LOOKBACK=7`
-- `DAILY_INDICATOR_WARMUP=30`
-- `WEEKLY_LOOKBACK=7`
-- `MA_PERIOD=9`
-- `EMA_PERIOD=20`
-- `RSI_PERIOD=14`
-- `MAX_INSTRUMENTS=500`
-
-The Dhan access token must never be committed to GitHub.
-
-## Oracle VM
-
-Psygrid runs on an Oracle Cloud VM as the `psygrid` systemd service from `/home/ubuntu/Psygrid`, using the virtualenv at `.venv` and listening on port 10000.
-
-Start command:
-
-`python app.py`
-
-The service environment supplies the Dhan client ID and the daily-rotated access token. No market-data persistence service is required.
+`tests/test_dhan_990_resolution.py` downloads Dhan's live instrument master and
+needs network access to `images.dhan.co`.
 
 ## Deployment
 
-GitHub Actions automatically tests and deploys the `main` branch to the Oracle production VM.
+Production runs on an Oracle Cloud VM as the `psygrid` systemd service from
+`/home/ubuntu/Psygrid`, using the `.venv` virtualenv and listening on port 10000.
+
+Every push to `main` triggers `.github/workflows/deploy-oracle.yml`:
+
+1. Lint and run the full test suite.
+2. Pull `main` on the VM, install requirements and restart the service.
+3. Wait for `/health`, then check all 16 index endpoints and the full equity
+   universe (`tools/check_live_universe.py`).
+
+`.github/workflows/ci.yml` runs the same lint and test checks on every pull
+request.

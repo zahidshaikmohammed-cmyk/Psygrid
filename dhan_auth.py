@@ -1,3 +1,5 @@
+"""Dhan access-token handling: explicit tokens from the environment or PIN + TOTP auto-generation."""
+
 from __future__ import annotations
 
 import os

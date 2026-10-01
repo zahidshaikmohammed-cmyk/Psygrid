@@ -1,3 +1,5 @@
+"""Option chains for NIFTY 50 stocks, polled round-robin from Dhan's option-chain API."""
+
 from __future__ import annotations
 
 import threading
@@ -16,7 +18,7 @@ EXPIRY_REFRESH_SECONDS = 1800.0
 
 # NIFTY 50 index constituents as of this build. This list is periodically
 # reconstituted by NSE (typically semi-annually) and, like stocks.json's
-# 990-equity universe, needs manual maintenance when that happens - Dhan's
+# equity universe, needs manual maintenance when that happens - Dhan's
 # instrument master has no "index membership" field to resolve this from.
 # Updated 2026-09-28: TATAMOTORS, INDUSINDBK, BRITANNIA, DIVISLAB,
 # HEROMOTOCO, BPCL, UPL, LTIM removed; BEL, ETERNAL, HINDALCO, INDIGO,
@@ -150,7 +152,7 @@ class StockOptionsManager:
     ~3.2s-per-request cadence means a full rotation across all of them takes
     roughly len(resolved) * 3.2s - by design, not a bug. Resolves each
     symbol's NSE equity security ID independently, directly against Dhan's
-    instrument master - deliberately not reusing the 990/989-equity
+    instrument master - deliberately not reusing the equity-universe
     universe's already-resolved instrument list, since that list's coverage
     is unrelated to NIFTY 50 membership (two current constituents, e.g.
     SBILIFE and SHRIRAMFIN, are not part of it) and this domain should not

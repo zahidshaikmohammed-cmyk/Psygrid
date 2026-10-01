@@ -1,3 +1,5 @@
+"""Fixed production configuration, the equity symbol universe, and Dhan credential loading."""
+
 from __future__ import annotations
 
 import base64

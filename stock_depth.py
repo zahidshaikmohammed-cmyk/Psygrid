@@ -1,3 +1,5 @@
+"""20-level option depth for NIFTY 50 stocks over one shared, rotating Dhan depth WebSocket."""
+
 from __future__ import annotations
 
 import contextlib

@@ -1,3 +1,5 @@
+"""Equity state extended with freshness tracking for current-quote recovery."""
+
 from __future__ import annotations
 
 import time

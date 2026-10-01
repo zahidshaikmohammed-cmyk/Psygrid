@@ -112,7 +112,7 @@ SENSEX futures resolve against Dhan's `BSE` instrument-master rows (`exchange_se
 
 | Field | Type | Meaning | Formula/Source |
 |---|---|---|---|
-| `advancing`/`declining`/`unchanged`/`unknown` | int | Counts across the live 990-equity universe | `change_pct` sign vs. previous close; `unknown` = no LTP or no previous close yet |
+| `advancing`/`declining`/`unchanged`/`unknown` | int | Counts across the live 989-equity universe | `change_pct` sign vs. previous close; `unknown` = no LTP or no previous close yet |
 | `advance_decline_ratio` | float or null | `advancing / declining` | null if `declining == 0` |
 | `new_session_highs`/`new_session_lows` | int | Constituents whose LTP is at/above (at/below) their **own intraday session** high/low so far | **Intraday only — not 52-week**, explicitly labeled as such in the payload |
 | `coverage_count` | int | Constituents with usable data this refresh | |
@@ -139,7 +139,7 @@ No `BULLISH`/`BEARISH`/`STRONG`/`WEAK` label anywhere in this payload — verifi
 | `components.{name}.age_seconds` | float or null | Time since that feed's own last update | 
 | `components.{name}.expected_refresh_seconds` | float | What that feed's own refresh cadence should be (used to derive the status thresholds: `>2x` → WARNING, `>5x` → STALE) |
 | `components.{name}.last_error` | string | The feed's own last recorded error, if any |
-| `components.{name}.record_count`/`expected_record_count`/`record_count_match` | int/int/bool | Present only for feeds with a known expected size (currently `equity_990`, expected 990) |
+| `components.{name}.record_count`/`expected_record_count`/`record_count_match` | int/int/bool | Present only for feeds with a known expected size (currently `equity_990`, expected 989; the component name is kept for compatibility) |
 
 `/public/health.json` never calls out to any upstream API itself — it only reads timestamps/status fields each manager already tracks, which is what keeps it lightweight.
 

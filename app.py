@@ -1,3 +1,5 @@
+"""Psygrid HTTP service: starts every market-data manager and serves their RAM-only JSON endpoints."""
+
 from __future__ import annotations
 
 import os
@@ -136,7 +138,7 @@ def startup() -> None:
         )
         manager.start()
 
-        # Completely separate index-data layer. It does not alter the 990-equity
+        # Completely separate index-data layer. It does not alter the equity
         # universe, subscriptions, state, shards, or readiness contract.
         try:
             index_manager = IndexLayerManager(settings, dhan_api)
@@ -157,7 +159,7 @@ def startup() -> None:
 
         # Independent derivatives domain: NIFTY, BANKNIFTY, MIDCPNIFTY and
         # SENSEX option chains (Dhan REST) and 20-level market depth (Dhan
-        # WebSocket). Entirely separate from the 990-equity universe and the
+        # WebSocket). Entirely separate from the equity universe and the
         # 16-index layer above; a failure here never affects either. Each
         # index's managers are published as <key>_options_manager and
         # <key>_depth_manager for the endpoint and health tables below.
@@ -189,7 +191,7 @@ def startup() -> None:
         # Real technical-indicator suite per underlying (EMA/SMA/RSI/MACD/
         # Bollinger/Supertrend/ADX/Stochastic/ATR/CCI/MFI/ROC/Momentum/
         # RVOL/CMF/Donchian), reusing the exact engine that powers the
-        # 990-equity /public/indicators.json layer.
+        # equity /public/indicators.json layer.
         try:
             nifty_underlying_indicators = UnderlyingIndicatorRuntime("NIFTY", _nifty_underlying_candles, settings)
             nifty_underlying_indicators.start()
@@ -240,7 +242,7 @@ def startup() -> None:
         # Stock option chains for the NIFTY 50 constituents that carry
         # listed derivatives. Shares the same rate-limited Dhan option-chain
         # REST queue as the index option-chain pollers above, round-robining
-        # one symbol at a time; entirely separate from the 990-equity
+        # one symbol at a time; entirely separate from the equity
         # universe, the 16-index layer, and the index derivatives above.
         try:
             stock_options_manager = StockOptionsManager(settings, dhan_api)
@@ -473,7 +475,7 @@ def _public_live_range(start: int, end: int) -> Response:
     if error:
         return error
     # Never sort a shard independently. Every shard is a slice of the same
-    # canonical 990-instrument order used by the feed and configuration.
+    # canonical equity-universe order used by the feed and configuration.
     return json_response(market_live_json(state, (start, end), True))
 
 
@@ -610,7 +612,7 @@ for route, start, end in SHARD_RANGES:
 # ---------------------------------------------------------------------------
 # Independent derivatives domain: NIFTY, BANKNIFTY, MIDCPNIFTY, SENSEX option
 # chains (Dhan REST) and 20-level market depth (Dhan WebSocket). Isolated from the
-# 990-equity universe and the 16-index layer above.
+# equity universe and the 16-index layer above.
 # ---------------------------------------------------------------------------
 
 _DERIVATIVES_ROUTES = (
@@ -720,7 +722,7 @@ def public_stock_depth_symbol(symbol: str) -> Response:
 # ---------------------------------------------------------------------------
 # Real technical-indicator suite per derivatives underlying (NIFTY,
 # BANKNIFTY, MIDCPNIFTY), reusing the same engine that computes indicators
-# for the 990-equity universe. Isolated: each runtime only reads an
+# for the equity universe. Isolated: each runtime only reads an
 # already-public 1m candle snapshot.
 # ---------------------------------------------------------------------------
 
@@ -753,7 +755,7 @@ for _path, _runtime_name, _symbol in _UNDERLYING_INDICATOR_ROUTES:
 
 # ---------------------------------------------------------------------------
 # Raw market breadth and sector aggregates, computed directly from the
-# already-live 990-equity RAM state. No new data source, no labels.
+# already-live equity RAM state. No new data source, no labels.
 # ---------------------------------------------------------------------------
 
 

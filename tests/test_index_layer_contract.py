@@ -25,7 +25,7 @@ def test_all_original_index_routes_are_registered():
     assert set(EXPECTED_INDEX_ROUTES) <= routes
 
 
-def test_index_layer_is_separate_from_990_routes():
+def test_index_layer_is_separate_from_equity_routes():
     routes = {route.path for route in app.routes}
     assert "/public/live.json" in routes
     assert "/public/live-a.json" in routes
