@@ -8,6 +8,7 @@ name: Intelligence history (VM operations)
 #   status    progress of the bootstrap unit and the archive
 #   verify    integrity check of every archived day
 #   validate  replay determinism and no-look-ahead on the latest day, and /v2/health
+#   probe     four single Dhan requests (status codes only): which endpoints the account can reach
 on:
   workflow_dispatch:
     inputs:
@@ -16,7 +17,7 @@ on:
         required: true
         default: inspect
         type: choice
-        options: [inspect, plan, run, status, verify, validate]
+        options: [inspect, plan, run, status, verify, validate, probe]
       sessions:
         description: completed sessions to hold (20 = the Intelligence baseline window)
         required: true
@@ -49,7 +50,7 @@ jobs:
           GENERATE: ${{ inputs.generate_token }}
         run: |
           set -euo pipefail
-          case "$ACTION" in inspect|plan|run|status|verify|validate) ;; *) echo "bad action"; exit 2;; esac
+          case "$ACTION" in inspect|plan|run|status|verify|validate|probe) ;; *) echo "bad action"; exit 2;; esac
           [[ "$SESSIONS" =~ ^[0-9]{1,4}$ ]] || { echo "bad sessions"; exit 2; }
           [[ "$RATE" =~ ^[0-9](\.[0-9]+)?$ ]] || { echo "bad rate"; exit 2; }
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
@@ -96,6 +97,14 @@ jobs:
               ;;
             verify)
               $CLI bootstrap-history verify
+              ;;
+            probe)
+              # Four single requests (status codes only) showing which Dhan endpoints the account can reach.
+              sudo sh -c "umask 077; tr '\0' '\n' < /proc/$PSYGRID_PID/environ | grep -E '^(DHAN_|PSYGRID_)' > $ENVFILE"
+              sudo systemd-run --unit psygrid-history-probe --uid ubuntu --gid ubuntu --wait --pipe --quiet \
+                --working-directory /home/ubuntu/Psygrid -p EnvironmentFile=$ENVFILE \
+                $CLI bootstrap-history probe $TOKEN_FLAG || true
+              sudo rm -f "$ENVFILE"
               ;;
             validate)
               echo "== /v2/health"; health

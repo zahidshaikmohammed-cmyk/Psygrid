@@ -210,8 +210,10 @@ def _http_post(url: str, headers: dict, payload: dict, timeout: float = 30.0):
 class HistoryClient:
     def __init__(self, client_id: str, token: str, rate: float = DEFAULT_RATE, post=_http_post, sleep=time.sleep,
                  get=_http_get):  # fmt: skip
-        self.headers = {"Accept": "application/json", "Content-Type": "application/json",
-                        "access-token": token, "client-id": client_id}  # fmt: skip
+        # Exactly the headers PSYGRID's own DhanAPI sends to /charts/*: the access token only (client-id is
+        # sent to /marketfeed/quote, not to the historical endpoints).
+        self.headers = {"Accept": "application/json", "Content-Type": "application/json", "access-token": token}
+        self.client_id = client_id
         self.limiter = RateLimiter(rate, sleep=sleep)
         self._post, self._sleep, self._get = post, sleep, get
         self.requests = 0
@@ -249,6 +251,37 @@ class HistoryClient:
                 raise RequestFailed(f"HTTP {status} {code}: {(body or {}).get('errorMessage', body)}"[:300])
             return body
         raise RequestFailed(f"gave up after {MAX_ATTEMPTS} attempts: {last}")
+
+    def probe(self) -> list[dict]:
+        """A few single requests that show which Dhan endpoints this account can reach (status codes only)."""
+        today = datetime.now(IST).date()
+        nifty = {"securityId": NIFTY[1], "exchangeSegment": NIFTY[2], "instrument": NIFTY[3], "expiryCode": 0,
+                 "oi": False, "fromDate": (today - timedelta(days=10)).isoformat(), "toDate": today.isoformat()}  # fmt: skip
+        last = today - timedelta(days=1)
+        while last.weekday() >= 5:
+            last -= timedelta(days=1)
+        intraday = {"securityId": "11536", "exchangeSegment": "NSE_EQ", "instrument": "EQUITY", "interval": "1",
+                    "oi": False, "fromDate": f"{last} 09:15:00", "toDate": f"{last} 15:30:00"}  # fmt: skip
+        with_client = {**self.headers, "client-id": self.client_id}
+        checks = [
+            ("charts/historical NIFTY (access-token)", "/charts/historical", self.headers, nifty),
+            ("charts/historical NIFTY (+client-id)", "/charts/historical", with_client, nifty),
+            ("charts/intraday TCS 1m (access-token)", "/charts/intraday", self.headers, intraday),
+            ("marketfeed/ltp NIFTY (+client-id)", "/marketfeed/ltp", with_client, {"IDX_I": [13]}),
+        ]
+        out = []
+        for name, path, headers, payload in checks:
+            self.limiter.acquire()
+            try:
+                status, _, body = self._post(BASE_URL + path, headers, payload)
+            except requests.RequestException as exc:
+                out.append({"check": name, "error": type(exc).__name__})
+                continue
+            body = body if isinstance(body, dict) else {}
+            rows = len(body.get("timestamp") or []) if "timestamp" in body else None
+            out.append({"check": name, "status": status, "errorCode": body.get("errorCode"), "rows": rows,
+                        "message": str(body.get("errorMessage") or "")[:120] or None})  # fmt: skip
+        return out
 
     def preflight(self) -> dict:
         """Dhan's profile: the Data API plan must be active. Costs no Data API request."""
