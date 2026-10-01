@@ -14,6 +14,7 @@ capped process and only reads what PSYGRID already produces.
 | [event-schema.md](event-schema.md) | Event schema `event/1`, catalogue, rules, storage |
 | [api.md](api.md) | `/v2` routes, authentication, rate limits, errors, the WebSocket stream |
 | [replay.md](replay.md) | Replay, the no-look-ahead guarantees, the CLI |
+| [history-bootstrap.md](history-bootstrap.md) | Filling the archive with genuine Dhan history: sizing, cost, resumability, integrity checks |
 | [deployment.md](deployment.md) | The systemd service, the deploy workflow, first-time setup, API keys |
 | [configuration.md](configuration.md) | Every environment variable and its default |
 | [operations.md](operations.md) | Monitoring, troubleshooting, backups and restore, recovery |

@@ -28,7 +28,8 @@ client).
 | `derivatives_errors` rising | PSYGRID endpoints unavailable or market paused | Check `curl 127.0.0.1:10000/public/nifty-futures.json`. Derivatives relationships show `INSUFFICIENT_DATA` until snapshots resume; nothing else is affected |
 | `401` on every request | Wrong, revoked or missing key | `python -m intelligence keys list`; create a new key |
 | `429` | Rate limit | Honour `Retry-After`; raise the key's rate with a new key (`--rate-per-minute`) |
-| Similarity `INSUFFICIENT_HISTORY` | Fewer than 5 earlier archived sessions | Expected while the archive is young |
+| `live.state = WAITING_FOR_DATA` for long | No archived session at all | Run the history bootstrap ([history-bootstrap.md](history-bootstrap.md)) |
+| Similarity `INSUFFICIENT_HISTORY` | Fewer than 5 earlier archived sessions | Run the history bootstrap, or wait for the archive to grow |
 | Anomalies use `INTRADAY` / `CROSS_SECTIONAL` baselines | Fewer than 5 earlier sessions | Expected while the archive is young; events carry `BASELINE_*` flags |
 | Service restarts repeatedly | Import error after a bad deploy, or memory ceiling | `journalctl -u psygrid-intelligence -n 100`; `systemctl status` shows `oom-kill` if `MemoryMax` was hit |
 | Disk growth | Caches and backups | Caches are rebuildable: delete `summaries/` and `states/` freely; backups are pruned to `BACKUP_KEEP` |
