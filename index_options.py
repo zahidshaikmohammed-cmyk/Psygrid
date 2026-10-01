@@ -22,6 +22,11 @@ EXPIRY_REFRESH_SECONDS = 1800.0
 MARKET_OPEN = datetime_time(9, 15)
 MARKET_CLOSE = datetime_time(15, 30)
 
+# Derivatives feeds pause outside market hours, keep their last data, and
+# report this status; they re-check the clock this often while paused.
+MARKET_CLOSED_STATUS = "MARKET_CLOSED"
+MARKET_CLOSED_RECHECK_SECONDS = 5.0
+
 UNDERLYING_EXCHANGE_SEGMENT = "IDX_I"
 UNDERLYING_INSTRUMENT = "INDEX"
 
@@ -122,6 +127,12 @@ class IndexOptionsState:
             self.status = "ERROR"
             self.last_error = error
 
+    def set_market_closed(self) -> None:
+        """Pause outside market hours; the last chain stays available."""
+        with self.lock:
+            self.status = MARKET_CLOSED_STATUS
+            self.last_error = ""
+
     def snapshot(self) -> dict:
         with self.lock:
             market_open = _is_market_open(datetime.now(self.tz))
@@ -177,6 +188,9 @@ class IndexOptionsManager:
             self.thread.join(timeout=8)
         self.thread = None
 
+    def _market_open(self) -> bool:
+        return _is_market_open(datetime.now(self.state.tz))
+
     def _error_code(self, reason: str) -> str:
         return f"DHAN_{self.spec.symbol}_OPTIONS_{reason}"
 
@@ -194,6 +208,10 @@ class IndexOptionsManager:
         expiries: list[str] = []
         expiry: str | None = None
         while not self.stop_event.is_set():
+            if not self._market_open():
+                self.state.set_market_closed()
+                self.stop_event.wait(MARKET_CLOSED_RECHECK_SECONDS)
+                continue
             try:
                 if not expiries or time.monotonic() - self._expiry_loaded_at >= EXPIRY_REFRESH_SECONDS:
                     expiries = self._load_expiries()

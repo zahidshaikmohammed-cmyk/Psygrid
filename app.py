@@ -13,7 +13,7 @@ import uvicorn
 from fastapi import FastAPI, Response
 from starlette.middleware.gzip import GZipMiddleware
 
-from config import UNIVERSE_SIZE, load_instruments, load_settings
+from config import MARKET_END, MARKET_START, UNIVERSE_SIZE, load_instruments, load_settings
 from daily_archive import ArchiveManager, DailyArchive, archive_dir_from_environment
 from dhan_api import DhanAPI
 from feed_runtime import LiveFeed
@@ -22,7 +22,13 @@ from global_context import GlobalContextManager, global_context_json
 from health_monitor import build_health, component_health
 from index_depth import IndexDepthManager, index_depth_json
 from index_layer import IndexLayerManager
-from index_options import INDEX_DERIVATIVES, IndexOptionsManager, index_options_json
+from index_options import (
+    INDEX_DERIVATIVES,
+    MARKET_CLOSED_STATUS,
+    IndexOptionsManager,
+    _is_market_open,
+    index_options_json,
+)
 from indicator_runtime import IndicatorRuntime
 from market_breadth import build_market_breadth, build_sector_breadth
 from midcpnifty_underlying import MidcapNiftyUnderlyingManager
@@ -50,6 +56,9 @@ archive_manager = None
 config_error = ""
 indicator_error = ""
 index_error = ""
+
+# A derivatives feed paused outside market hours still serves its last data.
+_SERVABLE_STATUSES = ("LIVE", MARKET_CLOSED_STATUS)
 
 
 def indicator_source_payload(_source_state):
@@ -671,7 +680,7 @@ def _derivatives_endpoint(manager_name: str, to_json, symbol: str, unavailable_s
     if manager is None:
         return json_response({"service": "PSYGRID", "symbol": symbol, "status": unavailable_status}, 503)
     payload = to_json(manager.state)
-    return json_response(payload, 200 if payload.get("status") == "LIVE" else 503)
+    return json_response(payload, 200 if payload.get("status") in _SERVABLE_STATUSES else 503)
 
 
 for _path, _manager_name, _to_json, _symbol, _unavailable in _DERIVATIVES_ROUTES:
@@ -709,7 +718,7 @@ def public_stock_options_symbol(symbol: str) -> Response:
             {"service": "PSYGRID", "symbol": symbol.upper(), "status": "STOCK_OPTIONS_UNAVAILABLE"}, 503
         )
     payload = stock_options_json(stock_options_manager, symbol)
-    return json_response(payload, 200 if payload.get("status") == "LIVE" else 503)
+    return json_response(payload, 200 if payload.get("status") in _SERVABLE_STATUSES else 503)
 
 
 # ---------------------------------------------------------------------------
@@ -737,7 +746,7 @@ def public_stock_depth_symbol(symbol: str) -> Response:
     if stock_depth_manager is None:
         return json_response({"service": "PSYGRID", "symbol": symbol.upper(), "status": "STOCK_DEPTH_UNAVAILABLE"}, 503)
     payload = stock_depth_json(stock_depth_manager, symbol)
-    return json_response(payload, 200 if payload.get("status") == "LIVE" else 503)
+    return json_response(payload, 200 if payload.get("status") in _SERVABLE_STATUSES else 503)
 
 
 # ---------------------------------------------------------------------------
@@ -829,6 +838,34 @@ def public_rbi_news() -> Response:
 # Reads only what each manager already knows about itself; never refetches
 # or recomputes upstream data.
 # ---------------------------------------------------------------------------
+
+
+# Health components that run around the clock rather than in a trading session.
+_ALWAYS_ON_COMPONENTS = frozenset({"global_context", "rbi_news"})
+# Option-chain, depth and futures feeds follow the 09:15-15:30 derivatives
+# session; everything else follows the 09:15-15:15 equity session.
+_DERIVATIVES_SUFFIXES = ("_options", "_depth", "_futures", "_nifty50")
+
+
+def _in_equity_session(now: datetime) -> bool:
+    start = settings.market_start if settings is not None else MARKET_START
+    end = settings.market_end if settings is not None else MARKET_END
+    return now.weekday() < 5 and start <= now.strftime("%H:%M") < end
+
+
+def _out_of_session(names: list[str], now: datetime) -> frozenset[str]:
+    """Components outside their trading hours, judged by the clock rather than
+    by feed status, so a feed that failed to start in session is never hidden."""
+    equity_open = _in_equity_session(now)
+    derivatives_open = _is_market_open(now)
+    closed = set()
+    for name in names:
+        if name in _ALWAYS_ON_COMPONENTS:
+            continue
+        is_derivatives = name.endswith(_DERIVATIVES_SUFFIXES)
+        if not (derivatives_open if is_derivatives else equity_open):
+            closed.add(name)
+    return frozenset(closed)
 
 
 def _build_health_payload() -> dict:
@@ -1021,7 +1058,7 @@ def _build_health_payload() -> dict:
         )
 
     market_status = "OPEN" if (state is not None and state.session_status == "LIVE") else "CLOSED"
-    payload = build_health(components, market_status)
+    payload = build_health(components, market_status, _out_of_session([c["name"] for c in components], now_ist))
     # Reported alongside, not as a component: the archive is idle outside
     # market hours by design and must not count against feed health.
     payload["archive"] = archive_manager.status() if archive_manager is not None else {"status": "DISABLED"}

@@ -18,7 +18,12 @@ from zoneinfo import ZoneInfo
 
 import websocket
 
-from index_options import IndexDerivativesSpec, _is_market_open
+from index_options import (
+    MARKET_CLOSED_RECHECK_SECONDS,
+    MARKET_CLOSED_STATUS,
+    IndexDerivativesSpec,
+    _is_market_open,
+)
 
 DEPTH_INSTRUMENT = "OPTIDX"
 DEPTH_LEVELS = 20
@@ -115,6 +120,12 @@ class IndexDepthState:
         with self.lock:
             self.status = "ERROR"
             self.last_error = error
+
+    def set_market_closed(self) -> None:
+        """Pause outside market hours; the last depth stays available."""
+        with self.lock:
+            self.status = MARKET_CLOSED_STATUS
+            self.last_error = ""
 
     def snapshot(self) -> dict:
         with self.lock:
@@ -256,6 +267,9 @@ class IndexDepthManager:
         with contextlib.suppress(Exception):
             ws.close()
 
+    def _market_open(self) -> bool:
+        return _is_market_open(datetime.now(self.state.tz))
+
     def _refresh_contracts(self) -> bool:
         """Re-select contracts from the option chain; return True if the subscription set changed."""
         contracts, expiry, underlying_ltp = _select_contracts(self.option_manager.state)
@@ -286,7 +300,7 @@ class IndexDepthManager:
         self.ws.settimeout(5)
         self.ws.send(self._subscribe_payload())
         self.state.connection_count += 1
-        while not self.stop_event.is_set():
+        while not self.stop_event.is_set() and self._market_open():
             try:
                 raw = self.ws.recv()
             except websocket.WebSocketTimeoutException:
@@ -301,6 +315,9 @@ class IndexDepthManager:
 
     def _quote_loop(self) -> None:
         while not self.stop_event.is_set():
+            if not self._market_open():
+                self.stop_event.wait(MARKET_CLOSED_RECHECK_SECONDS)
+                continue
             try:
                 contracts, expiry, underlying_ltp = _select_contracts(self.option_manager.state)
                 if contracts:
@@ -324,6 +341,11 @@ class IndexDepthManager:
         )
         quote_thread.start()
         while not self.stop_event.is_set():
+            if not self._market_open():
+                self._close_socket()
+                self.state.set_market_closed()
+                self.stop_event.wait(MARKET_CLOSED_RECHECK_SECONDS)
+                continue
             try:
                 changed = self._refresh_contracts()
                 if not self._contracts:

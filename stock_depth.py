@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 import websocket
 
 from index_depth import _parse_depth_message
-from index_options import _is_market_open
+from index_options import MARKET_CLOSED_RECHECK_SECONDS, MARKET_CLOSED_STATUS, _is_market_open
 
 STOCK_DEPTH_EXCHANGE_SEGMENT = "NSE_FNO"
 STOCK_DEPTH_INSTRUMENT = "OPTSTK"
@@ -122,6 +122,13 @@ class StockDepthState:
         with self.lock:
             self.status = "ERROR"
             self.last_error = error
+
+    def set_market_closed(self) -> None:
+        """Pause outside market hours; the last depth stays available."""
+        with self.lock:
+            self.status = MARKET_CLOSED_STATUS
+            self.last_error = ""
+            self.rotation_status = "IDLE"
 
     def snapshot(self) -> dict:
         with self.lock:
@@ -296,7 +303,7 @@ class StockDepthManager:
         self.ws = websocket.create_connection(self._ws_url(), timeout=15, enable_multithread=True)
         self.ws.settimeout(5)
         self.ws.send(self._subscribe_payload())
-        while not self.stop_event.is_set() and time.monotonic() < deadline:
+        while not self.stop_event.is_set() and time.monotonic() < deadline and self._market_open():
             try:
                 raw = self.ws.recv()
             except websocket.WebSocketTimeoutException:
@@ -312,9 +319,12 @@ class StockDepthManager:
         with contextlib.suppress(Exception):
             self.ws.close()
 
+    def _market_open(self) -> bool:
+        return _is_market_open(datetime.now(ZoneInfo(self.settings.timezone)))
+
     def _quote_loop(self) -> None:
         while not self.stop_event.is_set():
-            contracts = list(self._contracts)
+            contracts = list(self._contracts) if self._market_open() else []
             if contracts:
                 try:
                     instruments = [
@@ -341,6 +351,12 @@ class StockDepthManager:
         quote_thread = threading.Thread(target=self._quote_loop, daemon=True, name="psygrid-stock-depth-quotes")
         quote_thread.start()
         while not self.stop_event.is_set():
+            if not self._market_open():
+                for state in self.states.values():
+                    if state.status != "PENDING":
+                        state.set_market_closed()
+                self.stop_event.wait(MARKET_CLOSED_RECHECK_SECONDS)
+                continue
             batches = self._batches()
             if not batches:
                 self.stop_event.wait(5.0)

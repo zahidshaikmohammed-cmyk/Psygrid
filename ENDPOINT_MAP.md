@@ -37,6 +37,8 @@ Base URL (production): `http://140.245.226.102:10000`
 | `/public/{nifty,banknifty,midcpnifty,sensex}-indicators.json` | Technical-indicator suite on the underlying's own 1m candles | 5s | NIFTY/BANKNIFTY/SENSEX: sealed index layer's candles. MIDCPNIFTY: Dhan historical intraday API (new poller, no WS feed exists for this symbol) |
 | `/public/{nifty,banknifty,sensex}-futures.json` | Front-month index-futures quote | 2s quote / 30min contract resolution | Dhan instrument master (contract identity) + Dhan Market Quote API |
 
+Option-chain and depth feeds (index and NIFTY 50 stock) run only during market hours, 09:15–15:30 IST on weekdays. Outside those hours they make no Dhan requests, keep serving their last data with `status: "MARKET_CLOSED"` (HTTP 200), and resume automatically at the open.
+
 **SENSEX trades on BSE, not NSE** — its option-chain underlying identity (`security_id=51`, `IDX_I`) matches the sealed index layer, but its actual option/futures contracts trade on Dhan's `BSE_FNO` segment (vs. `NSE_FNO` for NIFTY/BANKNIFTY). `futures_layer.py`/`derivatives_instruments.py` take an `exchange` parameter for this; MIDCPNIFTY has no futures endpoint (no listed MIDCPNIFTY futures contract exists).
 
 ## NIFTY 50 stock options

@@ -88,7 +88,17 @@ def component_health(
     return result
 
 
-def build_health(components: list[dict], market_status: str) -> dict:
+def build_health(components: list[dict], market_status: str, out_of_session: frozenset[str] = frozenset()) -> dict:
+    """Summarise component freshness.
+
+    Components named in ``out_of_session`` are outside their trading hours:
+    unless still FRESH they are reported as CLOSED and do not count against
+    overall health, so after-hours quiet is not mistaken for a fault.
+    """
+    for component in components:
+        if component["name"] in out_of_session and component["status"] != "FRESH":
+            component["status"] = "CLOSED"
+    closed = sum(1 for c in components if c["status"] == "CLOSED")
     healthy = sum(1 for c in components if c["status"] == "FRESH")
     warning = sum(1 for c in components if c["status"] == "WARNING")
     stale = sum(1 for c in components if c["status"] == "STALE")
@@ -99,6 +109,8 @@ def build_health(components: list[dict], market_status: str) -> dict:
         overall = "DEGRADED"
     elif warning > 0:
         overall = "WARNING"
+    elif closed > 0 and healthy == 0:
+        overall = "MARKET_CLOSED"
     else:
         overall = "HEALTHY"
 
@@ -111,5 +123,6 @@ def build_health(components: list[dict], market_status: str) -> dict:
         "warning_count": warning,
         "stale_count": stale,
         "error_count": error,
+        "closed_count": closed,
         "components": {c["name"]: c for c in components},
     }
