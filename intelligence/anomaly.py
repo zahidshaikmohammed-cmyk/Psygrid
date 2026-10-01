@@ -188,8 +188,8 @@ def score_measure(
 ) -> MeasureResult:
     feature, baseline_field, transform = MEASURES[name]
     raw = features.values[feature].astype(float)
-    with np.errstate(invalid="ignore"):
-        value = transform(raw)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        value = transform(raw)  # a zero range scores as -inf, which is never finite and so never classified
     n = len(raw)
     median, scale, sample = np.full(n, np.nan), np.full(n, np.nan), np.zeros(n, dtype=int)
     kind = np.full(n, NO_BASELINE, dtype=object)

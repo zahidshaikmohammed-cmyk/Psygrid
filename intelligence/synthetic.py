@@ -9,6 +9,7 @@ Anomalies can be injected at chosen minutes to give detectors known answers.
 
 from __future__ import annotations
 
+import json
 import zlib
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
@@ -128,6 +129,10 @@ class SyntheticMarket:
                        for m in range(SESSION_MINUTES)],
             }  # fmt: skip
         archive.write_indices(indices)
+        manifest_path = archive.day_dir(session_date) / "manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest["synthetic_market"] = True  # read back by the intelligence layer and stamped on every event
+        manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True))
         return data
 
     def write_days(self, root: Path, dates: list[str]) -> None:
