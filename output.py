@@ -83,6 +83,13 @@ def _clean_candle(candle: dict) -> dict:
     }
 
 
+# Contract helpers imported by the standalone per-index modules (nifty.py,
+# banknifty.py, ...). They alias the canonical equity helpers above.
+LIVE_TIMEFRAMES = ("1m", "5m", "15m", "1h")
+_completed_rows = _dedupe_candles
+_normalize_ohlcv = _clean_candle
+
+
 def _stock_payload(state, security_id: str, meta: dict) -> dict:
     with state.lock:
         candles = [dict(c) for c in state.live_candles.get(security_id, [])]
