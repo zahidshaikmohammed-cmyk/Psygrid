@@ -30,7 +30,17 @@ STOCK_DEPTH_CONTRACTS_PER_SYMBOL = STOCK_DEPTH_STRIKES_PER_SYMBOL * 2
 STOCK_DEPTH_SYMBOLS_PER_BATCH = STOCK_DEPTH_MAX_INSTRUMENTS // STOCK_DEPTH_CONTRACTS_PER_SYMBOL
 STOCK_DEPTH_BATCH_SECONDS = 30.0
 STOCK_DEPTH_RECONNECT_SECONDS = 3.0
-STOCK_DEPTH_QUOTE_REFRESH_SECONDS = 1.0
+# Deliberately much slower than the existing per-underlying depth managers'
+# 1s quote refresh: this quote overlay (LTP/volume/OI) shares the same
+# process-wide, rate-limited Dhan REST queue as everything else - options
+# rotation, index/equity bootstrap calls, and the 4 existing 1s depth
+# quote loops. Adding a 5th continuous 1s consumer on top of those choked
+# the stock-options rotation down to a fraction of its intended speed in
+# production. The 20-level depth itself is unaffected - it comes from the
+# WebSocket push below, not this REST poll - so this only trades quote
+# overlay freshness (still refreshed several times within each 30s batch
+# window) for headroom on the shared queue.
+STOCK_DEPTH_QUOTE_REFRESH_SECONDS = 5.0
 STOCK_DEPTH_MARKET_OPEN = datetime_time(9, 15)
 STOCK_DEPTH_MARKET_CLOSE = datetime_time(15, 30)
 
