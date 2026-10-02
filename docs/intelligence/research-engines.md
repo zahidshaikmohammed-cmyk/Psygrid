@@ -56,7 +56,11 @@ on those sessions only, then evaluated every 5 minutes:
 - **Economics**: top-minus-bottom quintile in bps, net of a Roll-spread cost estimate.
 - **Placebos**: the time-shuffled signal, the reversed-time session, and the sign flip.
 - **Multiple testing**: Benjamini–Hochberg at q = 0.05 over every signal × horizon × subset.
-- **Verdict**: `SUPPORTED` only if a hypothesis survives FDR, has positive IC, keeps the same sign in both halves, and both placebos are insignificant. Otherwise `UNPROVEN`.
+- **Verdict** (pre-registered; every verdict carries its reason):
+  - `SUPPORTED` only if a hypothesis survives FDR, has positive IC, keeps the same sign in both halves, and both placebos are insignificant;
+  - `REJECTED` if it is significant in the wrong direction, or significant with an equally significant placebo (the effect is not about timing);
+  - `UNPROVEN` otherwise.
+- **Also reported**: a 95% interval for the mean IC, the IC information ratio, top-decile turnover, the median and volatility of the top-minus-bottom spread, and the share of days with a positive net return.
 
 Stale stocks (no bar in the latest minute) are excluded. Mid-price
 comparisons need the Full-packet archive, which starts with the first
@@ -75,11 +79,27 @@ Over the trailing 30 minutes:
 - move concentration: the share of the turnover-weighted move from the top 10 contributors. **NSE index weights are not available, so traded value is the weight.** This is a proxy and is labelled so;
 - change score: the larger |change| in correlation or dimension against the previous window, as a percentile of the same changes in earlier sessions.
 
-Each value is placed as a percentile among earlier qualified sessions at the
-same time of day (±30 minutes). Profiles are cached in
-`<store>/market_state/`. Regime labels follow from the percentiles:
-`COUPLED_STRESS`, `COUPLED`, `DISPERSED`, `QUIET`, `TYPICAL`, with the prefix
-`SHIFTING_` when the change score is ≥ 0.95. They describe co-movement only.
+Two more measures:
+- market volatility: the standard deviation of the market factor's 1m returns in the window, in bps;
+- sector synchronisation: the mean within-sector correlation minus the all-pairs mean correlation.
+
+Each value is placed as a percentile among earlier qualified sessions at the same time of day (±30
+minutes). Profiles are cached in `<store>/market_state/`.
+
+**State** (`state`) follows a rule fixed before looking at any results:
+
+| State | Percentile rule |
+| --- | --- |
+| `STRESSED` | mean correlation ≥ 0.8, and dispersion or market volatility ≥ 0.8: moving together, and far |
+| `DISLOCATED` | dispersion ≥ 0.9 with mean correlation ≤ 0.5: moving far, but apart |
+| `TRANSITION` | change score ≥ 0.9: the correlation structure is changing fast |
+| `NORMAL` | otherwise; `UNCALIBRATED` without history |
+
+`persistence` is the share of earlier 15-minute steps in the same state that were still in it 15 minutes
+later. The finer descriptive `regime` labels (`COUPLED_STRESS`, `COUPLED`, `DISPERSED`, `QUIET`, `TYPICAL`,
+prefixed `SHIFTING_`) remain. Whether the state adds predictive value is tested:
+- in the evaluation harness, by splitting by regime;
+- in 945, by splitting by market state and through v2's market-context features.
 
 ## Microstructure
 

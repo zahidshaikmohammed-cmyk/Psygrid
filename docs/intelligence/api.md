@@ -53,6 +53,10 @@ are `null`.
 | `GET /v2/stocks/{key}` | One stock, everything at `as_of`: features and anomalies, expected-response state (expected vs actual move, gap, gap in σ, market/sector/statistical contributions, pending response, delay profile), Full-packet microstructure with cadence support flags, NIFTY derivatives expectation, market-state summary, relationships, today's events, data quality, freshness. The response section reads `WARMING` while the model builds. See [research-engines.md](research-engines.md) | — |
 | `GET /v2/stocks` | Stocks ranked by a response measure (largest \|value\| first; stale stocks excluded) | `by` = `response_gap_sigma` (default), `pending_response_sigma`, `response_gap`, `pending_response`; `sector`; `limit` ≤ 1000 (50) |
 | `GET /v2/market/state` | Market state (correlation structure, effective dimension, dispersion, breadth, change score, percentiles, regime) and the derivatives expectation for NIFTY, BANKNIFTY and MIDCPNIFTY | — |
+| `GET /v2/945` | The latest live 945 decision and its outcome. `404` before the first decision | — |
+| `GET /v2/945/decisions` | Stored decisions, newest first, with the 15-minute outcome | `namespace` = `live` (default) or `replay-<version>`; `limit` ≤ 500 (30) |
+| `GET /v2/945/decisions/{date}` | One decision (immutable) and its outcome | `namespace` |
+| `GET /v2/945/report` | Out-of-sample performance of a namespace's decisions per horizon, with intervals and the verdict | `namespace` |
 | `WS /v2/stream` | Live event stream (below) | see below |
 
 Every event returned carries `seq`, its position in the store, usable as a

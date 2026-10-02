@@ -14,6 +14,7 @@ capped process and only reads what PSYGRID already produces.
 | [event-schema.md](event-schema.md) | Event schema `event/1`, catalogue, rules, storage |
 | [api.md](api.md) | `/v2` routes, authentication, rate limits, errors, the WebSocket stream |
 | [research-engines.md](research-engines.md) | Expected response, market state, microstructure, derivatives expectation, the evaluation harness, the minute stream, data preservation |
+| [945.md](945.md) | The 09:45 one-stock selector: information set, models, probability, immutability, reconstruction |
 | [completion-matrix.md](completion-matrix.md) | Every component and its proof level (implemented, tested, real-data validated, production verified) |
 | [replay.md](replay.md) | Replay, the no-look-ahead guarantees, the CLI |
 | [history-bootstrap.md](history-bootstrap.md) | Filling the archive with genuine Dhan history: sizing, cost, resumability, integrity checks |
