@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -317,13 +318,18 @@ def start_microstructure_recorder(live_state, instruments):
     """The Full-packet research recorder, unless PSYGRID_MICROSTRUCTURE=0."""
     if os.getenv("PSYGRID_MICROSTRUCTURE", "1").strip() == "0":
         return None
-    from microstructure import MicrostructureRecorder, state_bars_for_minute
+    from microstructure import MicrostructureRecorder, index_bars_for_minute, state_bars_for_minute
 
     symbols = {str(item.security_id): item.symbol for item in instruments}
     raw = {s.strip().upper() for s in os.getenv("PSYGRID_RAW_DEPTH_SYMBOLS", "").split(",") if s.strip()}
 
     def bars_for_minute(minute: int) -> list[tuple]:
-        return state_bars_for_minute(live_state, symbols, minute)
+        rows = state_bars_for_minute(live_state, symbols, minute)
+        indices = index_manager  # started after the recorder; read at each flush
+        if indices is not None:
+            with contextlib.suppress(Exception):  # index bars are an extra; equity bars still go out
+                rows += index_bars_for_minute(indices.states, minute)
+        return rows
 
     recorder = MicrostructureRecorder(archive_dir_from_environment(), symbols, settings.timezone,
                                       bars_for_minute=bars_for_minute, raw_symbols=raw)  # fmt: skip

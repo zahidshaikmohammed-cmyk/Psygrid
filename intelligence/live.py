@@ -37,6 +37,7 @@ from intelligence.events import ARCHIVE_REPLAY, LIVE_SNAPSHOT
 from intelligence.frame import as_of_time, frame_at
 from intelligence.settings import Settings
 from intelligence.similarity import _states_dir, load_states
+from intelligence.stream import stream_day, stream_path
 
 log = logging.getLogger("psygrid.intelligence.live")
 
@@ -45,9 +46,11 @@ OPTION_KEYS = ("nifty", "banknifty", "midcpnifty")
 SPOT_FALLBACK_KEYS = ("nifty", "banknifty")
 SESSION_OPEN, SESSION_CLOSE, LAST_AS_OF = "09:15", "15:30", "15:15"
 BACKUP_AFTER = "15:45"
+MODEL_WARM_BEFORE = "09:00"
 TICK_OFFSET_SECONDS = 5
 STALE_AFTER_SECONDS = 600  # in session, no new step for this long means the archive stopped moving
 WARM_PER_TICK = 3
+STREAM_POLL_SECONDS = 2.0
 
 
 def http_get_json(url: str, timeout: float = 5.0) -> dict:
@@ -85,8 +88,13 @@ class LiveRunner:
         self.clock = clock or (lambda: datetime.now(IST))
         self._lock = threading.Lock()
         self._snapshot: Snapshot | None = None
+        self.day = None
         self.snapshot_version = 0
-        self._seen: tuple[str, float] | None = None
+        self._seen: tuple[str, float, float] | None = None
+        self._days_seen: list[str] | None = None
+        self._qualified: set[str] = set()
+        self._last_housekeeping: int | None = None
+        self._model_warmed: str | None = None
         self._last_as_of: int | None = None
         self._session: str | None = None
         self._last_derivatives_minute: int | None = None
@@ -143,10 +151,13 @@ class LiveRunner:
             self.follow_archive(now)
         except Exception as exc:
             self._error("engine", exc)
-        try:
-            self.housekeeping(now)
-        except Exception as exc:
-            self._error("housekeeping", exc)
+        minute = int(_minute_floor(now).timestamp())
+        if minute != self._last_housekeeping:  # once a minute, however often the loop polls
+            self._last_housekeeping = minute
+            try:
+                self.housekeeping(now)
+            except Exception as exc:
+                self._error("housekeeping", exc)
         self.status["state"] = self._state(now)
 
     def record_derivatives(self, now: datetime) -> bool:
@@ -175,6 +186,7 @@ class LiveRunner:
             spot[key] = payload.get("underlying_ltp")
             open_market = open_market or payload.get("market_status") not in (None, "MARKET_CLOSED")
         if not open_market:
+            self._last_derivatives_minute = minute  # checked again next minute, not at every poll
             return False  # a holiday or a paused feed: nothing current to record
         for key in SPOT_FALLBACK_KEYS:
             if spot.get(key) is None:
@@ -191,20 +203,38 @@ class LiveRunner:
         return True
 
     def follow_archive(self, now: datetime) -> int:
-        """Step the engine through every new minute the archive now covers. Returns steps taken."""
+        """Step the engine through every new minute the archive and the stream now cover. Returns steps taken."""
+        root = Path(self.settings.archive_dir)
         today = now.strftime("%Y-%m-%d")
+        days = available_days(root)
+        if days != self._days_seen:  # the qualified-session scan reads every manifest; only redo it on change
+            self._days_seen, self._qualified = days, set(session_days(root))
         # Today counts while it is still filling; an earlier day only if it held a real session.
-        qualified = set(session_days(self.settings.archive_dir))
-        days = [d for d in available_days(self.settings.archive_dir) if d == today or (d < today and d in qualified)]
+        days = [d for d in days if d == today or (d < today and d in self._qualified)]
+        streaming = self.settings.use_stream and stream_path(root, today).exists()
+        if streaming and today not in days:
+            days.append(today)
         if not days:
             return 0
         session = days[-1]
-        path = Path(self.settings.archive_dir) / session / EQUITY_FILE
-        mtime = path.stat().st_mtime
-        if self._seen == (session, mtime):
+        path = root / session / EQUITY_FILE
+        archive_mtime = path.stat().st_mtime if path.exists() else 0.0
+        live_stream = streaming and session == today
+        stream_mtime = stream_path(root, today).stat().st_mtime if live_stream else 0.0
+        if self._seen == (session, archive_mtime, stream_mtime):
             return 0
-        day = load_day(self.settings.archive_dir, session)
-        written = datetime.fromtimestamp(mtime, IST)
+        covered = archive_mtime  # an archive written at T holds every bar that closed before T
+        if live_stream:
+            day, last_minute, _ = stream_day(root, session)
+            if day is None:
+                return 0
+            if last_minute is not None:  # a stream block for minute m is written after the bar closed
+                covered = max(covered, last_minute + 60)
+                self.status["stream_minute"] = datetime.fromtimestamp(last_minute, IST).strftime("%H:%M")
+        else:
+            day = load_day(root, session)
+        self.day = day  # the bars behind the latest snapshot, for the research views
+        written = datetime.fromtimestamp(covered, IST)
         limit = min(as_of_time(session, LAST_AS_OF), _minute_floor(written), _minute_floor(now))
         if session != self._session:
             self._session, self._last_as_of = session, None
@@ -230,8 +260,10 @@ class LiveRunner:
             self._publish(snapshot)
             self.status["steps"] += steps
             self.status["last_step_at"] = now.strftime("%Y-%m-%d %H:%M:%S IST")
+        if snapshot is not None and live_stream:
+            self.status["last_step_latency_s"] = round(self.clock().timestamp() - (self._last_as_of or 0), 2)
         if not self._stop.is_set():
-            self._seen = (session, mtime)
+            self._seen = (session, archive_mtime, stream_mtime)
         return steps
 
     def housekeeping(self, now: datetime) -> None:
@@ -242,6 +274,28 @@ class LiveRunner:
             self.status["last_backup"] = str(self.backup(today))
             self._backed_up = today
         self.warm_similarity(today)
+        if now >= as_of_time(today, BACKUP_AFTER) or now < as_of_time(today, MODEL_WARM_BEFORE):
+            self.warm_response_model(now)
+
+    def warm_response_model(self, now: datetime) -> bool:
+        """Build the next session's response model outside market hours, so the session only loads it."""
+        from intelligence.response import model_for
+
+        target = now.date() + timedelta(days=1 if now >= as_of_time(now.strftime("%Y-%m-%d"), BACKUP_AFTER) else 0)
+        while target.weekday() >= 5:
+            target += timedelta(days=1)
+        label = target.strftime("%Y-%m-%d")
+        if self._model_warmed == label:
+            return False
+        self._model_warmed = label  # once per target, success or not (a failure is reported, not retried each minute)
+        started = time.monotonic()
+        model = model_for(self.settings.archive_dir, label, cache_root=self.settings.store_dir)
+        self.status["response_model"] = {
+            "session": label,
+            "ready": model is not None,
+            "seconds": round(time.monotonic() - started, 1),
+        }
+        return model is not None
 
     def backup(self, label: str) -> Path:
         folder = self.settings.store_dir / "backups"
@@ -310,4 +364,7 @@ class LiveRunner:
             now = self.clock()
             next_tick = _minute_floor(now) + timedelta(minutes=1, seconds=TICK_OFFSET_SECONDS)
             log.debug("tick took %.2fs", time.monotonic() - started)
-            self._stop.wait(max(1.0, (next_tick - now).total_seconds()))
+            wait = max(1.0, (next_tick - now).total_seconds())
+            if self.settings.use_stream and _in_session(now):
+                wait = min(wait, STREAM_POLL_SECONDS)  # a stat() per poll; a step only when a minute arrives
+            self._stop.wait(wait)

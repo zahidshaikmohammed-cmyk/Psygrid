@@ -44,6 +44,7 @@ class Settings:
     record_derivatives: bool
     similarity_lookback: int
     backup_keep: int
+    use_stream: bool = True  # follow PSYGRID's per-minute stream (seconds) as well as its archive (minutes)
 
     @property
     def events_db(self) -> Path:
@@ -70,4 +71,5 @@ class Settings:
             record_derivatives=_bool("PSYGRID_INTELLIGENCE_RECORD_DERIVATIVES", True),
             similarity_lookback=_int("PSYGRID_INTELLIGENCE_SIMILARITY_SESSIONS", 60, 5, 1_000),
             backup_keep=_int("PSYGRID_INTELLIGENCE_BACKUP_KEEP", 14, 1, 365),
+            use_stream=_bool("PSYGRID_INTELLIGENCE_STREAM", True),
         )

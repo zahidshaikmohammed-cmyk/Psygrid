@@ -9,15 +9,18 @@ name: Intelligence history (VM operations)
 #   verify    integrity check of every archived day
 #   validate  replay determinism and no-look-ahead on the latest day, and /v2/health
 #   probe     four single Dhan requests (status codes only): which endpoints the account can reach
+#   evaluate  walk-forward out-of-sample evaluation of the response signals on the real archive (capped unit,
+#             refused during market hours); the report is kept in the intelligence store
+#   research  the research engines (response, market state, derivatives) on the latest archived day
 on:
   workflow_dispatch:
     inputs:
       action:
-        description: inspect, plan, run, status, verify or validate
+        description: inspect, plan, run, status, verify, validate, probe, evaluate or research
         required: true
         default: inspect
         type: choice
-        options: [inspect, plan, run, status, verify, validate, probe]
+        options: [inspect, plan, run, status, verify, validate, probe, evaluate, research]
       sessions:
         description: completed sessions to hold (20 = the Intelligence baseline window)
         required: true
@@ -50,7 +53,7 @@ jobs:
           GENERATE: ${{ inputs.generate_token }}
         run: |
           set -euo pipefail
-          case "$ACTION" in inspect|plan|run|status|verify|validate|probe) ;; *) echo "bad action"; exit 2;; esac
+          case "$ACTION" in inspect|plan|run|status|verify|validate|probe|evaluate|research) ;; *) echo "bad action"; exit 2;; esac
           [[ "$SESSIONS" =~ ^[0-9]{1,4}$ ]] || { echo "bad sessions"; exit 2; }
           [[ "$RATE" =~ ^[0-9](\.[0-9]+)?$ ]] || { echo "bad rate"; exit 2; }
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
@@ -109,6 +112,24 @@ jobs:
             validate)
               echo "== /v2/health"; health
               $CLI validate-replay
+              ;;
+            evaluate|research)
+              now=$(TZ=Asia/Kolkata date +%u%H%M)
+              if (( ${now:0:1} <= 5 && 10#${now:1} >= 845 && 10#${now:1} <= 1545 )); then
+                echo "refused: research jobs do not run during market hours (live feed first)"; exit 3
+              fi
+              STORE=$(sudo cat /proc/$(systemctl show -p MainPID --value psygrid-intelligence)/environ 2>/dev/null | tr '\0' '\n' | sed -n 's/^PSYGRID_INTELLIGENCE_DIR=//p' | head -1)
+              STORE=${STORE:-/home/ubuntu/psygrid-intelligence}
+              echo "== sessions: $($CLI days | wc -l) archived"
+              if [[ "$ACTION" == evaluate ]]; then
+                JOB="evaluate --store-dir $STORE --out $STORE/evaluation/latest.json"
+              else
+                JOB="research --store-dir $STORE --at 11:00"
+              fi
+              sudo systemd-run --unit psygrid-research --uid ubuntu --gid ubuntu --wait --pipe --quiet \
+                --working-directory /home/ubuntu/Psygrid -p Nice=15 -p CPUQuota=100% -p MemoryMax=1500M \
+                -p IOSchedulingClass=idle -p RuntimeMaxSec=4800 $CLI $JOB 2>&1 | tail -c 60000
+              curl -fsS http://127.0.0.1:10000/health; echo
               ;;
             run)
               $CLI bootstrap-history plan --sessions "$SESSIONS" --rate "$RATE"

@@ -29,6 +29,7 @@ from intelligence.events import CATEGORIES, ENGINE_VERSION, EVENT_TYPES, SCHEMA_
 from intelligence.features import CATALOGUE, FEATURE_VERSION, MARKET_FEATURES
 from intelligence.keys import KeyStore, RateLimiter
 from intelligence.live import LiveRunner
+from intelligence.research import RANKABLE, ResearchViews
 from intelligence.settings import Settings
 from intelligence.similarity import instrument_matches, market_matches
 
@@ -99,6 +100,7 @@ def create_app(settings: Settings, runner: LiveRunner | None = None, start_live:
         redoc_url=None,
     )
     app.state.runner = runner
+    research = app.state.research = ResearchViews(settings, runner)
 
     @app.middleware("http")
     async def access_and_headers(request: Request, call_next):
@@ -333,6 +335,27 @@ def create_app(settings: Settings, runner: LiveRunner | None = None, start_live:
         if result.get("status") == "UNKNOWN_INSTRUMENT":
             raise HTTPException(404, f"{key} is not in the universe")
         return result
+
+    # --- research views: expected response, microstructure, market state, derivatives -------------
+
+    @v2.get("/market/state")
+    def market_state():
+        return research.market(current())
+
+    @v2.get("/stocks")
+    def stocks(
+        by: Annotated[str, Query(pattern="^(" + "|".join(RANKABLE) + ")$")] = "response_gap_sigma",
+        sector: Annotated[str | None, Query(pattern=KEY_RE)] = None,
+        limit: Annotated[int, Query(ge=1, le=1000)] = 50,
+    ):
+        return research.ranked(current(), by, limit, sector)
+
+    @v2.get("/stocks/{key}")
+    def stock(key: Annotated[str, Path(pattern=KEY_RE)]):
+        view = research.stock(current(), key, store)
+        if view is None:
+            raise HTTPException(404, f"{key} is not in the universe")
+        return view
 
     app.include_router(v2)
 
