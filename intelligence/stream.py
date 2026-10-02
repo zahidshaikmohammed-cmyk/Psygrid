@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from daily_archive import EQUITY_FILE, EQUITY_REFERENCE_FILE, INDEX_FILE, MANIFEST_FILE
-from intelligence.archive import ArchiveDay, _read_reference, _read_rows, _to_bars, parse_timestamp
+from intelligence.archive import ArchiveDay, _read_reference, _read_rows, _to_bars, is_historical, parse_timestamp
 
 STREAM_DIR = ".live"
 BARS_STREAM = "bars_1m.csv"
@@ -113,7 +113,7 @@ def stream_day(archive_root: Path, session_date: str) -> tuple[ArchiveDay | None
         manifest = {}
     day = ArchiveDay(
         session_date=session_date,
-        equity=_to_bars(equity, "symbol", "symbol"),
+        equity=_to_bars(equity, "symbol", "symbol", drop_filler=is_historical(manifest)),
         indices=_to_bars(indices, "index", "symbol") if indices else None,
         reference=_read_reference(folder / EQUITY_REFERENCE_FILE),
         manifest={**manifest, "stream_minutes": len(read.minutes)},

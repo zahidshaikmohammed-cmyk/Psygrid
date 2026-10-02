@@ -129,6 +129,7 @@ jobs:
                 audit) JOB="-m intelligence --archive-dir $ARCHIVE audit --out $STORE/audit/latest.json" ;;
                 replay945) JOB="945.py --archive-dir $ARCHIVE --store-dir $STORE replay --out $STORE/945/replay-report.json" ;;
               esac
+              sudo systemctl stop psygrid-research 2>/dev/null || true  # a cancelled run can leave its unit behind
               sudo systemctl reset-failed psygrid-research 2>/dev/null || true
               sudo systemd-run --unit psygrid-research --uid ubuntu --gid ubuntu --wait --pipe --quiet \
                 --working-directory /home/ubuntu/Psygrid -p Nice=15 -p CPUQuota=100% -p MemoryMax=1500M \

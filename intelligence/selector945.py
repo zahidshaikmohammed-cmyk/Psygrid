@@ -50,7 +50,7 @@ from intelligence.archive import IST
 from intelligence.frame import as_of_time
 from intelligence.matrix import COLUMNS, MATRIX_VERSION, StateMatrix, average_ranks
 
-SELECTOR_VERSION = "1.0.0"
+SELECTOR_VERSION = "1.1.0"
 DECISION_TIME = "09:45"
 HORIZONS = (5, 15, 30)
 PRIMARY_HORIZON = 15

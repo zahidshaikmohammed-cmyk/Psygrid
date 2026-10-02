@@ -39,7 +39,7 @@ from intelligence.archive import load_day, session_days
 from intelligence.frame import as_of_time
 from intelligence.response import session_returns
 
-MARKET_STATE_VERSION = "2"
+MARKET_STATE_VERSION = "3"
 WINDOW = 30
 MIN_COVERAGE = 0.8
 MIN_STOCKS = 20

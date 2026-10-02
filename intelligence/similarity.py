@@ -39,7 +39,7 @@ from intelligence.frame import MarketFrame, as_of_time, frame_at
 from intelligence.history import store_dir
 from intelligence.universe import BROAD_INDEX, MARKET_INDEX
 
-STATE_VERSION = 1
+STATE_VERSION = 2
 WINDOW_MINUTES = 30
 INSTRUMENT_STEP = 5  # instrument states are kept every 5 minutes to bound storage
 DEFAULT_K = 10
