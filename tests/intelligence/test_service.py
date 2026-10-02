@@ -351,3 +351,122 @@ def test_settings_from_environment(monkeypatch, tmp_path):
     s = Settings.from_environment()
     assert s.port == 18101 and s.rate_per_minute == 1 and not s.require_keys and s.host == "127.0.0.1"
     assert s.events_db == tmp_path / "events.db"
+
+
+def test_live_follows_the_minute_stream_and_matches_replay(settings, tmp_path):
+    """Minutes the archive does not have yet come from PSYGRID's per-minute stream, with identical results."""
+    import csv
+    import gzip
+
+    from daily_archive import INDEX_FILE
+    from intelligence.archive import parse_timestamp
+    from intelligence.stream import stream_day, stream_path
+    from microstructure import BAR_COLUMNS, MicrostructureRecorder
+
+    full = load_day(settings.archive_dir, TODAY)
+    cut, last = as_of_time(TODAY, "10:30").timestamp(), as_of_time(TODAY, "10:41").timestamp()
+    stream_rows: dict[int, list[tuple]] = {}
+    for name, key_col in ((EQUITY_FILE, "symbol"), (INDEX_FILE, "index")):
+        path = settings.archive_dir / TODAY / name
+        with gzip.open(path, "rt", newline="") as handle:
+            reader = csv.DictReader(handle)
+            columns, rows = reader.fieldnames, list(reader)
+        keep = [r for r in rows if parse_timestamp(r["timestamp"]) < cut]
+        for r in rows:
+            minute = parse_timestamp(r["timestamp"])
+            if cut <= minute <= last:
+                sid = r.get("security_id", "") if key_col == "symbol" else f"IDX:{r['index']}"
+                stream_rows.setdefault(minute, []).append(
+                    (r["symbol"], sid, r["timestamp"], r["open"], r["high"], r["low"], r["close"], r["volume"])
+                )
+        with gzip.open(path, "wt", newline="") as handle:
+            writer = csv.DictWriter(handle, columns)
+            writer.writeheader()
+            writer.writerows(keep)
+    set_written(settings, "10:30:20")
+    target = stream_path(settings.archive_dir, TODAY)
+    for minute in sorted(stream_rows):
+        MicrostructureRecorder._append_block(None, target, BAR_COLUMNS, stream_rows[minute], minute)
+    with open(target, "a") as handle:  # a torn block (no end marker yet) is never read
+        handle.write("XYZ,1,2026-01-01 10:42:00 IST,1,1,1,1,1\n")
+    merged, last_minute, _ = stream_day(settings.archive_dir, TODAY)
+    assert last_minute == int(last) and merged.equity.close.shape[0] == full.equity.close.shape[0]
+    assert "XYZ" not in merged.equity.keys
+
+    clock = Clock(as_of_time(TODAY, "10:42") + timedelta(seconds=5))
+    runner = LiveRunner(settings, fetch=payloads(), clock=clock)
+    assert runner.follow_archive(clock()) == 88  # 09:15 .. 10:42
+    assert runner.snapshot.as_of.endswith("10:42:00 IST") and runner.status["stream_minute"] == "10:41"
+    assert runner.follow_archive(clock()) == 0  # nothing new in either source
+    replayed = EventStore(tmp_path / "replay.db")
+    engine = IntelligenceEngine(settings.archive_dir, settings.store_dir, event_store=replayed)
+    replay_session(engine, full, end="10:42")
+    assert [e["event_id"] for e in runner.store.search(after_seq=0, limit=1000)] == [
+        e["event_id"] for e in replayed.search(after_seq=0, limit=1000)
+    ]
+
+
+def test_stream_can_be_switched_off(settings):
+    from intelligence.stream import stream_path
+    from microstructure import BAR_COLUMNS, MicrostructureRecorder
+
+    off = dataclasses.replace(settings, use_stream=False)
+    set_written(off, "10:00:20")
+    minute = int(as_of_time(TODAY, "10:00").timestamp())
+    MicrostructureRecorder._append_block(None, stream_path(off.archive_dir, TODAY), BAR_COLUMNS, [], minute)
+    clock = Clock(as_of_time(TODAY, "10:30"))
+    runner = LiveRunner(off, fetch=payloads(), clock=clock)
+    assert runner.follow_archive(clock()) == 46 and "stream_minute" not in runner.status
+
+
+def test_research_routes(api):
+    client, _, _ = api
+    anonymous = TestClient(client.app)
+    assert anonymous.get("/v2/stocks/TCS").status_code == 401
+    research = client.app.state.research
+    first = client.get("/v2/stocks/TCS").json()  # the response model builds in the background
+    assert first["expected_response"]["status"] in ("WARMING", "READY")
+    assert research.wait_for_model(TODAY, timeout=300)
+    research._cache.clear()
+    tcs = client.get("/v2/stocks/TCS").json()
+    resp = tcs["expected_response"]
+    assert resp["status"] == "READY" and resp["window_minutes"] == 15
+    assert set(resp["contributions"]) == {"market", "sector", "statistical", "residual"}
+    assert resp["expected_response"] == pytest.approx(sum(resp["contributions"][k] for k in ("market", "sector", "statistical")), abs=1e-6)  # fmt: skip
+    assert tcs["liquidity_microstructure"]["classification"] == "UNSUPPORTED"  # no Full packets in this archive
+    assert tcs["market_state"]["regime"] and tcs["freshness"]["as_of"] == tcs["as_of"]
+    assert tcs["data_quality"]["status"] and isinstance(tcs["events"], list)
+    assert "not forecasts" in tcs["disclaimer"]
+    assert client.get("/v2/stocks/NOPE").status_code == 404
+    ranked = client.get("/v2/stocks", params={"by": "response_gap_sigma", "limit": 5}).json()
+    assert ranked["status"] == "READY" and len(ranked["stocks"]) == 5
+    values = [abs(s["response_gap_sigma"]) for s in ranked["stocks"]]
+    assert values == sorted(values, reverse=True)
+    assert client.get("/v2/stocks", params={"by": "price"}).status_code == 422
+    state = client.get("/v2/market/state").json()
+    assert state["market_state"]["percentiles"]["history_sessions"] >= 5
+    assert set(state["derivatives_expectation"]) == {"nifty", "banknifty", "midcpnifty"}
+
+
+def test_945_routes(api):
+    from intelligence.pipeline945 import decide_day, finish_day
+    from intelligence.selector945 import DecisionStore
+
+    client, _, runner = api
+    assert client.get("/v2/945").status_code == 404
+    assert TestClient(client.app).get("/v2/945").status_code == 401
+    settings = runner.settings
+    day = load_day(settings.archive_dir, TODAY)
+    store = DecisionStore(settings.store_dir, "live")
+    decision, matrix = decide_day(settings.archive_dir, settings.store_dir, day, store, computed_at="test")
+    finish_day(store, decision, matrix, day)
+    latest = client.get("/v2/945").json()
+    assert latest["decision"]["selected"]["symbol"] == decision.key and latest["outcome"]["horizons"]["15m"]
+    one = client.get(f"/v2/945/decisions/{TODAY}").json()
+    assert one["decision"]["hashes"]["decision"] == decision.payload["hashes"]["decision"]
+    listed = client.get("/v2/945/decisions").json()
+    assert listed["count"] == 1 and listed["decisions"][0]["symbol"] == decision.key
+    assert client.get("/v2/945/report").json()["decisions"] == 1
+    assert client.get("/v2/945/decisions", params={"namespace": "../../etc"}).status_code == 422
+    assert client.get("/v2/945/decisions/2026-01-01").status_code == 404
+    assert client.get("/v2/945/decisions/not-a-date").status_code == 422

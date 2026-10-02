@@ -222,6 +222,84 @@ def _validate_replay(args) -> int:
     return 0 if report["ok"] else 1
 
 
+def _evaluate(args) -> int:
+    from intelligence.evaluation import evaluate
+    from intelligence.history import store_dir
+
+    report = evaluate(args.archive_dir, args.store_dir or store_dir(), train_sessions=args.train_sessions,
+                      test_days=args.test_days, every=args.every, fdr_q=args.fdr,
+                      log=lambda m: print(m, file=sys.stderr, flush=True))  # fmt: skip
+    text = json.dumps(report, indent=2)
+    if args.out:
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(text)
+    print(text)
+    return 0 if report.get("status") == "OK" else 2
+
+
+def _research(args) -> int:
+    """Run the research engines on one archived minute and print what they measure (real-data check)."""
+    import numpy as np
+
+    from intelligence.archive import session_days
+    from intelligence.expectation import expectation
+    from intelligence.history import store_dir
+    from intelligence.market_state import measure, with_history
+    from intelligence.response import align, evaluate_state, model_for, session_returns
+
+    store = args.store_dir or store_dir()
+    date = args.date or (session_days(args.archive_dir) or [None])[-1]  # the latest real session
+    if date is None:
+        print(f"no archived days under {args.archive_dir}", file=sys.stderr)
+        return 2
+    at = as_of_time(date, args.at)
+    timings, out = {}, {"date": date, "as_of": args.at}
+    started = time.perf_counter()
+    day = load_day(args.archive_dir, date)
+    sr = session_returns(day, at)
+    timings["load_s"] = round(time.perf_counter() - started, 2)
+    started = time.perf_counter()
+    model = model_for(args.archive_dir, date, cache_root=store)
+    timings["model_s"] = round(time.perf_counter() - started, 2)
+    if model is None:
+        out["response"] = "fewer than 5 earlier qualified sessions"
+    else:
+        started = time.perf_counter()
+        sr = align(sr, model.keys)
+        state = evaluate_state(model, sr)
+        timings["response_state_s"] = round(time.perf_counter() - started, 3)
+        delay = model.delay_profile()
+        order = np.argsort(-np.nan_to_num(np.abs(state.gap_sigma), nan=-1))[: args.top]
+        out["response"] = {
+            "trained_on": [model.trained_on[0], model.trained_on[-1], len(model.trained_on)],
+            "market_factor": sr.market_source,
+            "stocks": len(sr.keys),
+            "median_delay_index": float(np.nanmedian(delay["delay_index"])),
+            "median_total_market_beta": float(np.nanmedian(model.total_market_beta)),
+            "largest_gaps": [state.of(sr.keys[i], model) | {"key": sr.keys[i]} for i in order],
+        }
+    started = time.perf_counter()
+    out["market_state"] = with_history(measure(day, at), args.archive_dir, store).view()
+    timings["market_state_s"] = round(time.perf_counter() - started, 2)
+    out["expectation"] = expectation(args.archive_dir, store, date, "nifty", at).view()
+    out["timings"] = timings
+    print(json.dumps(out, indent=2, default=float))
+    return 0
+
+
+def _audit(args) -> int:
+    from intelligence.audit import audit
+
+    report = audit(args.archive_dir, log=lambda m: print(m, file=sys.stderr, flush=True))
+    if args.out:
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(json.dumps(report, indent=2))
+    if not args.days:
+        report = {k: v for k, v in report.items() if k != "days"}
+    print(json.dumps(report, indent=2))
+    return 0 if not report["sessions_failed"] else 1
+
+
 def _days(args) -> int:
     days = available_days(args.archive_dir)
     print("\n".join(days) if days else f"no archived days under {args.archive_dir}")
@@ -275,6 +353,24 @@ def main(argv: list[str] | None = None) -> int:
     validate.add_argument("--every", type=int, default=5)
     validate.add_argument("--store-dir", type=Path, default=None, help="baseline cache (default: the service store)")
     validate.set_defaults(run=_validate_replay)
+    evaluation = commands.add_parser("evaluate", help="walk-forward out-of-sample test of the response signals")
+    evaluation.add_argument("--train-sessions", type=int, default=20)
+    evaluation.add_argument("--test-days", type=int, default=None, help="evaluate only the latest N eligible days")
+    evaluation.add_argument("--every", type=int, default=5, help="minutes between evaluation points")
+    evaluation.add_argument("--fdr", type=float, default=0.05, help="Benjamini-Hochberg false discovery rate")
+    evaluation.add_argument("--out", type=Path, default=None, help="also write the JSON report here")
+    evaluation.add_argument("--store-dir", type=Path, default=None)
+    evaluation.set_defaults(run=_evaluate)
+    audit = commands.add_parser("audit", help="coverage, missingness and integrity of every archived day")
+    audit.add_argument("--days", action="store_true", help="include the per-day reports in the output")
+    audit.add_argument("--out", type=Path, default=None, help="also write the full JSON report here")
+    audit.set_defaults(run=_audit)
+    research = commands.add_parser("research", help="run the research engines on one archived minute")
+    research.add_argument("date", nargs="?", help="session date (default: the latest archived)")
+    research.add_argument("--at", default="11:00", help="IST time HH:MM")
+    research.add_argument("--top", type=int, default=5)
+    research.add_argument("--store-dir", type=Path, default=None)
+    research.set_defaults(run=_research)
     commands.add_parser("backup", help="copy the event store and key file to <store>/backups").set_defaults(run=_backup)
     args = parser.parse_args(argv)
     return args.run(args)

@@ -58,6 +58,7 @@ MICRO_ARCHIVE = "microstructure_1m.csv.gz"
 RAW_ARCHIVE = "depth_snapshots.csv.gz"
 STATUS_FILE = "status.json"
 END_MARKER = "#END"
+INDEX_PREFIX = "IDX:"  # bar rows for indices carry security_id IDX:<key>
 
 MICRO_COLUMNS = (
     "symbol", "security_id", "timestamp", "packets", "trade_packets", "quote_changes", "invalid_book",
@@ -592,6 +593,26 @@ def state_bars_for_minute(live_state, symbols: dict[str, str], minute: int) -> l
                     candle = current
             if candle is not None:
                 rows.append((symbol, security_id, stamp, _price(candle["open"]), _price(candle["high"]),
+                             _price(candle["low"]), _price(candle["close"]), int(candle.get("volume") or 0)))  # fmt: skip
+    return rows
+
+
+def index_bars_for_minute(index_states: dict, minute: int) -> list[tuple]:
+    """Completed index 1m bars for one minute, in stream form: ``security_id`` is ``IDX:<key>``."""
+    from output import _ist_timestamp, _price
+
+    stamp = _ist_timestamp(minute)
+    rows = []
+    for key, st in sorted((index_states or {}).items()):
+        with st.lock:
+            candle = None
+            done = st.live_candles
+            if done and int(done[-1].get("timestamp", done[-1].get("epoch", 0)) or 0) == minute:
+                candle = done[-1]
+            elif st.current_1m is not None and int(st.current_1m.get("epoch", 0)) == minute:
+                candle = st.current_1m
+            if candle is not None:
+                rows.append((st.symbol, f"{INDEX_PREFIX}{key}", stamp, _price(candle["open"]), _price(candle["high"]),
                              _price(candle["low"]), _price(candle["close"]), int(candle.get("volume") or 0)))  # fmt: skip
     return rows
 

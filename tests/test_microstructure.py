@@ -194,3 +194,21 @@ def test_the_recorder_switches_itself_off_over_its_cpu_budget(tmp_path):
     assert not rec.enabled and "CPU budget" in rec.paused_reason
     rec.observe("101", packet(100, 100.1, 10, 10, 100.05, 10))  # off: a no-op
     assert rec.stats["packets"] == 0
+
+
+def test_index_bars_for_minute_marks_index_rows():
+    import threading
+    from types import SimpleNamespace
+
+    from microstructure import index_bars_for_minute
+
+    minute = 1_790_000_000 - 1_790_000_000 % 60
+    bar = {"timestamp": minute, "epoch": minute, "open": 1.0, "high": 2.0, "low": 0.5, "close": 1.5, "volume": 0}
+    states = {
+        "nifty500": SimpleNamespace(symbol="NIFTY 500", lock=threading.RLock(), live_candles=[bar], current_1m=None),
+        "nifty": SimpleNamespace(symbol="NIFTY", lock=threading.RLock(), live_candles=[],
+                                 current_1m={**bar, "timestamp": minute + 60, "epoch": minute + 60}),
+    }  # fmt: skip
+    rows = index_bars_for_minute(states, minute)
+    assert [r[1] for r in rows] == ["IDX:nifty500"] and rows[0][0] == "NIFTY 500" and rows[0][6] == 1.5
+    assert index_bars_for_minute(states, minute + 60)[0][1] == "IDX:nifty"
