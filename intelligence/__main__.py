@@ -173,13 +173,22 @@ def _bootstrap_history(args) -> int:
     if args.env_file:
         env.update(read_env_file(args.env_file))
     try:
-        try:
-            client_id, token, how = credentials(env, allow_generate=args.generate_token)
-        except DhanTokenRateLimited as exc:  # Dhan allows one token generation per ~2 minutes: wait once
-            wait = min(exc.retry_after + 5, 300)
-            log(f"Dhan token generation cooling down; waiting {wait}s")
+        for attempt in range(4):
+            # Dhan allows one token generation per ~2 minutes and rejects a TOTP code already used (PSYGRID
+            # generates its own token at every restart): wait for the cooldown or the next 30 s TOTP window.
+            try:
+                client_id, token, how = credentials(env, allow_generate=args.generate_token)
+                break
+            except DhanTokenRateLimited as exc:
+                wait = min(exc.retry_after + 5, 300)
+            except RuntimeError as exc:
+                if "TOTP" not in str(exc) or attempt == 3:
+                    raise
+                wait = 35
+            if attempt == 3:
+                raise BootstrapBlocked("could not obtain a Dhan token after 4 attempts")
+            log(f"Dhan token not available yet; waiting {wait}s")
             time.sleep(wait)
-            client_id, token, how = credentials(env, allow_generate=args.generate_token)
         log(f"credentials: {how}; rate {args.rate}/s, {args.workers} workers")
         bootstrap.client = HistoryClient(client_id, token, rate=args.rate or DEFAULT_RATE)
         if args.action == "probe":

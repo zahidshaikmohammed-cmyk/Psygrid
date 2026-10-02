@@ -53,6 +53,7 @@ global_context_manager = rbi_news_manager = None
 stock_options_manager = None
 stock_depth_manager = None
 archive_manager = None
+microstructure_recorder = None
 config_error = ""
 indicator_error = ""
 index_error = ""
@@ -107,7 +108,7 @@ def startup() -> None:
         banknifty_underlying_indicators, \
         midcpnifty_underlying_indicators
     global nifty_futures_manager, banknifty_futures_manager, global_context_manager, rbi_news_manager
-    global stock_options_manager, stock_depth_manager, archive_manager
+    global stock_options_manager, stock_depth_manager, archive_manager, microstructure_recorder
     config_error = ""
     indicator_error = ""
     index_error = ""
@@ -140,11 +141,20 @@ def startup() -> None:
 
         state = RuntimeFreshnessState(settings)
         dhan_api = DhanAPI(settings)
+        feed = LiveFeed(settings, state, instruments)
+        # Research recorder: keeps the Full-packet depth and quantities the 1m candles do not use. Optional
+        # and isolated: if it cannot start, the feed runs exactly as before.
+        try:
+            microstructure_recorder = start_microstructure_recorder(state, instruments)
+            if microstructure_recorder is not None:
+                feed.observer = microstructure_recorder.observe
+        except Exception:
+            microstructure_recorder = None
         manager = SessionManager(
             settings,
             state,
             dhan_api,
-            LiveFeed(settings, state, instruments),
+            feed,
             instruments,
         )
         manager.start()
@@ -303,8 +313,26 @@ def startup() -> None:
         config_error = str(exc)
 
 
+def start_microstructure_recorder(live_state, instruments):
+    """The Full-packet research recorder, unless PSYGRID_MICROSTRUCTURE=0."""
+    if os.getenv("PSYGRID_MICROSTRUCTURE", "1").strip() == "0":
+        return None
+    from microstructure import MicrostructureRecorder, state_bars_for_minute
+
+    symbols = {str(item.security_id): item.symbol for item in instruments}
+    raw = {s.strip().upper() for s in os.getenv("PSYGRID_RAW_DEPTH_SYMBOLS", "").split(",") if s.strip()}
+
+    def bars_for_minute(minute: int) -> list[tuple]:
+        return state_bars_for_minute(live_state, symbols, minute)
+
+    recorder = MicrostructureRecorder(archive_dir_from_environment(), symbols, settings.timezone,
+                                      bars_for_minute=bars_for_minute, raw_symbols=raw)  # fmt: skip
+    recorder.start()
+    return recorder
+
+
 def shutdown() -> None:
-    global manager, indicator_runtime, index_manager, archive_manager
+    global manager, indicator_runtime, index_manager, archive_manager, microstructure_recorder
     global \
         nifty_options_manager, \
         nifty_depth_manager, \
@@ -317,6 +345,9 @@ def shutdown() -> None:
         archive_manager.archive_now()
         archive_manager.stop()
         archive_manager = None
+    if microstructure_recorder is not None:
+        microstructure_recorder.stop()
+        microstructure_recorder = None
     if indicator_runtime is not None:
         indicator_runtime.stop()
         indicator_runtime = None
