@@ -170,3 +170,24 @@ def test_all_relationships_runs_end_to_end(day, market_root, store_root, tmp_pat
     report = detect(frame, features, baselines)
     rels = all_relationships(frame, features, report, load_derivatives(tmp_path, TODAY))
     assert any(r.subject == "SUNPHARMA" for r in rels)
+
+
+def test_full_option_chains_are_preserved(tmp_path):
+    from intelligence.derivatives import ChainRecorder, chain_rows, load_chains
+
+    payload = {"expiry": "2026-10-06", "underlying_ltp": 25000.5, "strikes": [
+        {"strike": 25000, "ce": {"last_price": 120.5, "oi": 1000, "volume": 50, "implied_volatility": 12.3,
+                                 "top_bid_price": 120, "top_ask_price": 121, "greeks": {"delta": 0.5}},
+         "pe": {"last_price": 110.0, "oi": 900, "volume": 40}},
+        {"strike": 25100, "ce": None, "pe": {"last_price": 150.0, "oi": 10}}]}  # fmt: skip
+    rows = chain_rows(600, "nifty", payload)
+    assert len(rows) == 3 and rows[0][4] == 25000.0 and rows[0][5] == "CE" and rows[0][15] == 0.5
+    recorder = ChainRecorder(tmp_path)
+    assert recorder.append("2026-10-05", rows) and recorder.append("2026-10-05", chain_rows(660, "nifty", payload))
+    with open(recorder.path("2026-10-05"), "ab") as handle:
+        handle.write(b"\x1f\x8b\x08\x00torn")  # a crash mid-write
+    loaded = load_chains(tmp_path, "2026-10-05")
+    assert len(loaded) == 6 and loaded[0]["implied_volatility"] == "12.3" and loaded[2]["previous_oi"] == ""
+    assert {r["minute"] for r in loaded} == {"600", "660"}
+    tight = ChainRecorder(tmp_path / "t", bytes_per_day=1)
+    assert tight.append("d", rows) and not tight.append("d", rows)  # the daily byte budget stops recording

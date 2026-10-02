@@ -30,7 +30,7 @@ from pathlib import Path
 import requests
 
 from intelligence.archive import EQUITY_FILE, IST, available_days, load_day, session_days
-from intelligence.derivatives import DerivativesRecorder, snapshot_from_payloads
+from intelligence.derivatives import ChainRecorder, DerivativesRecorder, chain_rows, snapshot_from_payloads
 from intelligence.engine import IntelligenceEngine, Snapshot
 from intelligence.event_store import EventStore
 from intelligence.events import ARCHIVE_REPLAY, LIVE_SNAPSHOT
@@ -80,6 +80,7 @@ class LiveRunner:
             settings.archive_dir, settings.store_dir, source=LIVE_SNAPSHOT, event_store=self.store
         )
         self.recorder = DerivativesRecorder(settings.store_dir)
+        self.chains = ChainRecorder(settings.store_dir)
         self.fetch = fetch
         self.clock = clock or (lambda: datetime.now(IST))
         self._lock = threading.Lock()
@@ -104,6 +105,7 @@ class LiveRunner:
             "last_step_at": None,
             "derivatives_recorded": 0,
             "derivatives_errors": 0,
+            "chain_snapshots": 0,
             "last_backup": None,
         }
 
@@ -181,6 +183,9 @@ class LiveRunner:
                 except Exception as exc:
                     log.info("spot %s unavailable: %s", key, exc)
         self.recorder.append(now.strftime("%Y-%m-%d"), snapshot_from_payloads(minute, spot, futures, options))
+        for key, payload in options.items():  # the whole chain, not only its aggregates
+            if self.chains.append(now.strftime("%Y-%m-%d"), chain_rows(minute, key, payload)):
+                self.status["chain_snapshots"] += 1
         self._last_derivatives_minute = minute
         self.status["derivatives_recorded"] += 1
         return True

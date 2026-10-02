@@ -37,6 +37,9 @@ class LiveFeed:
         self._backoff = self.NORMAL_INITIAL_BACKOFF
         self._connection_started_epoch = 0.0
         self._connection_quote_baseline = 0
+        # Optional research recorder (microstructure.MicrostructureRecorder.observe). It is called with the
+        # Full packet after the packet type is known; it is constant-time and never raises.
+        self.observer = None
 
     def _build_feed(self):
         context = DhanContext(self.settings.client_id, self.settings.access_token)
@@ -175,6 +178,13 @@ class LiveFeed:
 
         if packet_type not in {"quote data", "quote", "full data", "full"}:
             return
+
+        observer = self.observer
+        if observer is not None and packet_type in {"full data", "full"}:
+            try:
+                observer(security_id, data)
+            except Exception:  # research recording can never interrupt live ingestion
+                self.observer = None
 
         ltt_epoch = self._parse_ltt(
             data.get("LTT", data.get("ltt", data.get("last_trade_time"))),

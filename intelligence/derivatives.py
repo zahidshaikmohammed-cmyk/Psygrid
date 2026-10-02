@@ -102,3 +102,94 @@ def load_derivatives(root: Path, session_date: str) -> DerivativesDay:
                 continue
             snapshots[int(snap["minute"])] = snap  # a re-recorded minute replaces the earlier line
     return DerivativesDay(session_date, tuple(snapshots[m] for m in sorted(snapshots)))
+
+
+CHAIN_COLUMNS = (
+    "minute", "underlying", "expiry", "underlying_ltp", "strike", "side", "last_price", "oi", "previous_oi",
+    "volume", "implied_volatility", "top_bid_price", "top_bid_quantity", "top_ask_price", "top_ask_quantity",
+    "delta", "gamma", "theta", "vega",
+)  # fmt: skip
+CHAIN_BYTES_PER_DAY = 150_000_000
+
+
+def chain_rows(minute_epoch: int, key: str, payload: dict) -> list[tuple]:
+    """Every strike and side of one option-chain payload, as served (missing values stay empty)."""
+    rows = []
+    expiry, underlying = payload.get("expiry"), _clean(payload.get("underlying_ltp"))
+    for row in payload.get("strikes") or []:
+        strike = _clean(row.get("strike"))
+        for side in ("ce", "pe"):
+            leg = row.get(side)
+            if not isinstance(leg, dict):
+                continue
+            greeks = leg.get("greeks") if isinstance(leg.get("greeks"), dict) else {}
+            values = [_clean(leg.get(f)) for f in ("last_price", "oi", "previous_oi", "volume", "implied_volatility",
+                                                    "top_bid_price", "top_bid_quantity", "top_ask_price",
+                                                    "top_ask_quantity")]  # fmt: skip
+            values += [_clean(greeks.get(g)) for g in ("delta", "gamma", "theta", "vega")]
+            rows.append((minute_epoch, key, expiry, underlying, strike, side.upper(),
+                         *["" if v is None else v for v in values]))  # fmt: skip
+    return rows
+
+
+class ChainRecorder:
+    """Full option-chain snapshots, once a minute per underlying, within a daily byte budget.
+
+    ``<root>/chains/<date>.csv.gz`` is a sequence of gzip members (one per
+    snapshot), which reads back as one CSV stream; a torn last member from a
+    crash is detected by the reader and skipped.
+    """
+
+    def __init__(self, root: Path, bytes_per_day: int = CHAIN_BYTES_PER_DAY):
+        self.root = Path(root) / "chains"
+        self.budget = bytes_per_day
+        self._lock = threading.Lock()
+
+    def path(self, session_date: str) -> Path:
+        return self.root / f"{session_date}.csv.gz"
+
+    def append(self, session_date: str, rows: list[tuple]) -> bool:
+        if not rows:
+            return False
+        import csv
+        import gzip
+        import io
+
+        path = self.path(session_date)
+        with self._lock:
+            self.root.mkdir(parents=True, exist_ok=True)
+            size = path.stat().st_size if path.exists() else 0
+            if size >= self.budget:
+                return False
+            buffer = io.StringIO()
+            writer = csv.writer(buffer, lineterminator="\n")
+            if size == 0:
+                writer.writerow(CHAIN_COLUMNS)
+            writer.writerows(rows)
+            with open(path, "ab") as handle:
+                handle.write(gzip.compress(buffer.getvalue().encode(), compresslevel=6))
+        return True
+
+
+def load_chains(root: Path, session_date: str) -> list[dict]:
+    """Recorded chain rows for a day (a torn final gzip member is ignored)."""
+    import csv
+    import io
+    import zlib
+
+    path = Path(root) / "chains" / f"{session_date}.csv.gz"
+    if not path.exists():
+        return []
+    data = path.read_bytes()
+    text, offset = [], 0
+    while offset < len(data):
+        decompressor = zlib.decompressobj(16 + zlib.MAX_WBITS)
+        try:
+            chunk = decompressor.decompress(data[offset:])
+        except zlib.error:
+            break
+        if not decompressor.eof:
+            break  # a torn member
+        text.append(chunk.decode())
+        offset = len(data) - len(decompressor.unused_data)
+    return list(csv.DictReader(io.StringIO("".join(text))))
