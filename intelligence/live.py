@@ -95,6 +95,9 @@ class LiveRunner:
         self._qualified: set[str] = set()
         self._last_housekeeping: int | None = None
         self._model_warmed: str | None = None
+        self._945_failed: str | None = None
+        self._945_finalised: str | None = None
+        self._945_outcome_at = 0.0
         self._last_as_of: int | None = None
         self._session: str | None = None
         self._last_derivatives_minute: int | None = None
@@ -151,6 +154,11 @@ class LiveRunner:
             self.follow_archive(now)
         except Exception as exc:
             self._error("engine", exc)
+        if self.settings.selector_945:
+            try:
+                self.run_945(now)
+            except Exception as exc:
+                self._error("945", exc)
         minute = int(_minute_floor(now).timestamp())
         if minute != self._last_housekeeping:  # once a minute, however often the loop polls
             self._last_housekeeping = minute
@@ -276,6 +284,85 @@ class LiveRunner:
         self.warm_similarity(today)
         if now >= as_of_time(today, BACKUP_AFTER) or now < as_of_time(today, MODEL_WARM_BEFORE):
             self.warm_response_model(now)
+            if self.settings.selector_945:
+                self.finalise_945(now)
+                self.warm_945_history(today)
+
+    # --- PSYGRID 945 -------------------------------------------------------------------------------
+
+    def run_945(self, now: datetime) -> dict | None:
+        """Decide once, as soon as the engine has every bar that closed by 09:45; then track the outcome."""
+        from intelligence.pipeline945 import decide_day
+        from intelligence.selector945 import DECISION_TIME, DecisionStore, decision_outcome
+
+        today = now.strftime("%Y-%m-%d")
+        day = self.day
+        if day is None or day.session_date != today or self._session != today:
+            return None
+        decision_epoch = as_of_time(today, DECISION_TIME).timestamp()
+        if (self._last_as_of or 0) < decision_epoch:
+            return None  # the 09:44 bar has not arrived yet
+        store = DecisionStore(self.settings.store_dir, "live")
+        decision = store.load_decision(today)
+        if decision is None:
+            if self._945_failed == today:
+                return None
+            started = time.monotonic()
+            try:
+                made, _ = decide_day(self.settings.archive_dir, self.settings.store_dir, day, store,
+                                     computed_at=now.strftime("%Y-%m-%d %H:%M:%S IST"))  # fmt: skip
+            except Exception:
+                self._945_failed = today  # reported once; a restart retries
+                raise
+            decision = made.payload
+            self.status["945"] = {"session": today, "symbol": decision["selected"]["symbol"],
+                                  "direction": decision["selected"]["direction"],
+                                  "decided_at": decision["computed_at"],
+                                  "seconds": round(time.monotonic() - started, 2)}  # fmt: skip
+        # Provisional outcome while the horizons elapse (final after the close, from the archive).
+        if now.timestamp() >= decision_epoch + 31 * 60 and now.timestamp() - self._945_outcome_at >= 300:
+            outcome = decision_outcome(decision, day)
+            outcome["provisional"] = True
+            if not (store.load_outcome(today) or {}).get("final"):
+                store.save_outcome(today, outcome)
+            self._945_outcome_at = now.timestamp()
+        return decision
+
+    def finalise_945(self, now: datetime) -> bool:
+        """After the close: the final outcome and today's training record, from the archived day."""
+        from intelligence.pipeline945 import finish_day, inputs_at_0945
+        from intelligence.selector945 import Decision, DecisionStore
+
+        today = now.strftime("%Y-%m-%d")
+        if now < as_of_time(today, BACKUP_AFTER) or self._945_finalised == today:
+            return False
+        store = DecisionStore(self.settings.store_dir, "live")
+        decision = store.load_decision(today)
+        self._945_finalised = today
+        if decision is None or not (Path(self.settings.archive_dir) / today / EQUITY_FILE).exists():
+            return False
+        day = load_day(self.settings.archive_dir, today)
+        matrix = inputs_at_0945(self.settings.archive_dir, self.settings.store_dir, day)
+        outcome = finish_day(store, Decision(decision), matrix, day)
+        outcome["final"] = True
+        store.save_outcome(today, outcome)
+        return True
+
+    def warm_945_history(self, today: str) -> int:
+        """Cache earlier sessions' day summaries and market-state profiles, a few per minute, outside market hours."""
+        from intelligence.history import load_summary
+        from intelligence.market_state import _history_path, session_profile
+
+        warmed = 0
+        for session in [d for d in session_days(self.settings.archive_dir) if d < today][-60:]:
+            if warmed >= WARM_PER_TICK or self._stop.is_set():
+                break
+            if not _history_path(self.settings.store_dir, session).exists():
+                day = load_day(self.settings.archive_dir, session)
+                load_summary(self.settings.archive_dir, session, self.settings.store_dir, day=day)
+                session_profile(self.settings.archive_dir, session, self.settings.store_dir, day=day)
+                warmed += 1
+        return warmed
 
     def warm_response_model(self, now: datetime) -> bool:
         """Build the next session's response model outside market hours, so the session only loads it."""

@@ -29,13 +29,16 @@ from intelligence.events import CATEGORIES, ENGINE_VERSION, EVENT_TYPES, SCHEMA_
 from intelligence.features import CATALOGUE, FEATURE_VERSION, MARKET_FEATURES
 from intelligence.keys import KeyStore, RateLimiter
 from intelligence.live import LiveRunner
+from intelligence.pipeline945 import summarise_decisions
 from intelligence.research import RANKABLE, ResearchViews
+from intelligence.selector945 import DecisionStore
 from intelligence.settings import Settings
 from intelligence.similarity import instrument_matches, market_matches
 
 API_VERSION = "2.0.0"
 KEY_RE = r"^[A-Za-z0-9&._-]{1,40}$"
 DATE_RE = r"^\d{4}-\d{2}-\d{2}$"
+NAMESPACE_RE = r"^(live|replay(-[0-9.]+)?)$"  # 945 decision namespaces; nothing else reaches the filesystem
 EVENT_ID_RE = r"^evt_[0-9a-f]{16}$"
 STREAM_POLL_SECONDS = 1.0
 STREAM_HEARTBEAT_SECONDS = 20.0
@@ -356,6 +359,44 @@ def create_app(settings: Settings, runner: LiveRunner | None = None, start_live:
         if view is None:
             raise HTTPException(404, f"{key} is not in the universe")
         return view
+
+    # --- PSYGRID 945 ------------------------------------------------------------------------------
+
+    @v2.get("/945")
+    def decision_945_latest():
+        ds = DecisionStore(settings.store_dir, "live")
+        dates = ds.decisions()
+        if not dates:
+            raise HTTPException(404, "no live 945 decision stored yet")
+        return {"decision": ds.load_decision(dates[-1]), "outcome": ds.load_outcome(dates[-1])}
+
+    @v2.get("/945/decisions")
+    def decisions_945(
+        namespace: Annotated[str, Query(pattern=NAMESPACE_RE)] = "live",
+        limit: Annotated[int, Query(ge=1, le=500)] = 30,
+    ):
+        ds = DecisionStore(settings.store_dir, namespace)
+        rows = []
+        for date in ds.decisions()[-limit:][::-1]:
+            d, o = ds.load_decision(date), ds.load_outcome(date) or {}
+            rows.append({"session_date": date, "symbol": d["selected"]["symbol"], "direction": d["selected"]["direction"],
+                         "selection_score": d["selection_score"], "probability": d["probability"]["value"],
+                         "probability_status": d["probability"]["status"], "model": d["model"]["active"],
+                         "outcome_15m": (o.get("horizons") or {}).get("15m")})  # fmt: skip
+        return {"namespace": namespace, "count": len(rows), "decisions": rows}
+
+    @v2.get("/945/decisions/{date}")
+    def decision_945(date: Annotated[str, Path(pattern=DATE_RE)],
+                     namespace: Annotated[str, Query(pattern=NAMESPACE_RE)] = "live"):  # fmt: skip
+        ds = DecisionStore(settings.store_dir, namespace)
+        decision = ds.load_decision(date)
+        if decision is None:
+            raise HTTPException(404, f"no {namespace} 945 decision for {date}")
+        return {"decision": decision, "outcome": ds.load_outcome(date)}
+
+    @v2.get("/945/report")
+    def report_945(namespace: Annotated[str, Query(pattern=NAMESPACE_RE)] = "live"):
+        return summarise_decisions(DecisionStore(settings.store_dir, namespace))
 
     app.include_router(v2)
 

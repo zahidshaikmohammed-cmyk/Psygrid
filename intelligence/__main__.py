@@ -287,6 +287,19 @@ def _research(args) -> int:
     return 0
 
 
+def _audit(args) -> int:
+    from intelligence.audit import audit
+
+    report = audit(args.archive_dir, log=lambda m: print(m, file=sys.stderr, flush=True))
+    if args.out:
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(json.dumps(report, indent=2))
+    if not args.days:
+        report = {k: v for k, v in report.items() if k != "days"}
+    print(json.dumps(report, indent=2))
+    return 0 if not report["sessions_failed"] else 1
+
+
 def _days(args) -> int:
     days = available_days(args.archive_dir)
     print("\n".join(days) if days else f"no archived days under {args.archive_dir}")
@@ -348,6 +361,10 @@ def main(argv: list[str] | None = None) -> int:
     evaluation.add_argument("--out", type=Path, default=None, help="also write the JSON report here")
     evaluation.add_argument("--store-dir", type=Path, default=None)
     evaluation.set_defaults(run=_evaluate)
+    audit = commands.add_parser("audit", help="coverage, missingness and integrity of every archived day")
+    audit.add_argument("--days", action="store_true", help="include the per-day reports in the output")
+    audit.add_argument("--out", type=Path, default=None, help="also write the full JSON report here")
+    audit.set_defaults(run=_audit)
     research = commands.add_parser("research", help="run the research engines on one archived minute")
     research.add_argument("date", nargs="?", help="session date (default: the latest archived)")
     research.add_argument("--at", default="11:00", help="IST time HH:MM")

@@ -59,10 +59,9 @@ MIN_NAMES = 50
 
 
 def _rank(x: np.ndarray) -> np.ndarray:
-    order = np.argsort(x, kind="mergesort")
-    ranks = np.empty(len(x))
-    ranks[order] = np.arange(len(x))
-    return ranks
+    from intelligence.matrix import average_ranks
+
+    return average_ranks(x)  # ties share their mean rank (zero returns are common in 1m data)
 
 
 def spearman(a: np.ndarray, b: np.ndarray) -> float:
@@ -156,6 +155,8 @@ class DayResult:
     placebo_time: dict[tuple[str, int], float] = field(default_factory=dict)
     placebo_reversed: dict[tuple[str, int], float] = field(default_factory=dict)
     dispersion: float = float("nan")
+    turnover: dict[str, float] = field(default_factory=dict)  # share of the top decile replaced between points
+    points: int = 0
 
 
 def _signal_matrix(model, sr, every: int, start: int) -> dict[str, list[tuple[int, np.ndarray]]]:
@@ -194,6 +195,17 @@ def evaluate_day(model: ResponseModel, sr: SessionReturns, every: int = 5, seed:
         warnings.simplefilter("ignore", RuntimeWarning)
         result.dispersion = float(np.nanmean(np.nanstd(sr.r, axis=0)))
     for name, series in signals.items():
+        previous, changes = None, []
+        for _, values in series:
+            ok = np.isfinite(values)
+            if ok.sum() < MIN_NAMES:
+                continue
+            top = set(np.flatnonzero(ok & (values >= np.quantile(values[ok], 0.9))))
+            if previous:
+                changes.append(1 - len(top & previous) / max(len(previous), 1))
+            previous = top
+        result.turnover[name] = float(np.mean(changes)) if changes else float("nan")
+        result.points = len(series)
         for h in HORIZONS:
             ics, spreads, nets, shuffled, groups = [], [], [], [], {}
             minutes = [t for t, _ in series]
@@ -270,12 +282,24 @@ def summarise(results: list[DayResult], fdr_q: float = 0.05) -> dict:
             second, _, _ = _t_pvalue(daily[half:]) if len(daily) - half >= 3 else (float("nan"), 0, 1)
             placebo_t = _t_pvalue([r.placebo_time[(name, h)] for r in results])
             placebo_r = _t_pvalue([r.placebo_reversed[(name, h)] for r in results])
+            finite = np.array([x for x in daily if np.isfinite(x)])
+            sd = float(finite.std(ddof=1)) if len(finite) > 1 else float("nan")
+            half_width = 1.96 * sd / math.sqrt(len(finite)) if len(finite) > 1 else float("nan")
+            spreads = np.array([r.spread_bps[(name, h)] for r in results], dtype=float)
+            nets = np.array([r.net_bps[(name, h)] for r in results], dtype=float)
             entry = {
+                "days": len(finite),
                 "mean_ic": _round(mean), "t": _round(t), "p": _round(p),
+                "ic_ci95": [_round(mean - half_width), _round(mean + half_width)],
+                "ic_ir": _round(mean / sd if sd else float("nan")),
                 "hit_rate": _round(np.mean([x > 0 for x in daily if np.isfinite(x)]) if daily else float("nan")),
                 "first_half_ic": _round(first), "second_half_ic": _round(second),
                 "top_minus_bottom_bps": _round(np.nanmean([r.spread_bps[(name, h)] for r in results])),
-                "net_of_spread_bps": _round(np.nanmean([r.net_bps[(name, h)] for r in results])),
+                "median_top_minus_bottom_bps": _round(np.nanmedian(spreads)),
+                "top_minus_bottom_vol_bps": _round(np.nanstd(spreads, ddof=1)),
+                "net_of_spread_bps": _round(np.nanmean(nets)),
+                "net_positive_day_share": _round(np.mean(nets[np.isfinite(nets)] > 0) if np.isfinite(nets).any() else float("nan")),
+                "top_decile_turnover": _round(np.nanmean([r.turnover.get(name, float("nan")) for r in results])),
                 "placebo_time_ic": _round(placebo_t[0]), "placebo_time_p": _round(placebo_t[2]),
                 "placebo_reversed_ic": _round(placebo_r[0]), "placebo_reversed_p": _round(placebo_r[2]),
                 "sign_flipped_ic": _round(-mean),
@@ -306,8 +330,7 @@ def summarise(results: list[DayResult], fdr_q: float = 0.05) -> dict:
         ok = passed[hypotheses.index((name, h, "all"))]
         stable = np.sign(entry["first_half_ic"] or 0) == np.sign(entry["second_half_ic"] or 0) != 0
         placebo_clean = (entry["placebo_time_p"] or 1) > fdr_q and (entry["placebo_reversed_p"] or 1) > fdr_q
-        entry["verdict"] = ("SUPPORTED" if ok and stable and placebo_clean and (entry["mean_ic"] or 0) > 0
-                            else "UNPROVEN")  # fmt: skip
+        entry["verdict"], entry["verdict_reason"] = _verdict(entry, ok, stable, placebo_clean)
     return {
         "status": "OK",
         "test_days": len(results),
@@ -324,6 +347,25 @@ def summarise(results: list[DayResult], fdr_q: float = 0.05) -> dict:
             "enough sessions.",
         ],
     }
+
+
+def _verdict(entry: dict, significant: bool, stable: bool, placebo_clean: bool) -> tuple[str, str]:
+    """The pre-registered decision rule. SUPPORTED needs every test; REJECTED needs evidence against."""
+    mean = entry["mean_ic"] or 0
+    if significant and mean < 0:
+        return "REJECTED", "significant after FDR in the opposite direction to the hypothesis"
+    if significant and not placebo_clean:
+        return (
+            "REJECTED",
+            "a placebo (time-shuffled or reversed-time) is as significant: the effect is not timing-specific",
+        )
+    if significant and mean > 0 and stable:
+        if (entry.get("net_of_spread_bps") or 0) <= 0:
+            return "SUPPORTED", "statistically supported, but not after estimated spread costs"
+        return "SUPPORTED", "significant after FDR, same sign in both halves, placebos clean"
+    if significant and not stable:
+        return "UNPROVEN", "significant overall but the sign changes between halves"
+    return "UNPROVEN", "not significant after FDR"
 
 
 def _round(x) -> float | None:

@@ -82,8 +82,8 @@ def _summary_path(root: Path, session_date: str) -> Path:
     return root / "summaries" / f"{session_date}.v{SUMMARY_VERSION}.npz"
 
 
-def load_summary(archive_root: Path, session_date: str, cache_root: Path | None = None) -> DaySummary:
-    """A day's summary, from the cache when present, else computed from the archive and cached."""
+def load_summary(archive_root: Path, session_date: str, cache_root: Path | None = None, day=None) -> DaySummary:
+    """A day's summary, from the cache when present, else computed (from ``day`` if given) and cached."""
     cache_root = cache_root or store_dir()
     path = _summary_path(cache_root, session_date)
     if path.exists():
@@ -94,7 +94,7 @@ def load_summary(archive_root: Path, session_date: str, cache_root: Path | None 
             {f: data[f"i_{f}"] for f in INSTRUMENT_FIELDS},
             {f: data[f"m_{f}"] for f in MARKET_FIELDS},
         )
-    summary = summarise_day(load_day(archive_root, session_date))
+    summary = summarise_day(day if day is not None else load_day(archive_root, session_date))
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp.npz")
     np.savez_compressed(

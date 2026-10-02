@@ -73,3 +73,34 @@ def _cut(day, at):
                     ("open", "high", "low", "close", "volume")))  # fmt: skip
 
     return cut(day.equity), cut(day.indices) if day.indices else None, day.reference, day.manifest
+
+
+def test_state_taxonomy_rule():
+    from intelligence.market_state import classify_state
+
+    assert classify_state({"mean_correlation": None, "dispersion_bps": 0.5}) == "UNCALIBRATED"
+    assert classify_state({"mean_correlation": 0.9, "dispersion_bps": 0.3, "market_vol_bps": 0.85}) == "STRESSED"
+    assert classify_state({"mean_correlation": 0.3, "dispersion_bps": 0.95}) == "DISLOCATED"
+    assert classify_state({"mean_correlation": 0.5, "dispersion_bps": 0.5, "change_score": 0.93}) == "TRANSITION"
+    assert classify_state({"mean_correlation": 0.5, "dispersion_bps": 0.5}) == "NORMAL"
+
+
+def test_sector_sync_and_market_vol():
+    rng = np.random.default_rng(3)
+    r = rng.normal(0, 0.001, (60, 30))
+    r[:30] += rng.normal(0, 0.002, 30)  # rows 0..29: one synchronised sector
+    m = rng.normal(0, 0.001, 30)
+    stats = _window_stats(r, np.full(r.shape, 100.0), np.full(r.shape, 10.0), 30, 30, m,
+                          {"A": list(range(30)), "B": list(range(30, 60))})  # fmt: skip
+    # within-sector mean ~ (0.8 + 0) / 2 = 0.4 against an all-pairs mean ~ 0.2
+    assert stats["sector_sync"] == pytest.approx(0.2, abs=0.08)
+    flat = _window_stats(rng.normal(0, 0.001, (60, 30)), np.full(r.shape, 100.0), np.full(r.shape, 10.0), 30, 30, m,
+                         {"A": list(range(30)), "B": list(range(30, 60))})  # fmt: skip
+    assert abs(flat["sector_sync"]) < 0.05 and stats["market_vol_bps"] == pytest.approx(np.std(m, ddof=1) * 1e4)
+
+
+def test_with_history_assigns_state_and_persistence(market_root, tmp_path):
+    day = load_day(market_root, TODAY)
+    state = with_history(measure(day, as_of_time(TODAY, "12:00")), market_root, tmp_path)
+    assert state.state in ("NORMAL", "TRANSITION", "STRESSED", "DISLOCATED")
+    assert state.persistence is None or 0 <= state.persistence <= 1

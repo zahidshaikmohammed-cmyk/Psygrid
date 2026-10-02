@@ -443,6 +443,19 @@ def _cache_path(cache_root: Path, session_date: str, train: int) -> Path:
     return cache_root / "response" / f"{session_date}.t{train}.v{MODEL_VERSION}.npz"
 
 
+def universe_keys(sessions: list[SessionReturns]) -> tuple[str, ...]:
+    return tuple(sorted({k for sr in sessions for k in sr.keys}))
+
+
+def save_model(model: ResponseModel, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + f".{os.getpid()}.tmp.npz")
+    meta = {"trained_on": list(model.trained_on), "keys": list(model.keys), "sectors": list(model.sectors)}
+    np.savez(tmp, meta=json.dumps(meta), bm=model.beta_market, bs=model.beta_sector, bp=model.beta_stat,
+             loadings=model.loadings, resid_sd=model.resid_sd, rows=model.train_rows, turnover=model.median_turnover)  # fmt: skip
+    os.replace(tmp, path)
+
+
 def model_for(archive_root: Path, session_date: str, keys: tuple[str, ...] | None = None, train_sessions: int = 20,
               cache_root: Path | None = None, min_sessions: int = 5) -> ResponseModel | None:  # fmt: skip
     """The model for a session, trained on the ``train_sessions`` sessions before it (cached).
@@ -452,25 +465,21 @@ def model_for(archive_root: Path, session_date: str, keys: tuple[str, ...] | Non
     """
     cache_root = Path(cache_root or store_dir())
     path = _cache_path(cache_root, session_date, train_sessions)
+    earlier = [d for d in session_days(archive_root) if d < session_date][-train_sessions:]
     if path.exists():
         data = np.load(path, allow_pickle=False)
         meta = json.loads(str(data["meta"]))
-        if keys is None or tuple(meta["keys"]) == tuple(keys):
+        # A cached model is reused only if it was trained on exactly the sessions that are earlier now.
+        if list(meta["trained_on"]) == earlier and (keys is None or tuple(meta["keys"]) == tuple(keys)):
             return ResponseModel(tuple(meta["trained_on"]), tuple(meta["keys"]), tuple(meta["sectors"]),
                                  data["bm"], data["bs"], data["bp"], data["loadings"], data["resid_sd"],
                                  data["rows"], data["turnover"])  # fmt: skip
-    earlier = [d for d in session_days(archive_root) if d < session_date][-train_sessions:]
     if len(earlier) < min_sessions:
         return None
     sessions = [compact(session_returns(load_day(archive_root, d))) for d in earlier]
     if keys is None:
-        keys = tuple(sorted({k for sr in sessions for k in sr.keys}))
+        keys = universe_keys(sessions)
     model = fit(sessions, tuple(keys))
     del sessions
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + f".{os.getpid()}.tmp.npz")
-    meta = {"trained_on": list(model.trained_on), "keys": list(model.keys), "sectors": list(model.sectors)}
-    np.savez(tmp, meta=json.dumps(meta), bm=model.beta_market, bs=model.beta_sector, bp=model.beta_stat,
-             loadings=model.loadings, resid_sd=model.resid_sd, rows=model.train_rows, turnover=model.median_turnover)  # fmt: skip
-    os.replace(tmp, path)
+    save_model(model, path)
     return model

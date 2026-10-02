@@ -446,3 +446,27 @@ def test_research_routes(api):
     state = client.get("/v2/market/state").json()
     assert state["market_state"]["percentiles"]["history_sessions"] >= 5
     assert set(state["derivatives_expectation"]) == {"nifty", "banknifty", "midcpnifty"}
+
+
+def test_945_routes(api):
+    from intelligence.pipeline945 import decide_day, finish_day
+    from intelligence.selector945 import DecisionStore
+
+    client, _, runner = api
+    assert client.get("/v2/945").status_code == 404
+    assert TestClient(client.app).get("/v2/945").status_code == 401
+    settings = runner.settings
+    day = load_day(settings.archive_dir, TODAY)
+    store = DecisionStore(settings.store_dir, "live")
+    decision, matrix = decide_day(settings.archive_dir, settings.store_dir, day, store, computed_at="test")
+    finish_day(store, decision, matrix, day)
+    latest = client.get("/v2/945").json()
+    assert latest["decision"]["selected"]["symbol"] == decision.key and latest["outcome"]["horizons"]["15m"]
+    one = client.get(f"/v2/945/decisions/{TODAY}").json()
+    assert one["decision"]["hashes"]["decision"] == decision.payload["hashes"]["decision"]
+    listed = client.get("/v2/945/decisions").json()
+    assert listed["count"] == 1 and listed["decisions"][0]["symbol"] == decision.key
+    assert client.get("/v2/945/report").json()["decisions"] == 1
+    assert client.get("/v2/945/decisions", params={"namespace": "../../etc"}).status_code == 422
+    assert client.get("/v2/945/decisions/2026-01-01").status_code == 404
+    assert client.get("/v2/945/decisions/not-a-date").status_code == 422
