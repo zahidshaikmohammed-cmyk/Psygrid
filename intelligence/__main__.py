@@ -19,6 +19,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from dataclasses import asdict
 from pathlib import Path
 
@@ -172,7 +173,13 @@ def _bootstrap_history(args) -> int:
     if args.env_file:
         env.update(read_env_file(args.env_file))
     try:
-        client_id, token, how = credentials(env, allow_generate=args.generate_token)
+        try:
+            client_id, token, how = credentials(env, allow_generate=args.generate_token)
+        except DhanTokenRateLimited as exc:  # Dhan allows one token generation per ~2 minutes: wait once
+            wait = min(exc.retry_after + 5, 300)
+            log(f"Dhan token generation cooling down; waiting {wait}s")
+            time.sleep(wait)
+            client_id, token, how = credentials(env, allow_generate=args.generate_token)
         log(f"credentials: {how}; rate {args.rate}/s, {args.workers} workers")
         bootstrap.client = HistoryClient(client_id, token, rate=args.rate or DEFAULT_RATE)
         if args.action == "probe":

@@ -22,7 +22,7 @@ from pathlib import Path
 import numpy as np
 
 from config import MARKET_END
-from intelligence.archive import available_days, load_day
+from intelligence.archive import load_day, session_days
 from intelligence.features import log_returns
 from intelligence.frame import as_of_time, frame_at
 
@@ -180,7 +180,7 @@ def build_baselines(
     cache_root: Path | None = None,
 ) -> Baselines:
     """Baselines for ``session_date`` from up to ``window_sessions`` archived sessions strictly before it."""
-    earlier = [d for d in available_days(archive_root) if d < session_date][-window_sessions:]
+    earlier = [d for d in session_days(archive_root) if d < session_date][-window_sessions:]
     summaries = [load_summary(archive_root, d, cache_root) for d in earlier]
     n = len(keys)
     minutes = max((next(iter(s.market.values())).shape[0] for s in summaries), default=0)

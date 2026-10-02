@@ -163,6 +163,36 @@ def available_days(root: Path) -> list[str]:
     return sorted(p.name for p in root.iterdir() if (p / EQUITY_FILE).exists())
 
 
+MIN_SESSION_FRACTION = 0.25  # a session holds at least a quarter of the typical day's equity rows
+
+
+def equity_rows(root: Path, session_date: str) -> int | None:
+    """Equity rows recorded in a day's manifest (None when the manifest does not say)."""
+    try:
+        manifest = json.loads((Path(root) / session_date / MANIFEST_FILE).read_text())
+        return int(manifest["files"][EQUITY_FILE]["rows"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def session_days(root: Path, min_fraction: float = MIN_SESSION_FRACTION) -> list[str]:
+    """Archived days that hold a real session for the universe, oldest first.
+
+    PSYGRID's live archive can write a day with only a handful of instruments
+    (an exchange holiday the session logic did not know about, or a restart
+    late in the day). Such a day stays on disk but is not a session for
+    baselines or similarity: it must hold at least ``min_fraction`` of the
+    median day's equity rows. Days whose manifest records no rows count.
+    """
+    days = available_days(root)
+    rows = {d: equity_rows(root, d) for d in days}
+    known = sorted(r for r in rows.values() if r is not None)
+    if not known:
+        return days
+    floor = known[len(known) // 2] * min_fraction
+    return [d for d in days if rows[d] is None or rows[d] >= floor]
+
+
 def day_from_payloads(live: dict, index_snapshots: dict[str, dict] | None = None) -> ArchiveDay:
     """An ``ArchiveDay`` built in memory from PSYGRID's own payloads, validated exactly as archived rows are.
 

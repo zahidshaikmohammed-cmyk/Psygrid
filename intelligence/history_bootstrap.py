@@ -411,7 +411,10 @@ def resolve_instruments(symbols: list[str], lines=None) -> tuple[list[Instrument
     if lines is None:
         response = requests.get(MASTER_URL, timeout=60, stream=True)
         response.raise_for_status()
-        lines = response.iter_lines(decode_unicode=True)
+        # Dhan serves the master without a charset, and requests then yields bytes even with decode_unicode.
+        response.encoding = response.encoding or "utf-8"
+        lines = (line.decode("utf-8") if isinstance(line, bytes) else line
+                 for line in response.iter_lines(decode_unicode=True))  # fmt: skip
     try:
         for row in csv.DictReader(line for line in lines if line):
             name = str(row.get("SEM_INSTRUMENT_NAME", "")).strip().upper()
