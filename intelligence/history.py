@@ -26,7 +26,7 @@ from intelligence.archive import load_day, session_days
 from intelligence.features import log_returns
 from intelligence.frame import as_of_time, frame_at
 
-SUMMARY_VERSION = 3
+SUMMARY_VERSION = 4  # 4: Dhan-history filler bars read as no trade
 MAD_TO_SD = 1.4826
 POOL_MINUTES = 2
 INSTRUMENT_FIELDS = ("log_volume_1m", "abs_ret_1m", "log_range_1m")

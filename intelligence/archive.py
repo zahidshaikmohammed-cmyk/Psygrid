@@ -45,6 +45,7 @@ class Bars:
     close: np.ndarray
     volume: np.ndarray
     rejected: dict[str, list[tuple[int | None, str]]] = field(default_factory=dict)
+    no_trade_bars: int = 0  # flat zero-volume filler bars read as "no trade" (Dhan history only)
 
     def field(self, name: str) -> np.ndarray:
         return getattr(self, name)
@@ -96,8 +97,20 @@ def _read_rows(path: Path) -> list[dict]:
         return list(csv.DictReader(handle))
 
 
-def _to_bars(rows: list[dict], key_column: str, name_column: str) -> Bars:
+HISTORICAL_SOURCE = "DHAN_HISTORICAL_API"
+
+
+def _is_filler(bar: tuple) -> bool:
+    """A flat zero-volume bar: Dhan's historical API fills minutes without trades this way."""
+    o, h, low, c, v = bar
+    return v == 0 and o == h == low == c
+
+
+def _to_bars(rows: list[dict], key_column: str, name_column: str, drop_filler: bool = False) -> Bars:
+    """Parse rows into Bars. With ``drop_filler`` a flat zero-volume bar is a minute without a trade (missing),
+    which is what the live feed records for such a minute (no bar). Bars that moved on zero volume are kept."""
     parsed: dict[str, dict[int, tuple]] = {}
+    no_trade = 0
     names: dict[str, str] = {}
     rejected: dict[str, list[tuple[int | None, str]]] = {}
     for row in rows:
@@ -110,6 +123,9 @@ def _to_bars(rows: list[dict], key_column: str, name_column: str) -> Bars:
         if reason:
             rejected.setdefault(key, []).append((epoch, reason))
             continue
+        if drop_filler and _is_filler(bar):
+            no_trade += 1
+            continue
         per_key[epoch] = bar
     keys = tuple(sorted(names))
     minutes = np.array(sorted({epoch for bars in parsed.values() for epoch in bars}), dtype=np.int64)
@@ -120,7 +136,8 @@ def _to_bars(rows: list[dict], key_column: str, name_column: str) -> Bars:
             j = column[epoch]
             for k, name in enumerate(BAR_FIELDS):
                 arrays[name][i, j] = bar[k]
-    return Bars(keys=keys, names=tuple(names[k] for k in keys), minutes=minutes, rejected=rejected, **arrays)
+    return Bars(keys=keys, names=tuple(names[k] for k in keys), minutes=minutes, rejected=rejected,
+                no_trade_bars=no_trade, **arrays)  # fmt: skip
 
 
 def _read_reference(path: Path) -> dict[str, dict[str, float | None]]:
@@ -148,11 +165,16 @@ def load_day(root: Path, session_date: str) -> ArchiveDay:
         manifest = {}
     return ArchiveDay(
         session_date=session_date,
-        equity=_to_bars(_read_rows(equity_path), "symbol", "symbol"),
+        equity=_to_bars(_read_rows(equity_path), "symbol", "symbol", drop_filler=is_historical(manifest)),
         indices=_to_bars(_read_rows(index_path), "index", "symbol") if index_path.exists() else None,
         reference=_read_reference(day / EQUITY_REFERENCE_FILE),
         manifest=manifest,
     )
+
+
+def is_historical(manifest: dict) -> bool:
+    """True for a day written by the Dhan historical bootstrap (not by PSYGRID's live archive)."""
+    return (manifest or {}).get("source") == HISTORICAL_SOURCE
 
 
 def available_days(root: Path) -> list[str]:

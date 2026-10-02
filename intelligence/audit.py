@@ -7,7 +7,8 @@
 - coverage: equities present against the 989-symbol universe, the indices present, previous-close coverage;
 - missing intervals: minutes where fewer than half the stocks that traded that day have a bar (a feed or
   download gap rather than illiquidity), as time ranges; the per-stock bar fill distribution;
-- volume consistency: zero-volume bars, bars whose price moved on zero volume;
+- volume consistency: zero-volume bars kept, flat zero-volume filler bars read as "no trade" on Dhan-history days
+  (the live feed has no bar for a minute without trades), and bars whose price moved on zero volume;
 - timestamp consistency: first and last bar of the day against 09:15 and 15:29;
 - whether the day qualifies as a session (``archive.session_days``) and why not.
 
@@ -101,6 +102,7 @@ def audit_day(root: Path, session_date: str, universe: tuple[str, ...] | None, q
         zero = present & (vol == 0)
         moved = zero & (bars.high > bars.low)
     report["zero_volume_bars"] = int(zero.sum())
+    report["no_trade_filler_bars"] = int(bars.no_trade_bars)  # read as missing: Dhan-history flat zero-volume bars
     report["price_move_on_zero_volume"] = int(moved.sum())
     report["negative_or_missing_volume"] = int((present & ~(vol >= 0)).sum())
     report["indices"] = sorted(day.indices.keys) if day.indices is not None else []

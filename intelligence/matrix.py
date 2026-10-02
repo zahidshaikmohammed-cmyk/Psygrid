@@ -28,7 +28,7 @@ from intelligence.features import log_returns
 from intelligence.frame import MarketFrame
 from intelligence.universe import BROAD_INDEX, MARKET_INDEX, sector_of
 
-MATRIX_VERSION = "1"
+MATRIX_VERSION = "2"
 OPENING_RANGE_MINUTES = 15
 STALE_AFTER_MINUTES = 3
 

@@ -53,7 +53,7 @@ from intelligence.frame import as_of_time, frame_at
 from intelligence.history import store_dir
 from intelligence.universe import BROAD_INDEX, MARKET_INDEX, sector_of
 
-MODEL_VERSION = "1"
+MODEL_VERSION = "2"
 LAGS = 5
 STAT_FACTORS = 5
 RIDGE_ALPHA = 0.02  # ridge penalty as a fraction of the mean diagonal of X'X
