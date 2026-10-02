@@ -340,3 +340,61 @@ def test_probe_reports_status_codes_only():
     assert checks["charts/historical NIFTY (access-token)"]["rows"] == 2
     assert checks["charts/historical NIFTY (+client-id)"]["errorCode"] == "DH-902"
     assert "SECRET-TOKEN-XYZ" not in json.dumps(checks)  # never echoes credentials
+
+
+def test_master_download_handles_bytes_without_charset(monkeypatch):
+    import intelligence.history_bootstrap as hb
+
+    class Response:
+        encoding = None
+
+        def raise_for_status(self):
+            pass
+
+        def iter_lines(self, decode_unicode=False):
+            # requests yields bytes when the server declares no charset, even with decode_unicode=True
+            for line in master_lines():
+                yield line.encode() if self.encoding is None else line
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(hb.requests, "get", lambda *a, **k: Response())
+    instruments, _ = hb.resolve_instruments(["TCS", "INFY"])
+    assert {i.symbol for i in instruments if i.kind == "equity"} == {"TCS", "INFY"}
+
+
+def test_master_download_decodes_bytes_lines(monkeypatch):
+    import intelligence.history_bootstrap as hb
+
+    class Response:
+        encoding = "utf-8"
+
+        def raise_for_status(self):
+            pass
+
+        def iter_lines(self, decode_unicode=False):
+            yield from (line.encode() for line in master_lines())
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(hb.requests, "get", lambda *a, **k: Response())
+    instruments, _ = hb.resolve_instruments(["TCS"])
+    assert [i.symbol for i in instruments if i.kind == "equity"] == ["TCS"]
+
+
+def test_partial_days_are_not_sessions(built, tmp_path):
+    import shutil
+
+    from intelligence.archive import session_days
+
+    root, *_ = built
+    shutil.copytree(root, tmp_path / "a")
+    stub = tmp_path / "a" / "2026-10-02"  # a holiday the live archive wrote with a handful of instruments
+    stub.mkdir()
+    (stub / EQUITY_FILE).write_bytes((root / "2026-10-01" / EQUITY_FILE).read_bytes())
+    (stub / MANIFEST_FILE).write_text(json.dumps({"session_date": "2026-10-02", "files": {EQUITY_FILE: {"rows": 100}}}))
+    assert "2026-10-02" in available_days(tmp_path / "a")
+    assert "2026-10-02" not in session_days(tmp_path / "a")
+    assert session_days(tmp_path / "a", min_fraction=0) == available_days(tmp_path / "a")

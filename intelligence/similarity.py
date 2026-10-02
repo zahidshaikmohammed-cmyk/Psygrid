@@ -33,7 +33,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from intelligence.archive import available_days, load_day
+from intelligence.archive import load_day, session_days
 from intelligence.features import _session_open, log_returns
 from intelligence.frame import MarketFrame, as_of_time, frame_at
 from intelligence.history import store_dir
@@ -336,7 +336,7 @@ def _insufficient(sessions: int) -> dict:
 
 
 def _earlier_sessions(archive_root: Path, session_date: str, lookback: int) -> list[str]:
-    return [d for d in available_days(archive_root) if d < session_date][-lookback:]
+    return [d for d in session_days(archive_root) if d < session_date][-lookback:]
 
 
 def market_matches(frame: MarketFrame, archive_root: Path, cache_root: Path | None = None,

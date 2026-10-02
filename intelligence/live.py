@@ -29,7 +29,7 @@ from pathlib import Path
 
 import requests
 
-from intelligence.archive import EQUITY_FILE, IST, available_days, load_day
+from intelligence.archive import EQUITY_FILE, IST, available_days, load_day, session_days
 from intelligence.derivatives import DerivativesRecorder, snapshot_from_payloads
 from intelligence.engine import IntelligenceEngine, Snapshot
 from intelligence.event_store import EventStore
@@ -188,7 +188,9 @@ class LiveRunner:
     def follow_archive(self, now: datetime) -> int:
         """Step the engine through every new minute the archive now covers. Returns steps taken."""
         today = now.strftime("%Y-%m-%d")
-        days = [d for d in available_days(self.settings.archive_dir) if d <= today]
+        # Today counts while it is still filling; an earlier day only if it held a real session.
+        qualified = set(session_days(self.settings.archive_dir))
+        days = [d for d in available_days(self.settings.archive_dir) if d == today or (d < today and d in qualified)]
         if not days:
             return 0
         session = days[-1]
