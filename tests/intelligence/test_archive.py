@@ -3,8 +3,6 @@
 import csv
 import gzip
 
-import numpy as np
-
 
 def test_dhan_history_filler_bars_are_no_trade(tmp_path):
     """Dhan's historical API fills minutes without trades with flat zero-volume bars; the live feed has no bar.
