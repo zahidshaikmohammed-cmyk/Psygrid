@@ -55,6 +55,7 @@ stock_options_manager = None
 stock_depth_manager = None
 archive_manager = None
 microstructure_recorder = None
+option_depth_recorder = None
 config_error = ""
 indicator_error = ""
 index_error = ""
@@ -110,6 +111,7 @@ def startup() -> None:
         midcpnifty_underlying_indicators
     global nifty_futures_manager, banknifty_futures_manager, global_context_manager, rbi_news_manager
     global stock_options_manager, stock_depth_manager, archive_manager, microstructure_recorder
+    global option_depth_recorder
     config_error = ""
     indicator_error = ""
     index_error = ""
@@ -193,6 +195,13 @@ def startup() -> None:
             indicator_runtime = None
             indicator_error = str(exc)
 
+        # Research recorder for the 20-level option depth below: per-minute order-book features per
+        # contract, on disk. Optional and isolated: if it cannot start, the depth feeds run as before.
+        try:
+            option_depth_recorder = start_option_depth_recorder()
+        except Exception:
+            option_depth_recorder = None
+
         # Independent derivatives domain: NIFTY, BANKNIFTY, MIDCPNIFTY and
         # SENSEX option chains (Dhan REST) and 20-level market depth (Dhan
         # WebSocket). Entirely separate from the equity universe and the
@@ -209,6 +218,8 @@ def startup() -> None:
             if options_manager is not None:
                 try:
                     depth_manager = IndexDepthManager(settings, dhan_api, options_manager, spec)
+                    if option_depth_recorder is not None:
+                        depth_manager.state.observer = option_depth_recorder.observe
                     depth_manager.start()
                 except Exception:
                     depth_manager = None
@@ -294,6 +305,9 @@ def startup() -> None:
         if stock_options_manager is not None:
             try:
                 stock_depth_manager = StockDepthManager(settings, dhan_api, stock_options_manager)
+                if option_depth_recorder is not None:
+                    for depth_state in stock_depth_manager.states.values():
+                        depth_state.observer = option_depth_recorder.observe
                 stock_depth_manager.start()
             except Exception:
                 stock_depth_manager = None
@@ -337,8 +351,20 @@ def start_microstructure_recorder(live_state, instruments):
     return recorder
 
 
+def start_option_depth_recorder():
+    """The 20-level option-depth research recorder, unless PSYGRID_OPTION_DEPTH=0."""
+    if os.getenv("PSYGRID_OPTION_DEPTH", "1").strip() == "0":
+        return None
+    from option_depth_recorder import OptionDepthRecorder
+
+    recorder = OptionDepthRecorder(archive_dir_from_environment(), settings.timezone)
+    recorder.start()
+    return recorder
+
+
 def shutdown() -> None:
     global manager, indicator_runtime, index_manager, archive_manager, microstructure_recorder
+    global option_depth_recorder
     global \
         nifty_options_manager, \
         nifty_depth_manager, \
@@ -354,6 +380,9 @@ def shutdown() -> None:
     if microstructure_recorder is not None:
         microstructure_recorder.stop()
         microstructure_recorder = None
+    if option_depth_recorder is not None:
+        option_depth_recorder.stop()
+        option_depth_recorder = None
     if indicator_runtime is not None:
         indicator_runtime.stop()
         indicator_runtime = None
@@ -1099,6 +1128,9 @@ def _build_health_payload() -> dict:
     # Reported alongside, not as a component: the archive is idle outside
     # market hours by design and must not count against feed health.
     payload["archive"] = archive_manager.status() if archive_manager is not None else {"status": "DISABLED"}
+    payload["option_depth_recorder"] = (
+        option_depth_recorder.status() if option_depth_recorder is not None else {"status": "DISABLED"}
+    )
     return payload
 
 

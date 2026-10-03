@@ -597,6 +597,9 @@
    "error_count": "int",
    "healthy_count": "int",
    "market_status": "str",
+   "option_depth_recorder": {
+    "status": "str"
+   },
    "overall_status": "str",
    "service": "str",
    "stale_count": "int",

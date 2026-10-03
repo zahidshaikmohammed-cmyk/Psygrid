@@ -62,6 +62,9 @@ class StockDepthState:
         self.expiry: str | None = None
         self.underlying_ltp: float | None = None
         self.contracts: dict[str, dict] = {}
+        # Optional research recorder (option_depth_recorder.OptionDepthRecorder.observe), called once per
+        # side packet while this state's lock is held.
+        self.observer = None
         self.rotation_status = "IDLE"
         self.packet_count = 0
 
@@ -95,6 +98,9 @@ class StockDepthState:
             self.packet_count += 1
             self.status = "LIVE"
             self.last_error = ""
+            observer = self.observer
+            if observer is not None:  # the option-depth recorder: constant time, never raises
+                observer(self.symbol, row, side, levels, self.underlying_ltp)
 
     def update_quotes(self, quotes: dict[str, dict]) -> None:
         with self.lock:

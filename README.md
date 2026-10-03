@@ -74,6 +74,7 @@ config.py                   fixed configuration and the stocks.json universe
 | `PORT` | no | HTTP port (default `10000`) |
 | `PSYGRID_STOCKS_FILE` | no | Path to the universe file (default `stocks.json`) |
 | `PSYGRID_ARCHIVE_DIR` | no | Where daily archives are written (default `~/psygrid-data`) |
+| `PSYGRID_OPTION_DEPTH` | no | `0` turns off the option-depth recorder (default on) |
 
 Never commit credentials. The equity universe lives in `stocks.json`. Each
 symbol's Dhan security id is resolved at startup from Dhan's instrument
@@ -106,6 +107,24 @@ the day cannot overwrite a fuller earlier save.
 import pandas as pd
 day = pd.read_csv("~/psygrid-data/2026-10-01/equity_1m.csv.gz")
 ```
+
+### Option-depth recorder
+
+The index and NIFTY 50 stock depth feeds serve only the latest 20-level book.
+`option_depth_recorder.py` keeps the session: one row per option contract per
+minute in `$PSYGRID_ARCHIVE_DIR/YYYY-MM-DD/option_depth_1m.csv.gz` (live
+during the session in `.live/YYYY-MM-DD/option_depth_1m.csv`, one block per
+closed minute). Each row carries packet cadence, best bid/ask and mid path,
+spread, 5- and 20-level depth and imbalance, top-of-book order-flow imbalance,
+liquidity added and removed across all 20 levels, the largest resting order
+on each side, and the contract's OI and volume.
+
+Values are measured from Dhan's per-side snapshot packets, not exchange
+events; `packets` and `max_gap_ms` say what each row can support. The
+recorder is isolated like the archive: it never raises into a depth feed,
+pauses below 2 GB free disk, switches itself off above 10% of one core, and
+reports under `option_depth_recorder` in `/public/health.json`. Set
+`PSYGRID_OPTION_DEPTH=0` to turn it off.
 
 ## Intelligence layer
 

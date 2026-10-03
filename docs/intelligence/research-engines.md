@@ -177,6 +177,7 @@ Measured at 989 stocks (`tools/bench_stream.py`, sandbox):
 | 1m equity and index bars | `<archive>/<date>/` (gzip) | Permanent | ≈ 6 MB/day |
 | Full-packet features per stock-minute (depth levels 1 and 5, quantities, order counts, total buy/sell quantity, average price, LTP/LTQ/LTT, spread, OFI, flow) | Stream, then `<archive>/<date>/microstructure_1m.csv.gz` with a sha256 manifest | Stream 2 days; archive permanent | ≈ 30–60 MB/day compressed (to be confirmed by the first real session) |
 | Raw 5-level depth snapshots (`PSYGRID_RAW_DEPTH_SYMBOLS` only) | `depth_snapshots.csv.gz` | Permanent | 300 MB/day cap |
+| 20-level option depth per contract-minute (NIFTY/BANKNIFTY/MIDCPNIFTY/SENSEX nearest 25 strikes, NIFTY 50 stock options while their depth batch is active): cadence, spread, 5- and 20-level depth and imbalance, top-of-book OFI, liquidity added and removed, largest resting order per side, OI and volume | Stream, then `<archive>/<date>/option_depth_1m.csv.gz` with a sha256 manifest (`option_depth_recorder.py`) | Stream 2 days; archive permanent | ≈ 5–10 MB/day compressed (≈ 150 contracts × 375 minutes) |
 | Full index option chains, every strike, once a minute | `<store>/chains/<date>.csv.gz` | Permanent | 150 MB/day cap |
 | Futures and option aggregates per minute | `<store>/derivatives/<date>.jsonl` | Permanent | < 1 MB/day |
 
