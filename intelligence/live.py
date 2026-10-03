@@ -26,11 +26,19 @@ import time
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from pathlib import Path
+from urllib.parse import quote
 
 import requests
 
 from intelligence.archive import EQUITY_FILE, IST, available_days, load_day, session_days
-from intelligence.derivatives import ChainRecorder, DerivativesRecorder, chain_rows, snapshot_from_payloads
+from intelligence.derivatives import (
+    STOCK_CHAIN_BYTES_PER_DAY,
+    STOCK_CHAINS,
+    ChainRecorder,
+    DerivativesRecorder,
+    chain_rows,
+    snapshot_from_payloads,
+)
 from intelligence.engine import IntelligenceEngine, Snapshot
 from intelligence.event_store import EventStore
 from intelligence.events import ARCHIVE_REPLAY, LIVE_SNAPSHOT
@@ -84,6 +92,8 @@ class LiveRunner:
         )
         self.recorder = DerivativesRecorder(settings.store_dir)
         self.chains = ChainRecorder(settings.store_dir)
+        self.stock_chains = ChainRecorder(settings.store_dir, STOCK_CHAIN_BYTES_PER_DAY, folder=STOCK_CHAINS)
+        self._stock_chain_seen: dict[str, str] = {}  # symbol -> the updated_at last recorded
         self.fetch = fetch
         self.clock = clock or (lambda: datetime.now(IST))
         self._lock = threading.Lock()
@@ -117,6 +127,7 @@ class LiveRunner:
             "derivatives_recorded": 0,
             "derivatives_errors": 0,
             "chain_snapshots": 0,
+            "stock_chain_snapshots": 0,
             "last_backup": None,
         }
 
@@ -206,9 +217,48 @@ class LiveRunner:
         for key, payload in options.items():  # the whole chain, not only its aggregates
             if self.chains.append(now.strftime("%Y-%m-%d"), chain_rows(minute, key, payload)):
                 self.status["chain_snapshots"] += 1
+        self.record_stock_chains(now, minute)
         self._last_derivatives_minute = minute
         self.status["derivatives_recorded"] += 1
         return True
+
+    def record_stock_chains(self, now: datetime, minute: int) -> int:
+        """Record each NIFTY 50 stock chain PSYGRID has refreshed since it was last recorded. Returns chains written.
+
+        PSYGRID polls the 50 stock chains round-robin (about 2.7 minutes per rotation), so most minutes bring
+        a handful of new chains; a chain is recorded once per refresh, stamped with the minute it was read.
+        """
+        base = self.settings.psygrid_url
+        try:
+            listing = self.fetch(f"{base}/public/stock-options.json")
+        except Exception as exc:
+            self.status["derivatives_errors"] += 1
+            log.info("stock options listing unavailable: %s", exc)
+            return 0
+        written = 0
+        for entry in listing.get("stocks") or []:
+            symbol, updated = entry.get("symbol"), entry.get("updated_at")
+            if (
+                not symbol
+                or not updated
+                or entry.get("status") != "LIVE"
+                or self._stock_chain_seen.get(symbol) == updated
+            ):
+                continue
+            try:
+                payload = self.fetch(f"{base}/public/stock-options/{quote(symbol, safe='')}.json")
+            except Exception as exc:
+                self.status["derivatives_errors"] += 1
+                log.info("stock options %s unavailable: %s", symbol, exc)
+                continue
+            served = payload.get("updated_at")
+            if not served or served == self._stock_chain_seen.get(symbol):
+                continue  # nothing new behind the listing entry
+            if self.stock_chains.append(now.strftime("%Y-%m-%d"), chain_rows(minute, symbol, payload)):
+                written += 1
+            self._stock_chain_seen[symbol] = served
+        self.status["stock_chain_snapshots"] += written
+        return written
 
     def follow_archive(self, now: datetime) -> int:
         """Step the engine through every new minute the archive and the stream now cover. Returns steps taken."""

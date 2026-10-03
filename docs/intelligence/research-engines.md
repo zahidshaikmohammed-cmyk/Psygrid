@@ -142,8 +142,11 @@ bars and the futures snapshots.
 | `tail_z` | Latest 1m index return in units of the 1m move IV implies |
 | `uncertainty` | Snapshot age (stale beyond 180 s), ATM bid-ask width as a share of the straddle, strikes with IV, sessions behind the profile |
 
-There are no dealer-positioning or gamma claims. Stock option chains are not
-recorded each minute; only index chains are.
+There are no dealer-positioning or gamma claims. NIFTY 50 stock chains are
+recorded too (`<store>/stock_chains/<date>.csv.gz`, same columns), once per
+PSYGRID refresh: PSYGRID polls them round-robin, so each stock's chain is about
+2.7 minutes apart and is stamped with the minute it was read. The expectation
+engine does not use them yet.
 
 ## The minute stream (real-time path)
 
@@ -179,6 +182,7 @@ Measured at 989 stocks (`tools/bench_stream.py`, sandbox):
 | Raw 5-level depth snapshots (`PSYGRID_RAW_DEPTH_SYMBOLS` only) | `depth_snapshots.csv.gz` | Permanent | 300 MB/day cap |
 | 20-level option depth per contract-minute (NIFTY/BANKNIFTY/MIDCPNIFTY/SENSEX nearest 25 strikes, NIFTY 50 stock options while their depth batch is active): cadence, spread, 5- and 20-level depth and imbalance, top-of-book OFI, liquidity added and removed, largest resting order per side, OI and volume | Stream, then `<archive>/<date>/option_depth_1m.csv.gz` with a sha256 manifest (`option_depth_recorder.py`) | Stream 2 days; archive permanent | ≈ 5–10 MB/day compressed (≈ 150 contracts × 375 minutes) |
 | Full index option chains, every strike, once a minute | `<store>/chains/<date>.csv.gz` | Permanent | 150 MB/day cap |
+| Full NIFTY 50 stock option chains, every strike, once per PSYGRID refresh (≈ every 2.7 min per stock) | `<store>/stock_chains/<date>.csv.gz` | Permanent | 200 MB/day cap |
 | Futures and option aggregates per minute | `<store>/derivatives/<date>.jsonl` | Permanent | < 1 MB/day |
 
 The recorder stops writing when free disk falls below 2 GB. It drops (and

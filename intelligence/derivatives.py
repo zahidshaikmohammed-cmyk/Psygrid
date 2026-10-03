@@ -132,16 +132,21 @@ def chain_rows(minute_epoch: int, key: str, payload: dict) -> list[tuple]:
     return rows
 
 
+INDEX_CHAINS, STOCK_CHAINS = "chains", "stock_chains"
+STOCK_CHAIN_BYTES_PER_DAY = 200_000_000
+
+
 class ChainRecorder:
     """Full option-chain snapshots, once a minute per underlying, within a daily byte budget.
 
-    ``<root>/chains/<date>.csv.gz`` is a sequence of gzip members (one per
+    ``<root>/<folder>/<date>.csv.gz`` is a sequence of gzip members (one per
     snapshot), which reads back as one CSV stream; a torn last member from a
-    crash is detected by the reader and skipped.
+    crash is detected by the reader and skipped. Index chains go to
+    ``chains/``, NIFTY 50 stock chains to ``stock_chains/``.
     """
 
-    def __init__(self, root: Path, bytes_per_day: int = CHAIN_BYTES_PER_DAY):
-        self.root = Path(root) / "chains"
+    def __init__(self, root: Path, bytes_per_day: int = CHAIN_BYTES_PER_DAY, folder: str = INDEX_CHAINS):
+        self.root = Path(root) / folder
         self.budget = bytes_per_day
         self._lock = threading.Lock()
 
@@ -171,13 +176,13 @@ class ChainRecorder:
         return True
 
 
-def load_chains(root: Path, session_date: str) -> list[dict]:
+def load_chains(root: Path, session_date: str, folder: str = INDEX_CHAINS) -> list[dict]:
     """Recorded chain rows for a day (a torn final gzip member is ignored)."""
     import csv
     import io
     import zlib
 
-    path = Path(root) / "chains" / f"{session_date}.csv.gz"
+    path = Path(root) / folder / f"{session_date}.csv.gz"
     if not path.exists():
         return []
     data = path.read_bytes()

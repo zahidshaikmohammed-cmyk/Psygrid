@@ -9,6 +9,7 @@ import stat
 import subprocess
 import sys
 from datetime import timedelta
+from urllib.parse import unquote
 
 import pytest
 from fastapi.testclient import TestClient
@@ -16,7 +17,7 @@ from starlette.websockets import WebSocketDisconnect
 
 from intelligence.api import create_app
 from intelligence.archive import EQUITY_FILE, load_day
-from intelligence.derivatives import load_derivatives
+from intelligence.derivatives import STOCK_CHAINS, load_chains, load_derivatives
 from intelligence.engine import IntelligenceEngine, replay_session
 from intelligence.event_store import EventStore
 from intelligence.frame import as_of_time
@@ -59,11 +60,25 @@ def set_written(settings, hhmm_ss):
     os.utime(settings.archive_dir / TODAY / EQUITY_FILE, (moment.timestamp(), moment.timestamp()))
 
 
-def payloads(open_market=True, fail=()):
+STOCK_CHAIN = {"underlying_ltp": 1400.0, "expiry": "2026-10-28", "strikes": [
+    {"strike": 1400.0, "ce": {"last_price": 21.5, "oi": 1000, "implied_volatility": 22.1},
+     "pe": {"last_price": 19.0, "oi": 1500, "greeks": {"delta": -0.48}}}]}  # fmt: skip
+
+
+def payloads(open_market=True, fail=(), stock_updates=None):
+    """A fake PSYGRID. ``stock_updates`` maps symbol -> updated_at for the stock-options listing."""
+    stock_updates = {"RELIANCE": "10:00:01", "M&M": "09:59:30"} if stock_updates is None else stock_updates
+
     def fetch(url):
         for part in fail:
             if part in url:
                 raise ConnectionError(f"refused: {url}")
+        if url.endswith("/public/stock-options.json"):
+            return {"stocks": [{"symbol": s, "status": "LIVE", "updated_at": u} for s, u in stock_updates.items()]
+                    + [{"symbol": "TCS", "status": "PENDING", "updated_at": None}]}  # fmt: skip
+        if "/public/stock-options/" in url:
+            symbol = unquote(url.rsplit("/", 1)[1].removesuffix(".json"))
+            return {**STOCK_CHAIN, "symbol": symbol, "updated_at": stock_updates[symbol]}
         if url.endswith("-futures.json"):
             return {"last_price": 25100.5, "top_bid_price": 25100.0, "top_ask_price": 25101.0, "oi": 1e6,
                     "volume": 10.0, "market_open": open_market}  # fmt: skip
@@ -153,6 +168,36 @@ def test_derivatives_recording(settings):
     assert runner.status["derivatives_errors"] == 1
     closed = LiveRunner(settings, fetch=payloads(open_market=False), clock=Clock(clock() + timedelta(minutes=1)))
     assert not closed.record_derivatives(closed.clock())  # PSYGRID says the market is closed: record nothing
+
+
+def test_stock_chains_are_recorded_once_per_refresh(settings):
+    updates = {"RELIANCE": "10:00:01", "M&M": "09:59:30"}
+    clock = Clock(as_of_time(TODAY, "10:00") + timedelta(seconds=5))
+    runner = LiveRunner(settings, fetch=payloads(stock_updates=updates), clock=clock)
+    assert runner.record_derivatives(clock())
+    assert runner.status["stock_chain_snapshots"] == 2  # TCS has no chain yet: skipped, not an error
+    rows = load_chains(settings.store_dir, TODAY, STOCK_CHAINS)
+    assert {r["underlying"] for r in rows} == {"RELIANCE", "M&M"} and len(rows) == 4
+    assert {r["side"] for r in rows} == {"CE", "PE"} and rows[0]["expiry"] == "2026-10-28"
+
+    updates["RELIANCE"] = "10:01:02"  # only RELIANCE refreshed in the next minute
+    clock.moment += timedelta(minutes=1)
+    assert runner.record_derivatives(clock())
+    assert runner.status["stock_chain_snapshots"] == 3
+    rows = load_chains(settings.store_dir, TODAY, STOCK_CHAINS)
+    assert [r["underlying"] for r in rows].count("RELIANCE") == 4 and len(rows) == 6
+    assert all(r["underlying"] not in ("RELIANCE", "M&M") for r in load_chains(settings.store_dir, TODAY))
+
+
+def test_a_failing_stock_chain_is_counted_and_retried(settings):
+    clock = Clock(as_of_time(TODAY, "10:00") + timedelta(seconds=5))
+    runner = LiveRunner(settings, fetch=payloads(fail=("stock-options/RELIANCE",)), clock=clock)
+    assert runner.record_derivatives(clock())
+    assert runner.status["stock_chain_snapshots"] == 1 and runner.status["derivatives_errors"] == 1
+    runner.fetch = payloads()
+    clock.moment += timedelta(minutes=1)
+    runner.record_derivatives(clock())
+    assert runner.status["stock_chain_snapshots"] == 2  # RELIANCE recorded once it answers; M&M not repeated
 
 
 def test_a_failing_source_never_stops_the_loop(settings):
