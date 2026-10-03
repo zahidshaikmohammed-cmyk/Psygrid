@@ -19,7 +19,7 @@ from instrument_master import fetch_nse_equity_security_ids
 UNIVERSE_SIZE = 989
 TIMEZONE = "Asia/Kolkata"
 MARKET_START = "09:15"
-MARKET_END = "15:15"
+MARKET_END = "15:30"  # NSE normal-market close; the closing session is captured too
 INTRADAY_HISTORY_DAYS = 7
 DAILY_LOOKBACK = 7
 DAILY_INDICATOR_WARMUP = 30

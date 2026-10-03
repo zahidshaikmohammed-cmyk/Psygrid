@@ -1,4 +1,4 @@
-"""Equity market-session lifecycle: authenticate at 09:15, bootstrap 1m history, wipe state at 15:15."""
+"""Equity market-session lifecycle: authenticate at 09:15, bootstrap 1m history, wipe state at the 15:30 close."""
 
 from __future__ import annotations
 

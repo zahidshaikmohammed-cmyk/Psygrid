@@ -135,7 +135,7 @@ No `BULLISH`/`BEARISH`/`STRONG`/`WEAK` label anywhere in this payload — verifi
 | Field | Type | Meaning |
 |---|---|---|
 | `overall_status` | string | `HEALTHY`/`WARNING`/`DEGRADED`/`DOWN` — rolled up from every component that is in session; `MARKET_CLOSED` when every market-hours feed is closed and nothing else is wrong |
-| `components.{name}.status` | string | `FRESH`/`WARNING`/`STALE`/`ERROR` for that one feed, or `CLOSED` when the feed is outside its trading hours (by the clock: equity, index and indicator feeds 09:15–15:15 IST, option/depth/futures feeds 09:15–15:30 IST, weekdays). `global_context` and `rbi_news` are never `CLOSED`. `CLOSED` components do not affect `overall_status` |
+| `components.{name}.status` | string | `FRESH`/`WARNING`/`STALE`/`ERROR` for that one feed, or `CLOSED` when the feed is outside its trading hours (by the clock: every feed 09:15–15:30 IST, weekdays). `global_context` and `rbi_news` are never `CLOSED`. `CLOSED` components do not affect `overall_status` |
 | `closed_count` | int | Number of components currently `CLOSED` |
 | `components.{name}.age_seconds` | float or null | Time since that feed's own last update | 
 | `components.{name}.expected_refresh_seconds` | float | What that feed's own refresh cadence should be (used to derive the status thresholds: `>2x` → WARNING, `>5x` → STALE) |

@@ -880,7 +880,7 @@ def public_rbi_news() -> Response:
 # Health components that run around the clock rather than in a trading session.
 _ALWAYS_ON_COMPONENTS = frozenset({"global_context", "rbi_news"})
 # Option-chain, depth and futures feeds follow the 09:15-15:30 derivatives
-# session; everything else follows the 09:15-15:15 equity session.
+# session, and so does the equity session (09:15-15:30, config.MARKET_END).
 _DERIVATIVES_SUFFIXES = ("_options", "_depth", "_futures", "_nifty50")
 
 

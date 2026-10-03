@@ -188,7 +188,8 @@ def _closed_at(*when):
 
 def test_session_windows_follow_the_clock():
     assert _closed_at(2026, 10, 1, 10, 0) == frozenset()  # Thursday, mid-session
-    assert _closed_at(2026, 10, 1, 15, 20) == EQUITY_GROUP  # equity closed, derivatives still open
+    assert _closed_at(2026, 10, 1, 15, 20) == frozenset()  # the closing session: equity and derivatives both open
+    assert _closed_at(2026, 10, 1, 15, 30) == EQUITY_GROUP | DERIVATIVES_GROUP
     assert _closed_at(2026, 10, 1, 19, 30) == EQUITY_GROUP | DERIVATIVES_GROUP
     assert _closed_at(2026, 10, 3, 11, 0) == EQUITY_GROUP | DERIVATIVES_GROUP  # Saturday
     assert _closed_at(2026, 10, 1, 9, 14) == EQUITY_GROUP | DERIVATIVES_GROUP

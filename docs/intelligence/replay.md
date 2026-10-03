@@ -16,7 +16,7 @@ live service already processed adds nothing.
 
 ## What a frame at `as_of` contains
 
-- 1m bars whose bar has *closed* by `as_of` (bar open + 60 s ≤ as_of), from 09:15 to 15:15;
+- 1m bars whose bar has *closed* by `as_of` (bar open + 60 s ≤ as_of), from 09:15 to 15:15 (`ANALYSIS_END`; PSYGRID records to 15:30, the research window stops at 15:15 so every model and verdict stays comparable);
 - rejected rows only once their bar has closed;
 - the previous close and today's open (known before the session).
 

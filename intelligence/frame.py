@@ -13,7 +13,7 @@ from datetime import datetime, time
 
 import numpy as np
 
-from config import MARKET_END, MARKET_START
+from config import MARKET_START
 from intelligence.archive import BAR_FIELDS, IST, ArchiveDay, Bars
 
 BAR_SECONDS = 60
@@ -34,6 +34,11 @@ class MarketFrame:
         return int(self.as_of.timestamp())
 
 
+# The research window. PSYGRID records the whole 09:15-15:30 session, but every model, calibration
+# profile and evaluation verdict was built on 09:15-15:15, so analysis stays there until it is re-run.
+ANALYSIS_END = "15:15"
+
+
 def _clock(session_date: str, hhmm: str) -> int:
     hour, minute = map(int, hhmm.split(":"))
     day = datetime.strptime(session_date, "%Y-%m-%d").date()
@@ -43,7 +48,7 @@ def _clock(session_date: str, hhmm: str) -> int:
 def session_grid(session_date: str, as_of: datetime) -> np.ndarray:
     """Bar-open epochs from the session open whose bars had completed by ``as_of``."""
     first = _clock(session_date, MARKET_START)
-    end = min(int(as_of.timestamp()), _clock(session_date, MARKET_END))
+    end = min(int(as_of.timestamp()), _clock(session_date, ANALYSIS_END))
     last = end - BAR_SECONDS
     if last < first:
         return np.empty(0, dtype=np.int64)

@@ -14,7 +14,7 @@ EXPECTED = 989
 SHARDS = tuple("abcdefghijklmnopqrstuv")
 IST = ZoneInfo("Asia/Kolkata")
 MARKET_START = time(9, 15)
-MARKET_END = time(15, 15)
+MARKET_END = time(15, 30)
 EXPECTED_STOCK_KEYS = {"symbol", "security_id", "previous_close", "today_open", "candles_1m"}
 EXPECTED_CANDLE_KEYS = {"timestamp", "open", "high", "low", "close", "volume"}
 

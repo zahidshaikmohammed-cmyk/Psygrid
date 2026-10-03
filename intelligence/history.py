@@ -21,10 +21,9 @@ from pathlib import Path
 
 import numpy as np
 
-from config import MARKET_END
 from intelligence.archive import load_day, session_days
 from intelligence.features import log_returns
-from intelligence.frame import as_of_time, frame_at
+from intelligence.frame import ANALYSIS_END, as_of_time, frame_at
 
 SUMMARY_VERSION = 4  # 4: Dhan-history filler bars read as no trade
 MAD_TO_SD = 1.4826
@@ -50,7 +49,7 @@ class DaySummary:
 
 def summarise_day(day) -> DaySummary:
     """Per-minute base quantities for a whole archived day."""
-    frame = frame_at(day, as_of_time(day.session_date, MARKET_END))
+    frame = frame_at(day, as_of_time(day.session_date, ANALYSIS_END))
     bars = frame.equity
     with warnings.catch_warnings(), np.errstate(divide="ignore", invalid="ignore"):
         warnings.simplefilter("ignore", RuntimeWarning)

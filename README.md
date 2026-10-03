@@ -11,7 +11,7 @@ disk, building a history for backtesting.
 ## Design principles
 
 - **Genuine data only.** Psygrid never interpolates, gap-fills or invents candles, quotes or option rows. A missing value is reported as missing.
-- **RAM-only serving.** Endpoints are served from memory, with no database. Session state is wiped after the 15:15 IST close, once the day has been archived (see [Daily archive](#daily-archive)).
+- **RAM-only serving.** Endpoints are served from memory, with no database. Session state is wiped after the 15:30 IST close, once the day has been archived (see [Daily archive](#daily-archive)).
 - **Native candles.** Live 1-minute candles are built from Dhan WebSocket ticks and cumulative-volume deltas. Higher timeframes come from Dhan's own historical endpoints.
 - **Isolated domains.** The equity feed, the index layer and each derivatives feed run in independent managers. A failure in one never takes down another.
 - **Fixed configuration.** Session times, universe size and indicator periods are constants in `config.py`. Environment variables cannot change market-data behaviour.
@@ -41,7 +41,7 @@ are sent with `Cache-Control: no-store`.
 
 ```
 app.py                      FastAPI service; starts every manager, serves the endpoints
-├── session.py              equity session lifecycle (09:15 start, 15:15 wipe)
+├── session.py              equity session lifecycle (09:15 start, 15:30 wipe)
 │   ├── feed_runtime.py     equity WebSocket feed with stale-instrument recovery (feed.py)
 │   ├── state_runtime.py    RAM state + freshness tracking (state.py)
 │   └── backfill.py         rate-limited historical gap backfill
@@ -93,7 +93,7 @@ Every trading day, Psygrid saves its completed 1-minute candles to
 
 Values are exactly what `/public/live.json` and the index endpoints serve: IST
 timestamps and completed candles only, never synthetic. The archive is saved
-every 5 minutes during the session, at the 15:15 close (after the final candle
+every 5 minutes during the session, at the 15:30 close (after the final candle
 closes and before memory is wiped), and when the service stops. A full day is
 about 6 MB.
 
