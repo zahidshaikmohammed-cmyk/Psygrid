@@ -1,0 +1,59 @@
+name: Oracle diagnostics (read-only)
+
+# Read-only inspection of the Oracle VM. It never restarts, stops, edits or
+# deletes anything. Runs on push to the ops/oracle-diagnostics branch only.
+on:
+  push:
+    branches: [ops/oracle-diagnostics]
+    paths: [".github/workflows/oracle-diagnostics.yml"]
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect VM (read-only)
+        env:
+          ORACLE_SSH_KEY: ${{ secrets.ORACLE_SSH_KEY }}
+        run: |
+          set -uo pipefail
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$ORACLE_SSH_KEY" > ~/.ssh/k && chmod 600 ~/.ssh/k
+          ssh-keyscan -H 140.245.226.102 >> ~/.ssh/known_hosts 2>/dev/null
+          ssh -i ~/.ssh/k -o BatchMode=yes ubuntu@140.245.226.102 'bash -s' <<'REMOTE'
+          set -uo pipefail
+          sec(){ echo; echo "===== $* ====="; }
+          sec date; date -u; uptime
+          sec "systemctl cat psygrid"; systemctl cat psygrid --no-pager
+          sec "service state"; systemctl show psygrid -p MainPID -p ActiveState -p SubState -p NRestarts -p ActiveEnterTimestamp -p LimitNOFILE -p LimitNOFILESoft -p MemoryCurrent -p TasksCurrent
+          PID=$(systemctl show -p MainPID --value psygrid)
+          echo "PID=$PID"
+          if [ -n "$PID" ] && [ "$PID" != 0 ]; then
+            sec "process"; ps -o pid,etime,rss,nlwp,cmd -p "$PID"
+            sec "open files limit"; grep -i "open files" /proc/$PID/limits
+            sec "fd count"; ls /proc/$PID/fd | wc -l
+            sec "fd kinds"; for f in /proc/$PID/fd/*; do readlink "$f"; done 2>/dev/null | sed -E 's/\[[0-9]+\]//; s#^/.*#file#' | sort | uniq -c | sort -rn | head
+            sec "threads"; ls /proc/$PID/task | wc -l
+          fi
+          sec "listen socket 10000"; sudo ss -ltnp "( sport = :10000 )"
+          sec "tcp states to :10000"; sudo ss -tan "( sport = :10000 )" | awk 'NR>1{print $1}' | sort | uniq -c
+          sec "curl /health"; curl -sS -m 8 -o /tmp/h.json -w "http=%{http_code} time=%{time_total}\n" http://127.0.0.1:10000/health; head -c 600 /tmp/h.json 2>/dev/null; echo
+          sec "curl /public/live-a.json"; curl -sS -m 8 -o /dev/null -w "http=%{http_code} size=%{size_download}\n" http://127.0.0.1:10000/public/live-a.json
+          sec "journal counts since boot of unit"; SINCE=$(systemctl show -p ActiveEnterTimestamp --value psygrid)
+          echo "since: $SINCE"
+          for p in "deallocating an open event loop" "Too many open files" "Errno 24" "Traceback" "RECONNECTING" "No market-feed quote packets"; do
+            printf '%-40s %s\n' "$p" "$(sudo journalctl -u psygrid --since "$SINCE" --no-pager 2>/dev/null | grep -c "$p")"
+          done
+          sec "first 'Too many open files'"; sudo journalctl -u psygrid --since "$SINCE" --no-pager | grep -m3 "Too many open files"
+          sec "first 'deallocating'"; sudo journalctl -u psygrid --since "$SINCE" --no-pager | grep -m2 "deallocating an open event loop"
+          sec "journal tail"; sudo journalctl -u psygrid -n 40 --no-pager
+          sec "other services"; for u in psygrid-intelligence psygridevents; do systemctl show $u -p ActiveState -p MemoryCurrent -p MainPID 2>/dev/null; done
+          sec "memory"; free -m
+          sec "disk"; df -h / /home 2>/dev/null
+          sec "journal disk"; sudo journalctl --disk-usage
+          sec "du /home/ubuntu (depth 2)"; du -xh --max-depth=2 /home/ubuntu 2>/dev/null | sort -h | tail -25
+          sec "du /var/log"; sudo du -xh --max-depth=1 /var/log 2>/dev/null | sort -h | tail -10
+          sec "du caches"; du -sh ~/.cache/* 2>/dev/null | sort -h | tail; sudo du -sh /var/cache/apt 2>/dev/null
+          sec "Psygrid env keys (names only)"; for f in $(systemctl show -p EnvironmentFiles --value psygrid | awk '{print $1}' | tr -d '-'); do echo "$f:"; sudo sed -E 's/=.*/=<redacted>/' "$f" 2>/dev/null; done
+          sec "Psygrid git"; git -C /home/ubuntu/Psygrid log --oneline -3
+          true
+          REMOTE
