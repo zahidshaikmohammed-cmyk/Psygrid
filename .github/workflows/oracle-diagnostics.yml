@@ -1,7 +1,9 @@
-name: Oracle diagnostics (read-only)
+name: Oracle diagnostics and acceptance
 
-# Read-only inspection of the Oracle VM. It never restarts, stops, edits or
-# deletes anything. Runs on push to the ops/oracle-diagnostics branch only.
+# Inspection of the Oracle VM plus PSYGRID acceptance checks. It never restarts,
+# stops, edits or deletes anything belonging to PSYGRID. The only state change is
+# the isolation test: it stops psygridevents (downstream), confirms PSYGRID keeps
+# serving, and starts psygridevents again. Runs on push to this branch only.
 on:
   push:
     branches: [ops/oracle-diagnostics]
@@ -55,5 +57,66 @@ jobs:
           sec "du caches"; du -sh ~/.cache/* 2>/dev/null | sort -h | tail; sudo du -sh /var/cache/apt 2>/dev/null
           sec "Psygrid env keys (names only)"; for f in $(systemctl show -p EnvironmentFiles --value psygrid | awk '{print $1}' | tr -d '-'); do echo "$f:"; sudo sed -E 's/=.*/=<redacted>/' "$f" 2>/dev/null; done
           sec "Psygrid git"; git -C /home/ubuntu/Psygrid log --oneline -3
+          sec "systemd hardening"; systemctl show psygrid -p Restart -p WatchdogUSec -p NotifyAccess -p LimitNOFILE -p OOMScoreAdjust -p CPUWeight -p IOWeight -p MemoryLow -p NRestarts
+          sec "watchdog events"; sudo journalctl -u psygrid --since "$SINCE" --no-pager | grep -ci "watchdog timeout" || true
+          sec "full /health"; curl -sS -m 8 http://127.0.0.1:10000/health | python3 -m json.tool
+          sec "endpoint acceptance"; python3 - <<'PY'
+          import json, time, urllib.request
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+          base = "http://127.0.0.1:10000"
+          now = datetime.now(ZoneInfo("Asia/Kolkata"))
+          def get(path):
+              t = time.monotonic()
+              with urllib.request.urlopen(base + path, timeout=15) as r:
+                  body = r.read()
+                  return r.status, json.loads(body), round((time.monotonic() - t) * 1000), len(body)
+          fails = []
+          status, live, ms, size = get("/public/live.json")
+          stocks = live.get("stocks") or {}
+          print(f"/public/live.json http={status} {ms}ms {size}B stocks={len(stocks)} keys={sorted(live)[:12]}")
+          seen = []
+          future = 0
+          for shard in "abcdefghijklmnopqrstuv":
+              st, body, ms, size = get(f"/public/live-{shard}.json")
+              sym = list((body.get("stocks") or {}).keys())
+              seen += sym
+              for rec in (body.get("stocks") or {}).values():
+                  for c in rec.get("candles_1m") or []:
+                      ts = c.get("timestamp")
+                      when = datetime.fromisoformat(ts) if ts else None
+                      if when and when.tzinfo is None:
+                          when = when.replace(tzinfo=now.tzinfo)
+                      if when and when > now:
+                          future += 1
+              print(f"live-{shard}: http={st} {ms}ms {size}B symbols={len(sym)}")
+              if st != 200:
+                  fails.append(shard)
+          print("shard symbols total", len(seen), "unique", len(set(seen)), "match live.json", set(seen) == set(stocks))
+          print("future candles", future)
+          first = next(iter(stocks), None)
+          if first:
+              st, body, ms, _ = get(f"/public/stock/{first}.json")
+              print(f"/public/stock/{first}.json http={st} {ms}ms keys={sorted(body)[:10]}")
+          for path in ("/public/nifty.json", "/public/indicators.json", "/public/health.json"):
+              try:
+                  st, body, ms, size = get(path)
+                  print(f"{path} http={st} {ms}ms {size}B status={body.get('status')}")
+              except Exception as exc:
+                  print(f"{path} FAILED {exc}")
+                  fails.append(path)
+          print("ACCEPTANCE", "FAIL" if fails or future or len(set(seen)) != len(seen) else "PASS", fails)
+          PY
+          sec "archive writes today"; ls -la /home/ubuntu/psygrid-data/$(TZ=Asia/Kolkata date +%F) 2>/dev/null || echo "no archive directory for today"
+          sec "fd count after endpoint sweep"; ls /proc/$(systemctl show -p MainPID --value psygrid)/fd | wc -l
+          sec "isolation: stop psygridevents, PSYGRID must keep serving"
+          PID_BEFORE=$(systemctl show -p MainPID --value psygrid)
+          sudo systemctl stop psygridevents || true
+          sleep 5
+          for i in 1 2 3; do curl -sS -m 5 -o /dev/null -w "psygrid /health http=%{http_code}\n" http://127.0.0.1:10000/health; curl -sS -m 10 -o /dev/null -w "psygrid live-a http=%{http_code}\n" http://127.0.0.1:10000/public/live-a.json; sleep 2; done
+          echo "psygrid pid before=$PID_BEFORE after=$(systemctl show -p MainPID --value psygrid) (must match)"
+          sudo systemctl start psygridevents || true
+          sleep 5
+          systemctl show psygridevents -p ActiveState -p MemoryMax -p CPUWeight -p OOMScoreAdjust -p IOSchedulingClass 2>/dev/null
           true
           REMOTE
