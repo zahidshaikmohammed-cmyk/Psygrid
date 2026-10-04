@@ -10,6 +10,8 @@ from zoneinfo import ZoneInfo
 
 from dhanhq import DhanContext, MarketFeed
 
+from runtime_guard import close_market_feed
+
 
 class DhanConnectionLimited(RuntimeError):
     """Dhan rejected the market-feed connection because of limits."""
@@ -251,13 +253,7 @@ class LiveFeed:
         if feed is None:
             return
         self._connection_stop.set()
-        with contextlib.suppress(Exception):
-            feed.close_connection()
-        try:
-            if feed.loop and not feed.loop.is_closed():
-                feed.loop.close()
-        except Exception:
-            pass
+        close_market_feed(feed)
 
     def _run(self) -> None:
         while not self._stop_requested.is_set():

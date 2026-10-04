@@ -73,15 +73,35 @@ config.py                   fixed configuration and the stocks.json universe
 | `FRED_API_KEY` | no | Enables `/public/global-context.json`. Without it, the endpoint reports an error. |
 | `PORT` | no | HTTP port (default `10000`) |
 | `PSYGRID_STOCKS_FILE` | no | Path to the universe file (default `stocks.json`) |
-| `PSYGRID_ARCHIVE_DIR` | no | Where daily archives are written (default `~/psygrid-data`) |
+| `PSYGRID_ARCHIVE` | no | `1` turns on the daily archive below. Off by default: Psygrid is live-only and writes no market data to disk |
+| `PSYGRID_MICROSTRUCTURE` | no | `1` turns on the Full-packet research recorder (writes to disk). Off by default |
+| `PSYGRID_ARCHIVE_DIR` | no | Where the archive and recorder write when enabled (default `~/psygrid-data`) |
+| `PSYGRID_MARKET_HOLIDAYS` | no | Comma-separated ISO dates on which no session is opened (weekends are always closed) |
+| `PSYGRID_SPECIAL_SESSIONS` | no | Comma-separated ISO dates that open a session even on a weekend |
+| `PSYGRID_WATCHDOG_MAX_RSS_MB` | no | Memory ceiling for the systemd watchdog (default `2048`) |
 
 Never commit credentials. The equity universe lives in `stocks.json`. Each
 symbol's Dhan security id is resolved at startup from Dhan's instrument
 master, never hard-coded.
 
-## Daily archive
+## Health and protection
 
-Every trading day, Psygrid saves its completed 1-minute candles to
+`/health` always answers HTTP 200 while the process can serve, and reports the real state:
+`status` is `OK` or `DEGRADED` with `reasons`, plus the process descriptor count and limit, RSS,
+threads, the session window (`OPEN`, `CLOSED`, `NON_TRADING_DAY`), the Dhan feed status and
+reconnects, the last market timestamp and its age, whether data is fresh, and when a live
+endpoint was last generated. Outside market hours an idle feed is expected and is not a fault.
+
+`deploy/harden_psygrid.sh` (run by the deploy workflow) installs a systemd drop-in: restart on any
+exit with back-off, a 150 s watchdog fed by `runtime_guard.ServiceWatchdog` only while the server
+answers its own `/health` and stays under its descriptor and memory budget, `LimitNOFILE=65536`,
+and top CPU/I/O/OOM priority over every downstream service on the VM. It also bounds the journal
+to 300 MB. Stale data or a Dhan outage never restarts the service; it is reported and the feed
+reconnects by itself.
+
+## Daily archive (opt-in, `PSYGRID_ARCHIVE=1`)
+
+When enabled, every trading day Psygrid saves its completed 1-minute candles to
 `$PSYGRID_ARCHIVE_DIR/YYYY-MM-DD/` (default `~/psygrid-data`):
 
 | File | Columns |

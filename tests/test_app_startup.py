@@ -41,6 +41,7 @@ EXPECTED_GLOBALS = (
 @pytest.fixture
 def started(monkeypatch, tmp_path):
     monkeypatch.setenv("PSYGRID_ARCHIVE_DIR", str(tmp_path))
+    monkeypatch.setenv("PSYGRID_ARCHIVE", "1")
     # startup() assigns module globals; restore them afterwards so no other test sees this run.
     assigned = set(app_module.startup.__code__.co_names) | {
         f"{s.key}_{kind}_manager" for s in INDEX_DERIVATIVES for kind in ("options", "depth")
@@ -104,3 +105,14 @@ def test_shutdown_releases_managers(started):
     app_module.shutdown()
     for name in ("manager", "index_manager", "archive_manager", "nifty_options_manager", "stock_options_manager"):
         assert getattr(app_module, name) is None, name
+
+
+def test_live_only_by_default_nothing_is_archived(started, monkeypatch, tmp_path):
+    monkeypatch.delenv("PSYGRID_ARCHIVE", raising=False)
+    monkeypatch.delenv("PSYGRID_MICROSTRUCTURE", raising=False)
+    app_module.shutdown()
+    app_module.startup()
+    assert app_module.config_error == ""
+    assert app_module.archive_manager is None
+    assert app_module.microstructure_recorder is None
+    assert list(tmp_path.iterdir()) == []

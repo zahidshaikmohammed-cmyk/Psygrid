@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 from backfill import HistoricalBackfill
 from config import refresh_access_token
 from dhan_auth import DhanTokenRateLimited, generate_access_token
+from runtime_guard import is_trading_day
 
 
 class SessionManager:
@@ -52,7 +53,7 @@ class SessionManager:
         now = now or self.now()
         sh, sm = map(int, self.settings.market_start.split(":"))
         eh, em = map(int, self.settings.market_end.split(":"))
-        return dt_time(sh, sm) <= now.time() < dt_time(eh, em)
+        return is_trading_day(now.date()) and dt_time(sh, sm) <= now.time() < dt_time(eh, em)
 
     def start(self) -> None:
         if self.thread and self.thread.is_alive():
