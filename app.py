@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -35,6 +36,7 @@ from market_breadth import build_market_breadth, build_sector_breadth
 from midcpnifty_underlying import MidcapNiftyUnderlyingManager
 from output import market_live_json, stock_json
 from rbi_news import RbiNewsManager, rbi_news_json
+from runtime_guard import ServiceWatchdog, is_trading_day, process_stats, raise_nofile_limit
 from session import SessionManager
 from state_runtime import RuntimeFreshnessState
 from stock_depth import StockDepthManager, stock_depth_json, stock_depth_listing_json
@@ -169,19 +171,22 @@ def startup() -> None:
             index_manager = None
             index_error = f"{type(exc).__name__}: {exc}"
 
-        # Daily archive: a best-effort copy of each session's completed 1m
-        # candles on disk for backtesting. Live serving stays RAM-only and an
-        # archive failure never affects the feeds.
-        try:
-            archive_manager = ArchiveManager(
-                DailyArchive(archive_dir_from_environment(), settings.timezone), state, lambda: index_manager
-            )
-            manager.on_session_end = archive_manager.archive_equity
-            if index_manager is not None:
-                index_manager.on_session_end = archive_manager.archive_indices
-            archive_manager.start()
-        except Exception:
-            archive_manager = None
+        # Daily archive: an opt-in copy of each session's completed 1m candles on
+        # disk (PSYGRID_ARCHIVE=1). PSYGRID is live-only by default: nothing about
+        # the market is written to disk and every session's data is dropped at
+        # its end. An archive failure never affects the feeds.
+        archive_manager = None
+        if _env_flag("PSYGRID_ARCHIVE"):
+            try:
+                archive_manager = ArchiveManager(
+                    DailyArchive(archive_dir_from_environment(), settings.timezone), state, lambda: index_manager
+                )
+                manager.on_session_end = archive_manager.archive_equity
+                if index_manager is not None:
+                    index_manager.on_session_end = archive_manager.archive_indices
+                archive_manager.start()
+            except Exception:
+                archive_manager = None
 
         # Additive derived-data layer. It consumes the exact same canonical
         # PSYGRID live payload builder used by /public/live.json, so the core
@@ -314,9 +319,13 @@ def startup() -> None:
         config_error = str(exc)
 
 
+def _env_flag(name: str) -> bool:
+    return os.getenv(name, "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def start_microstructure_recorder(live_state, instruments):
-    """The Full-packet research recorder, unless PSYGRID_MICROSTRUCTURE=0."""
-    if os.getenv("PSYGRID_MICROSTRUCTURE", "1").strip() == "0":
+    """The Full-packet research recorder; opt-in with PSYGRID_MICROSTRUCTURE=1 (it writes to disk)."""
+    if not _env_flag("PSYGRID_MICROSTRUCTURE"):
         return None
     from microstructure import MicrostructureRecorder, index_bars_for_minute, state_bars_for_minute
 
@@ -391,11 +400,25 @@ def shutdown() -> None:
         manager = None
 
 
+service_watchdog: ServiceWatchdog | None = None
+_process_started_epoch = time.time()
+_last_live_generated_epoch: float | None = None
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    global service_watchdog
+    raise_nofile_limit()
+    # Feeds systemd's WatchdogSec only while this process still answers HTTP and
+    # stays inside its descriptor/memory budget; a no-op outside systemd.
+    service_watchdog = ServiceWatchdog.from_environment(int(os.getenv("PORT", "10000")))
+    service_watchdog.start()
     startup()
-    yield
-    shutdown()
+    try:
+        yield
+    finally:
+        service_watchdog.stop()
+        shutdown()
 
 
 app = FastAPI(title="Psygrid", docs_url=None, redoc_url=None, lifespan=lifespan)
@@ -507,9 +530,114 @@ def root() -> Response:
     )
 
 
+def _mark_live_generated() -> None:
+    global _last_live_generated_epoch
+    _last_live_generated_epoch = time.time()
+
+
+def _iso_epoch(epoch: float | None) -> str | None:
+    if epoch is None:
+        return None
+    return datetime.fromtimestamp(epoch, ZoneInfo("Asia/Kolkata")).isoformat(timespec="seconds")
+
+
+def _service_health_payload() -> dict:
+    """Real liveness: process budget, session window, Dhan feed and data freshness.
+
+    ``status`` is OK only when nothing below is wrong; DEGRADED lists ``reasons``.
+    Outside market hours an idle, disconnected feed is expected and is not a fault.
+    """
+    now = datetime.now(ZoneInfo("Asia/Kolkata"))
+    reasons: list[str] = []
+    process = process_stats()
+    process["uptime_seconds"] = round(time.time() - _process_started_epoch, 1)
+    if process.get("fd_usage_ratio") is not None and process["fd_usage_ratio"] >= 0.7:
+        reasons.append(f"open file descriptors high: {process['open_fds']}/{process['fd_limit']}")
+    watchdog = service_watchdog.last_check if service_watchdog is not None else None
+    if watchdog and watchdog.get("ok") is False:
+        reasons.extend(f"watchdog: {reason}" for reason in watchdog.get("reasons", []))
+
+    trading_day = is_trading_day(now.date())
+    in_hours = _in_equity_session(now)
+    market_window = "OPEN" if in_hours else ("CLOSED" if trading_day else "NON_TRADING_DAY")
+    snap = state.snapshot() if state is not None else {}
+    feed = getattr(manager, "feed", None) if manager is not None else None
+    feed_thread = getattr(feed, "_thread", None)
+    feed_thread_alive = bool(feed_thread is not None and feed_thread.is_alive())
+    tick_age = snap.get("last_tick_age_seconds")
+    max_age = snap.get("max_live_age_seconds")
+    fresh = bool(
+        snap.get("session_status") == "LIVE" and tick_age is not None and max_age is not None and tick_age <= max_age
+    )
+
+    if config_error:
+        status = "CONFIG_ERROR"
+        reasons.insert(0, config_error)
+    elif state is None:
+        status = "STARTING"
+    else:
+        if in_hours:
+            if snap.get("session_status") != "LIVE":
+                reasons.append(f"market hours but session is {snap.get('session_status')}")
+            if snap.get("feed_status") != "CONNECTED":
+                reasons.append(f"market hours but Dhan feed is {snap.get('feed_status')}")
+            if not feed_thread_alive:
+                reasons.append("market hours but Dhan feed thread is not running")
+            if not fresh:
+                reasons.append(f"market data stale: last tick {tick_age}s ago (max {max_age}s)")
+        status = "DEGRADED" if reasons else "OK"
+
+    index_states = list(index_manager.states.values()) if index_manager is not None else []
+    index_feed: dict[str, int] = {}
+    for index_state in index_states:
+        key = str(getattr(index_state, "feed_status", "UNKNOWN"))
+        index_feed[key] = index_feed.get(key, 0) + 1
+
+    return {
+        "service": "PSYGRID",
+        "status": status,
+        "reasons": reasons,
+        "checked_at": now.isoformat(timespec="seconds"),
+        "process": process,
+        "watchdog": watchdog,
+        "session": {
+            "trading_day": trading_day,
+            "market_window": market_window,
+            "session_status": snap.get("session_status"),
+            "session_date": snap.get("session_date"),
+        },
+        "dhan": {
+            "feed_status": snap.get("feed_status"),
+            "feed_thread_alive": feed_thread_alive,
+            "stream_health": snap.get("stream_health"),
+            "websocket_reconnects": snap.get("websocket_reconnects"),
+            "websocket_connected_at": snap.get("websocket_connected_at"),
+            "last_message_at": snap.get("last_message_at"),
+            "last_feed_error": snap.get("last_feed_error"),
+            "token_validity": snap.get("token_validity"),
+        },
+        "data": {
+            "fresh": fresh,
+            "last_market_timestamp": snap.get("last_tick_at"),
+            "last_tick_age_seconds": tick_age,
+            "max_live_age_seconds": max_age,
+            "stock_count": snap.get("stock_count"),
+            "subscribed_count": snap.get("subscribed_count"),
+            "live_stock_count": snap.get("live_stock_count"),
+            "last_endpoint_generated_at": _iso_epoch(_last_live_generated_epoch),
+        },
+        "index_layer": {"available": index_manager is not None, "feed_status": index_feed, "error": index_error},
+        "storage": {
+            "archive_enabled": archive_manager is not None,
+            "microstructure_enabled": microstructure_recorder is not None,
+        },
+    }
+
+
 @app.get("/health", response_class=Response)
 def health() -> Response:
-    return json_response({"service": "PSYGRID", "status": "OK"})
+    # Always HTTP 200 while the process can answer; read ``status``/``reasons`` for the truth.
+    return json_response(_service_health_payload())
 
 
 @app.get("/ready", response_class=Response)
@@ -534,6 +662,7 @@ def public_live() -> Response:
     error = _error_response()
     if error:
         return error
+    _mark_live_generated()
     return json_response(market_live_json(state))
 
 
@@ -543,6 +672,7 @@ def _public_live_range(start: int, end: int) -> Response:
         return error
     # Never sort a shard independently. Every shard is a slice of the same
     # canonical equity-universe order used by the feed and configuration.
+    _mark_live_generated()
     return json_response(market_live_json(state, (start, end), True))
 
 
@@ -887,7 +1017,7 @@ _DERIVATIVES_SUFFIXES = ("_options", "_depth", "_futures", "_nifty50")
 def _in_equity_session(now: datetime) -> bool:
     start = settings.market_start if settings is not None else MARKET_START
     end = settings.market_end if settings is not None else MARKET_END
-    return now.weekday() < 5 and start <= now.strftime("%H:%M") < end
+    return is_trading_day(now.date()) and start <= now.strftime("%H:%M") < end
 
 
 def _out_of_session(names: list[str], now: datetime) -> frozenset[str]:

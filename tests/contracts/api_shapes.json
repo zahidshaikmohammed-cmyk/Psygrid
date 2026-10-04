@@ -66,8 +66,57 @@
  },
  "/health": {
   "shape": {
+   "checked_at": "str",
+   "data": {
+    "fresh": "bool",
+    "last_endpoint_generated_at": "null",
+    "last_market_timestamp": "null",
+    "last_tick_age_seconds": "null",
+    "live_stock_count": "int",
+    "max_live_age_seconds": "int",
+    "stock_count": "int",
+    "subscribed_count": "int"
+   },
+   "dhan": {
+    "feed_status": "str",
+    "feed_thread_alive": "bool",
+    "last_feed_error": "str",
+    "last_message_at": "null",
+    "stream_health": "str",
+    "token_validity": "null",
+    "websocket_connected_at": "null",
+    "websocket_reconnects": "int"
+   },
+   "index_layer": {
+    "available": "bool",
+    "error": "str",
+    "feed_status": {
+     "STARTING": "int"
+    }
+   },
+   "process": {
+    "fd_limit": "int",
+    "fd_usage_ratio": "float",
+    "open_fds": "int",
+    "pid": "int",
+    "rss_mb": "float",
+    "threads": "int",
+    "uptime_seconds": "float"
+   },
+   "reasons": [],
    "service": "str",
-   "status": "str"
+   "session": {
+    "market_window": "str",
+    "session_date": "str",
+    "session_status": "str",
+    "trading_day": "bool"
+   },
+   "status": "str",
+   "storage": {
+    "archive_enabled": "bool",
+    "microstructure_enabled": "bool"
+   },
+   "watchdog": "null"
   },
   "status_code": 200
  },

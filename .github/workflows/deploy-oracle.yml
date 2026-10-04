@@ -47,8 +47,9 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           /home/ubuntu/Psygrid/.venv/bin/pip install -r requirements.txt
-          /home/ubuntu/Psygrid/.venv/bin/python -m py_compile app.py
-          sudo systemctl daemon-reload
+          /home/ubuntu/Psygrid/.venv/bin/python -m py_compile app.py runtime_guard.py
+          # Restart policy, watchdog, fd limit, priority over downstream services, bounded journal.
+          sudo bash deploy/harden_psygrid.sh
           if ! sudo iptables -C INPUT -p tcp --dport 10000 -j ACCEPT 2>/dev/null; then
             sudo iptables -I INPUT 5 -p tcp --dport 10000 -j ACCEPT
           fi
@@ -64,8 +65,18 @@ jobs:
           done
           test "$health_ok" -eq 1
           sleep 10
-          curl -fsS http://127.0.0.1:10000/health
-          echo
+          health="$(curl -fsS http://127.0.0.1:10000/health)"
+          echo "$health"
+          # The new process must run with the raised descriptor limit and a sane status.
+          printf '%s' "$health" | /home/ubuntu/Psygrid/.venv/bin/python -c '
+          import json, sys
+          h = json.load(sys.stdin)
+          p = h["process"]
+          assert h["status"] in {"OK", "DEGRADED"}, h["status"]
+          assert p["fd_limit"] is None or p["fd_limit"] >= 65536, p
+          assert p["fd_usage_ratio"] is None or p["fd_usage_ratio"] < 0.2, p
+          print("health:", h["status"], h["reasons"], "fds", p["open_fds"], "/", p["fd_limit"])
+          '
           REMOTE
 
       - name: Verify public health

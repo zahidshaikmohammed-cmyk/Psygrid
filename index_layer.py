@@ -18,6 +18,7 @@ from dhanhq import DhanContext, MarketFeed
 
 from config import refresh_access_token
 from output import _clean_candle, _ist_timestamp, _price
+from runtime_guard import close_market_feed, is_trading_day
 
 MASTER_URL = "https://images.dhan.co/api-data/api-scrip-master.csv"
 INDEX_SEGMENT = "IDX_I"
@@ -517,11 +518,9 @@ class IndexLayerFeed:
                         state.set_feed_status("RECONNECTING", f"index websocket:{message}")
             finally:
                 self._connection_stop.set()
-                try:
-                    if feed is not None:
-                        feed.close_connection()
-                except Exception:
-                    pass
+                # close_market_feed also closes the event loop MarketFeed created; leaving it open leaked
+                # its descriptors on every reconnect until the HTTP server could no longer accept.
+                close_market_feed(feed)
                 self._feed = None
             if self._stop.wait(self._backoff):
                 break
@@ -569,7 +568,7 @@ class IndexLayerManager:
     def _in_market(self, now: datetime) -> bool:
         sh, sm = map(int, self.settings.market_start.split(":"))
         eh, em = map(int, self.settings.market_end.split(":"))
-        return dt_time(sh, sm) <= now.time() < dt_time(eh, em)
+        return is_trading_day(now.date()) and dt_time(sh, sm) <= now.time() < dt_time(eh, em)
 
     def start(self):
         if self.thread and self.thread.is_alive():
