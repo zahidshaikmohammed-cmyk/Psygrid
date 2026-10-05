@@ -5,7 +5,10 @@ name: PSYGRID Live Core Deploy (E2 Micro nodes)
 # a restart wipes a node's RAM-only session, so deploys are a deliberate act.
 #
 # Repository configuration:
-#   secret   LIVE_CORE_SSH_KEY              private key for both VMs
+#   secret   LIVE_CORE_NODE0_SSH_KEY        private key for node 0's VM (required to deploy node 0)
+#   secret   LIVE_CORE_NODE1_SSH_KEY        private key for node 1's VM (required to deploy node 1)
+#   The two VMs were created with different key pairs, so each node is reached only with its own key.
+#   Keys live only in GitHub secrets and in a 0600 file on the runner for the length of this step.
 #   variable LIVE_CORE_NODE0_HOST           public IP of node 0 (default 129.225.112.47)
 #   variable LIVE_CORE_NODE1_HOST           public IP of node 1 (node 1 is skipped while unset)
 #   variable LIVE_CORE_NODE0_PRIVATE_URL    e.g. http://10.0.0.11:10000 (peer traffic stays in the VCN)
@@ -91,7 +94,8 @@ jobs:
 
       - name: Deploy nodes
         env:
-          SSH_KEY: ${{ secrets.LIVE_CORE_SSH_KEY }}
+          NODE0_SSH_KEY: ${{ secrets.LIVE_CORE_NODE0_SSH_KEY }}
+          NODE1_SSH_KEY: ${{ secrets.LIVE_CORE_NODE1_SSH_KEY }}
           TARGET: ${{ inputs.target }}
           SSH_USER: ${{ vars.LIVE_CORE_SSH_USER || 'ubuntu' }}
           NODE0_HOST: ${{ vars.LIVE_CORE_NODE0_HOST || '129.225.112.47' }}
@@ -101,9 +105,23 @@ jobs:
           RELEASE: ${{ github.sha }}
         run: |
           set -euo pipefail
-          test -n "$SSH_KEY" || { echo "secret LIVE_CORE_SSH_KEY is not set"; exit 1; }
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          printf '%s\n' "$SSH_KEY" > ~/.ssh/live_core && chmod 600 ~/.ssh/live_core
+          trap 'rm -f ~/.ssh/live_core_node0 ~/.ssh/live_core_node1' EXIT
+
+          # Write node N's key to its own file; fail early if the selected node has no key.
+          install_key() {
+            local node="$1" key="$2"
+            if [ -z "$key" ]; then
+              echo "secret LIVE_CORE_NODE${node}_SSH_KEY is not set; cannot deploy node ${node}"
+              exit 1
+            fi
+            ( umask 077 && printf '%s\n' "$key" > ~/.ssh/live_core_node"${node}" )
+          }
+          case "$TARGET" in both|node0) install_key 0 "$NODE0_SSH_KEY" ;; esac
+          case "$TARGET" in
+            both|node1) if [ -n "$NODE1_HOST" ]; then install_key 1 "$NODE1_SSH_KEY"; fi ;;
+          esac
+          unset NODE0_SSH_KEY NODE1_SSH_KEY
           NODE0_URL="${NODE0_URL:-http://${NODE0_HOST}:${PORT}}"
           if [ -n "$NODE1_HOST" ]; then NODE1_URL="${NODE1_URL:-http://${NODE1_HOST}:${PORT}}"; fi
 
@@ -111,7 +129,7 @@ jobs:
             local node="$1" host="$2" peers="$3"
             echo "=== node ${node} -> ${host} (peers: ${peers:-none}) ==="
             ssh-keyscan -H "$host" >> ~/.ssh/known_hosts 2>/dev/null
-            local ssh_opts=(-i ~/.ssh/live_core -o BatchMode=yes -o ConnectTimeout=20)
+            local ssh_opts=(-i ~/.ssh/live_core_node"${node}" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20)
             local root="/home/${SSH_USER}/psygrid-live-core"
             local dir="${root}/releases/${RELEASE}"
             ssh "${ssh_opts[@]}" "${SSH_USER}@${host}" "mkdir -p '${dir}'"

@@ -265,3 +265,16 @@ def test_install_script_rejects_a_node_id_outside_the_cluster(node_id):
         text=True,
     )
     assert result.returncode == 2
+
+
+def test_each_node_is_deployed_with_its_own_ssh_key():
+    code = _code_lines((ROOT / ".github" / "workflows" / "deploy-live-core.yml").read_text(encoding="utf-8"))
+    assert "secrets.LIVE_CORE_NODE0_SSH_KEY" in code and "secrets.LIVE_CORE_NODE1_SSH_KEY" in code
+    assert "secrets.LIVE_CORE_SSH_KEY" not in code  # the VMs do not share a key pair
+    assert '-i ~/.ssh/live_core_node"${node}"' in code and "IdentitiesOnly=yes" in code
+    assert "rm -f ~/.ssh/live_core_node0 ~/.ssh/live_core_node1" in code
+    assert "PRIVATE KEY" not in "".join(
+        path.read_text(encoding="utf-8", errors="ignore")
+        for path in [*ROOT.joinpath("deploy", "live-core").iterdir(), *ROOT.joinpath(".github", "workflows").iterdir()]
+        if path.is_file()
+    )

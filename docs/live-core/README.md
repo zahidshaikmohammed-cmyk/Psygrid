@@ -215,7 +215,10 @@ restart drops that node's RAM session. It:
 
 One-time setup:
 
-1. **Repository settings.** Secret `LIVE_CORE_SSH_KEY`. Variables `LIVE_CORE_NODE1_HOST`
+1. **Repository settings.** Secrets `LIVE_CORE_NODE0_SSH_KEY` and `LIVE_CORE_NODE1_SSH_KEY`: the
+   private keys of the two VMs, which were created with different key pairs. Node 0 is deployed
+   only with the node 0 key and node 1 only with the node 1 key; a target of `node0` needs only the
+   first, `node1` only the second. Keys are never stored in the repository. Variables `LIVE_CORE_NODE1_HOST`
    (node 1's public IP) and, recommended, `LIVE_CORE_NODE0_PRIVATE_URL` /
    `LIVE_CORE_NODE1_PRIVATE_URL` (VCN private IPs, so peer traffic stays internal). Optionally
    `LIVE_CORE_NODE0_HOST` (defaults to 129.225.112.47) and `LIVE_CORE_SSH_USER` (defaults to
