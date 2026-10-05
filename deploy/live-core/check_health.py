@@ -20,7 +20,9 @@ def fetch(url: str, timeout: float = 60.0) -> dict:
         return json.loads(r.read().decode("utf-8"))
 
 
-def check_node(health: dict, expect_node: int, node_count: int, max_rss_mb: float) -> list[str]:
+def check_node(
+    health: dict, expect_node: int, node_count: int, max_rss_mb: float, allow_config_error: bool = False
+) -> list[str]:
     process = health.get("process", {})
     print(
         f"node {health.get('node_id')}/{health.get('node_count')} status {health.get('status')} {health.get('reasons')}"
@@ -35,7 +37,9 @@ def check_node(health: dict, expect_node: int, node_count: int, max_rss_mb: floa
         failures.append(
             f"node identity is {health.get('node_id')}/{health.get('node_count')}, expected {expect_node}/{node_count}"
         )
-    if health.get("status") == "CONFIG_ERROR":
+    if health.get("status") == "CONFIG_ERROR" and allow_config_error:
+        print("WARNING: credentials missing (fill /etc/psygrid-live-core.env): " + "; ".join(health.get("reasons", [])))
+    elif health.get("status") == "CONFIG_ERROR":
         failures.append(
             "configuration error (fill /etc/psygrid-live-core.env): " + "; ".join(health.get("reasons", []))
         )
@@ -112,6 +116,7 @@ def main(argv=None) -> int:
     parser.add_argument("--require-coverage", action="store_true")
     parser.add_argument("--require-reachable", action="store_true")
     parser.add_argument("--require-live", action="store_true")
+    parser.add_argument("--allow-config-error", action="store_true")
     parser.add_argument("--wait-seconds", type=float, default=60.0)
     args = parser.parse_args(argv)
     path = {"node": "/health/node", "cluster": "/health", "live": "/public/live.json"}[args.mode]
@@ -126,7 +131,7 @@ def main(argv=None) -> int:
                 return 1
             time.sleep(2)
     if args.mode == "node":
-        failures = check_node(health, args.expect_node, args.node_count, args.max_rss_mb)
+        failures = check_node(health, args.expect_node, args.node_count, args.max_rss_mb, args.allow_config_error)
     elif args.mode == "cluster":
         failures = check_cluster(health, args.require_coverage, args.require_reachable)
     else:
