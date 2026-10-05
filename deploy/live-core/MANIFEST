@@ -1,0 +1,27 @@
+# Files shipped to a Live Core node. Nothing else from the repository is copied to the E2 Micro VMs:
+# no app.py, no options/futures/depth/indicator/archive/intelligence modules.
+# tests/live_core/test_live_core_resources.py proves this set imports and starts on its own.
+live_core/__init__.py
+live_core/__main__.py
+live_core/aggregate.py
+live_core/api.py
+live_core/config.py
+live_core/feed.py
+live_core/history.py
+live_core/partition.py
+live_core/render.py
+live_core/runtime.py
+live_core/state.py
+auth_retry.py
+config.py
+dhan_api.py
+dhan_auth.py
+feed.py
+instrument_master.py
+output.py
+runtime_guard.py
+stocks.json
+deploy/live-core/requirements.txt
+deploy/live-core/psygrid-live-core.service.in
+deploy/live-core/install.sh
+deploy/live-core/check_health.py

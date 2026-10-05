@@ -1,0 +1,171 @@
+name: PSYGRID Live Core Deploy (E2 Micro nodes)
+
+# Deploys ONLY the Live Core (python -m live_core) to the two Oracle Always Free E2.1.Micro VMs.
+# It never touches the full PSYGRID VM, psygrid.service or deploy-oracle.yml. Manual trigger only:
+# a restart wipes a node's RAM-only session, so deploys are a deliberate act.
+#
+# Repository configuration:
+#   secret   LIVE_CORE_NODE0_SSH_KEY        private key for node 0's VM (required to deploy node 0)
+#   secret   LIVE_CORE_NODE1_SSH_KEY        private key for node 1's VM (required to deploy node 1)
+#   The two VMs were created with different key pairs, so each node is reached only with its own key.
+#   Keys live only in GitHub secrets and in a 0600 file on the runner for the length of this step.
+#   variable LIVE_CORE_NODE0_HOST           public IP of node 0 (default 129.225.112.47)
+#   variable LIVE_CORE_NODE1_HOST           public IP of node 1 (node 1 is skipped while unset)
+#   variable LIVE_CORE_NODE0_PRIVATE_URL    e.g. http://10.0.0.11:10000 (peer traffic stays in the VCN)
+#   variable LIVE_CORE_NODE1_PRIVATE_URL    e.g. http://10.0.0.12:10000
+#   variable LIVE_CORE_SSH_USER             default ubuntu
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Which node(s) to deploy
+        type: choice
+        options: [both, node0, node1]
+        default: both
+      allow_market_hours:
+        description: Deploy during 09:00-15:20 IST on a weekday (restarting a node drops its RAM session)
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-live-core
+  cancel-in-progress: false
+
+env:
+  NODE_COUNT: "2"
+  PORT: "10000"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Lint
+        run: ruff check live_core tests/live_core && ruff format --check live_core tests/live_core
+
+      - name: Live Core tests and the shared feed/runtime-guard/contract tests
+        run: >
+          python -m pytest -q tests/live_core tests/test_runtime_guard.py tests/test_shard_contract.py
+          tests/test_universe.py tests/test_live_safety.py tests/test_feed_timestamp.py
+
+      - name: Build the Live Core bundle (manifest files only)
+        run: |
+          set -euo pipefail
+          files="$(grep -v '^[[:space:]]*#' deploy/live-core/MANIFEST | sed '/^[[:space:]]*$/d')"
+          for f in $files; do git ls-files --error-unmatch "$f" >/dev/null; done
+          tar czf live-core.tgz $files
+          tar tzf live-core.tgz
+          if tar tzf live-core.tgz | grep -Eq '(^|/)app\.py$'; then echo "app.py must not ship"; exit 1; fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: live-core-bundle
+          path: live-core.tgz
+          retention-days: 7
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Refuse to restart nodes during the market session unless asked
+        if: ${{ !inputs.allow_market_hours }}
+        run: |
+          set -euo pipefail
+          now="$(TZ=Asia/Kolkata date +%u%H%M)"
+          day="${now:0:1}"; hhmm="${now:1}"
+          if [ "$day" -le 5 ] && [ "$hhmm" -ge 0900 ] && [ "$hhmm" -lt 1520 ]; then
+            echo "It is $(TZ=Asia/Kolkata date) - inside the equity session. Re-run with allow_market_hours to deploy anyway."
+            exit 1
+          fi
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: live-core-bundle
+
+      - name: Deploy nodes
+        env:
+          NODE0_SSH_KEY: ${{ secrets.LIVE_CORE_NODE0_SSH_KEY }}
+          NODE1_SSH_KEY: ${{ secrets.LIVE_CORE_NODE1_SSH_KEY }}
+          TARGET: ${{ inputs.target }}
+          SSH_USER: ${{ vars.LIVE_CORE_SSH_USER || 'ubuntu' }}
+          NODE0_HOST: ${{ vars.LIVE_CORE_NODE0_HOST || '129.225.112.47' }}
+          NODE1_HOST: ${{ vars.LIVE_CORE_NODE1_HOST }}
+          NODE0_URL: ${{ vars.LIVE_CORE_NODE0_PRIVATE_URL }}
+          NODE1_URL: ${{ vars.LIVE_CORE_NODE1_PRIVATE_URL }}
+          RELEASE: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          trap 'rm -f ~/.ssh/live_core_node0 ~/.ssh/live_core_node1' EXIT
+
+          # Write node N's key to its own file; fail early if the selected node has no key.
+          install_key() {
+            local node="$1" key="$2"
+            if [ -z "$key" ]; then
+              echo "secret LIVE_CORE_NODE${node}_SSH_KEY is not set; cannot deploy node ${node}"
+              exit 1
+            fi
+            ( umask 077 && printf '%s\n' "$key" > ~/.ssh/live_core_node"${node}" )
+          }
+          case "$TARGET" in both|node0) install_key 0 "$NODE0_SSH_KEY" ;; esac
+          case "$TARGET" in
+            both|node1) if [ -n "$NODE1_HOST" ]; then install_key 1 "$NODE1_SSH_KEY"; fi ;;
+          esac
+          unset NODE0_SSH_KEY NODE1_SSH_KEY
+          NODE0_URL="${NODE0_URL:-http://${NODE0_HOST}:${PORT}}"
+          if [ -n "$NODE1_HOST" ]; then NODE1_URL="${NODE1_URL:-http://${NODE1_HOST}:${PORT}}"; fi
+
+          deploy_node() {
+            local node="$1" host="$2" peers="$3"
+            echo "=== node ${node} -> ${host} (peers: ${peers:-none}) ==="
+            ssh-keyscan -H "$host" >> ~/.ssh/known_hosts 2>/dev/null
+            local ssh_opts=(-i ~/.ssh/live_core_node"${node}" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20)
+            local root="/home/${SSH_USER}/psygrid-live-core"
+            local dir="${root}/releases/${RELEASE}"
+            ssh "${ssh_opts[@]}" "${SSH_USER}@${host}" "mkdir -p '${dir}'"
+            scp "${ssh_opts[@]}" live-core.tgz "${SSH_USER}@${host}:${dir}/live-core.tgz"
+            ssh "${ssh_opts[@]}" "${SSH_USER}@${host}" "set -euo pipefail
+              cd '${dir}' && tar xzf live-core.tgz && rm -f live-core.tgz
+              sudo NODE_ID='${node}' NODE_COUNT='${NODE_COUNT}' APP_USER='${SSH_USER}' LIVE_CORE_ROOT='${root}' \\
+                   PORT='${PORT}' PEERS='${peers}' bash deploy/live-core/install.sh
+              if ! python3 deploy/live-core/check_health.py node http://127.0.0.1:${PORT} \\
+                   --expect-node '${node}' --node-count '${NODE_COUNT}'; then
+                sudo journalctl -u psygrid-live-core-node${node} -n 60 --no-pager
+                exit 1
+              fi"
+          }
+
+          case "$TARGET" in
+            both|node0) deploy_node 0 "$NODE0_HOST" "${NODE1_URL:+1=${NODE1_URL}}" ;;
+          esac
+          case "$TARGET" in
+            both|node1)
+              if [ -z "$NODE1_HOST" ]; then
+                echo "LIVE_CORE_NODE1_HOST is not set; node 1 skipped"
+              else
+                deploy_node 1 "$NODE1_HOST" "0=${NODE0_URL}"
+              fi
+              ;;
+          esac
+
+      - name: Verify the combined system from node 0
+        env:
+          NODE0_HOST: ${{ vars.LIVE_CORE_NODE0_HOST || '129.225.112.47' }}
+          NODE1_HOST: ${{ vars.LIVE_CORE_NODE1_HOST }}
+        run: |
+          set -euo pipefail
+          tar xzf live-core.tgz deploy/live-core/check_health.py
+          # Both partitions must be covered once node 1 exists; until then node 0 alone is reported.
+          require=""
+          if [ -n "$NODE1_HOST" ]; then require="--require-coverage"; fi
+          python3 deploy/live-core/check_health.py cluster "http://${NODE0_HOST}:${PORT}" $require
