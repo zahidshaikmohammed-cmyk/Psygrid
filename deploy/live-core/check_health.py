@@ -13,7 +13,7 @@ import time
 import urllib.request
 
 
-def fetch(url: str, timeout: float = 15.0) -> dict:
+def fetch(url: str, timeout: float = 60.0) -> dict:
     with urllib.request.urlopen(
         urllib.request.Request(url, headers={"User-Agent": "live-core-check"}), timeout=timeout
     ) as r:
@@ -52,35 +52,69 @@ def check_node(health: dict, expect_node: int, node_count: int, max_rss_mb: floa
     return failures
 
 
-def check_cluster(health: dict, require_coverage: bool) -> list[str]:
+def check_cluster(health: dict, require_coverage: bool, require_reachable: bool = False) -> list[str]:
     cluster = health.get("cluster", {})
     for node, summary in sorted(cluster.get("nodes", {}).items()):
         print(
             f"NODE {node}: reachable={summary.get('reachable')} healthy={summary.get('healthy')} "
             f"session={summary.get('session_status')} feed={summary.get('feed_status')} "
             f"subscribed={summary.get('subscribed_instrument_count')}/{summary.get('expected_instrument_count')} "
-            f"error={summary.get('error', '')}"
+            f"partition=[{summary.get('partition')}, {summary.get('partition_end')}) "
+            f"status={summary.get('status')} reasons={summary.get('reasons')} error={summary.get('error', '')}"
         )
     print(
         f"COVERAGE: {cluster.get('coverage_status')} "
         f"{cluster.get('covered_instrument_count')}/{cluster.get('expected_instrument_count')}"
     )
+    failures = []
     if require_coverage and not cluster.get("partitions_covered"):
-        return [f"partitions not covered: {cluster.get('coverage_status')}"]
-    return []
+        failures.append(f"partitions not covered: {cluster.get('coverage_status')}")
+    nodes = cluster.get("nodes", {})
+    if require_reachable and (
+        len(nodes) != cluster.get("node_count") or any(not n.get("reachable") or n.get("error") for n in nodes.values())
+    ):
+        failures.append("every node must be reachable from this node with a matching partition")
+    return failures
+
+
+def check_live(payload: dict, require_live: bool) -> list[str]:
+    """Summarise /public/live.json: status, coverage and how many real candles it carries."""
+    stocks = payload.get("stocks") or {}
+    candles = sum(len(stock.get("candles_1m") or []) for stock in stocks.values())
+    with_candles = sum(1 for stock in stocks.values() if stock.get("candles_1m"))
+    coverage = payload.get("coverage") or {}
+    print(
+        f"live.json: status={payload.get('status')} session={payload.get('session', {}).get('status')} "
+        f"date={payload.get('session', {}).get('date')} stock_count={payload.get('stock_count')} "
+        f"universe_size={payload.get('universe_size')} stocks_with_candles={with_candles} candles={candles}"
+    )
+    for node, info in sorted((coverage.get("nodes") or {}).items()):
+        print(
+            f"  node {node}: available={info.get('available')} session={info.get('session_status')} "
+            f"stocks={info.get('stock_count')}/{info.get('expected_stock_count')} error={info.get('error', '')}"
+        )
+    failures = []
+    if require_live:
+        if payload.get("status") != "OK" or payload.get("stock_count") != payload.get("universe_size"):
+            failures.append(f"live.json is {payload.get('status')} with {payload.get('stock_count')} stocks")
+        if not with_candles:
+            failures.append("live.json carries no candles yet")
+    return failures
 
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=["node", "cluster"])
+    parser.add_argument("mode", choices=["node", "cluster", "live"])
     parser.add_argument("base_url")
     parser.add_argument("--expect-node", type=int, default=0)
     parser.add_argument("--node-count", type=int, default=2)
     parser.add_argument("--max-rss-mb", type=float, default=400.0)
     parser.add_argument("--require-coverage", action="store_true")
+    parser.add_argument("--require-reachable", action="store_true")
+    parser.add_argument("--require-live", action="store_true")
     parser.add_argument("--wait-seconds", type=float, default=60.0)
     args = parser.parse_args(argv)
-    path = "/health/node" if args.mode == "node" else "/health"
+    path = {"node": "/health/node", "cluster": "/health", "live": "/public/live.json"}[args.mode]
     deadline = time.monotonic() + args.wait_seconds
     while True:
         try:
@@ -93,8 +127,10 @@ def main(argv=None) -> int:
             time.sleep(2)
     if args.mode == "node":
         failures = check_node(health, args.expect_node, args.node_count, args.max_rss_mb)
+    elif args.mode == "cluster":
+        failures = check_cluster(health, args.require_coverage, args.require_reachable)
     else:
-        failures = check_cluster(health, args.require_coverage)
+        failures = check_live(health, args.require_live)
     for failure in failures:
         print(f"FAIL: {failure}", file=sys.stderr)
     return 1 if failures else 0

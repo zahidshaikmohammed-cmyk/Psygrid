@@ -244,6 +244,9 @@ def test_the_live_core_workflow_deploys_only_the_live_core():
     assert "harden_psygrid" not in code and "deploy-oracle" not in code
     assert "140.245.226.102" not in code  # the full PSYGRID VM is never a target
     assert "129.225.112.47" in code
+    # Node 1 has a default host, so a `both` run can never silently skip it.
+    assert "vars.LIVE_CORE_NODE1_HOST || '140.245.228.101'" in code
+    assert "node 1 skipped" not in code
     install = _code_lines((ROOT / "deploy" / "live-core" / "install.sh").read_text(encoding="utf-8"))
     assert "psygrid.service" not in install and "PSYGRID_ARCHIVE" not in install
     assert "systemctl restart psygrid\n" not in install
@@ -271,10 +274,34 @@ def test_each_node_is_deployed_with_its_own_ssh_key():
     code = _code_lines((ROOT / ".github" / "workflows" / "deploy-live-core.yml").read_text(encoding="utf-8"))
     assert "secrets.LIVE_CORE_NODE0_SSH_KEY" in code and "secrets.LIVE_CORE_NODE1_SSH_KEY" in code
     assert "secrets.LIVE_CORE_SSH_KEY" not in code  # the VMs do not share a key pair
-    assert '-i ~/.ssh/live_core_node"${node}"' in code and "IdentitiesOnly=yes" in code
+    assert "-i $HOME/.ssh/live_core_node$1 -o IdentitiesOnly=yes" in code
     assert "rm -f ~/.ssh/live_core_node0 ~/.ssh/live_core_node1" in code
     assert "PRIVATE KEY" not in "".join(
         path.read_text(encoding="utf-8", errors="ignore")
         for path in [*ROOT.joinpath("deploy", "live-core").iterdir(), *ROOT.joinpath(".github", "workflows").iterdir()]
         if path.is_file()
     )
+
+
+def test_check_health_summarises_the_combined_live_endpoint(capsys):
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("check_health", ROOT / "deploy" / "live-core" / "check_health.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    candle = {"timestamp": "2026-10-05 09:15:00 IST", "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}
+    live = {
+        "status": "OK",
+        "stock_count": 2,
+        "universe_size": 2,
+        "session": {"status": "LIVE"},
+        "stocks": {"A": {"candles_1m": [candle]}, "B": {"candles_1m": []}},
+    }
+    assert module.check_live(live, require_live=True) == []
+    assert "stocks_with_candles=1 candles=1" in capsys.readouterr().out
+    assert module.check_live({**live, "status": "PARTIAL", "stock_count": 1}, require_live=True)
+    assert module.check_live({**live, "stocks": {"A": {"candles_1m": []}}}, require_live=True)
+    cluster = {"cluster": {"node_count": 2, "nodes": {"0": {"reachable": True}, "1": {"reachable": False}}}}
+    assert module.check_cluster(cluster, False, require_reachable=True)
+    cluster["cluster"]["nodes"]["1"]["reachable"] = True
+    assert module.check_cluster(cluster, False, require_reachable=True) == []

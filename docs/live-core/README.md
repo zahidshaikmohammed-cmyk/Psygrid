@@ -199,7 +199,9 @@ feed watchdog, history.
 
 The `PSYGRID Live Core Deploy (E2 Micro nodes)` workflow (`deploy-live-core.yml`) is manual only and
 refuses to run during 09:00-15:20 IST on weekdays unless `allow_market_hours` is ticked, because a
-restart drops that node's RAM session. It:
+restart drops that node's RAM session. Its `action` input is `status` (read-only: OS, Python,
+memory, the names but never the values of the variables in `/etc/psygrid-live-core.env`, unit state,
+listeners, local and public health, cluster view and `/public/live.json` summary) or `deploy`, which:
 
 1. Runs the Live Core tests plus the shared feed/runtime-guard/contract tests.
 2. Builds a bundle of only the files in `deploy/live-core/MANIFEST`. `app.py` and the full app's
@@ -210,26 +212,27 @@ restart drops that node's RAM session. It:
    * writes the topology env and renders `psygrid-live-core-node<N>.service`;
    * opens the port in iptables, enables and restarts the unit;
    * keeps the last 3 releases.
-4. Checks `/health/node` on each VM, then the cluster view from node 0. Once node 1 exists, both
-   partitions must be covered.
+4. Checks `/health/node` on each VM. Every selected node is attempted even if an earlier one fails.
+5. From the internet: port 10000 on both VMs, the cluster view from node 0 (for `both`, both nodes
+   must be reachable with matching partitions) and a summary of node 0's `/public/live.json`.
 
 One-time setup:
 
 1. **Repository settings.** Secrets `LIVE_CORE_NODE0_SSH_KEY` and `LIVE_CORE_NODE1_SSH_KEY`: the
    private keys of the two VMs, which were created with different key pairs. Node 0 is deployed
    only with the node 0 key and node 1 only with the node 1 key; a target of `node0` needs only the
-   first, `node1` only the second. Keys are never stored in the repository. Variables `LIVE_CORE_NODE1_HOST`
-   (node 1's public IP) and, recommended, `LIVE_CORE_NODE0_PRIVATE_URL` /
-   `LIVE_CORE_NODE1_PRIVATE_URL` (VCN private IPs, so peer traffic stays internal). Optionally
-   `LIVE_CORE_NODE0_HOST` (defaults to 129.225.112.47) and `LIVE_CORE_SSH_USER` (defaults to
-   `ubuntu`).
+   first, `node1` only the second. Keys are never stored in the repository. The hosts default to
+   129.225.112.47 (node 0) and 140.245.228.101 (node 1); `LIVE_CORE_NODE0_HOST` /
+   `LIVE_CORE_NODE1_HOST` override them. Optional `LIVE_CORE_NODE0_PRIVATE_URL` /
+   `LIVE_CORE_NODE1_PRIVATE_URL` keep peer traffic inside the VCN; without them the nodes use each
+   other's public IP. `LIVE_CORE_SSH_USER` is optional: `ubuntu`, then `opc`, is tried.
 2. **VMs.** Ubuntu 24.04 (Python 3.12). On each VM, create `/etc/psygrid-live-core.env` with the
    Dhan credentials (the first deploy creates a template and reports `CONFIG_ERROR` until it is
    filled).
 3. **Network.** Allow TCP 10000 in the VCN security list: from the internet for node 0, and at least
    from node 0's private IP for node 1.
 
-Node 1 can be deployed before or after node 0. Until it exists, node 0 serves its half and reports
+Either node can be deployed first. While one is missing, the other serves its half and reports
 `PARTIAL` / `LIVE_INCOMPLETE`.
 
 ## Operational notes and open risks
