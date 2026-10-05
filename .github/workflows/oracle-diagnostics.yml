@@ -134,11 +134,11 @@ jobs:
           sec "index ids in Dhan master (read-only)"; curl -sS -m 60 https://images.dhan.co/api-data/api-scrip-master.csv -o /tmp/master.csv && python3 - <<'PY'
           import csv
           for r in csv.DictReader(open("/tmp/master.csv")):
-              if r.get("SEM_INSTRUMENT_NAME", "").upper() == "INDEX":
+              if r.get("SEM_INSTRUMENT_NAME", "").upper() == "INDEX" and r.get("SEM_SMST_SECURITY_ID") in {"13", "19", "21", "25", "27", "29", "51"}:
                   print(r.get("SEM_EXM_EXCH_ID"), r.get("SEM_SMST_SECURITY_ID"), r.get("SEM_TRADING_SYMBOL"), r.get("SM_SYMBOL_NAME"))
           PY
           rm -f /tmp/master.csv
-          sec "served index values"; for k in nifty indiavix nifty500 finnifty; do curl -sS -m 8 http://127.0.0.1:10000/public/$k.json | python3 -c "import json,sys;d=json.load(sys.stdin);print('$k', d.get('symbol'), d.get('security_id'), d.get('ltp'))"; done
+          sec "served index values"; for k in nifty banknifty sensex indiavix nifty500 finnifty niftyit; do curl -sS -m 8 http://127.0.0.1:10000/public/$k.json | python3 -c "import json,sys;d=json.load(sys.stdin);print('$k', d.get('symbol'), d.get('security_id'), d.get('ltp'))"; done
           sec "indicators.json error"; curl -sS -m 10 -o /dev/null -w "http=%{http_code}\n" http://127.0.0.1:10000/public/indicators.json
           sudo journalctl -u psygrid --since "-20 min" --no-pager | grep -B2 -A40 -m2 "Traceback" | tail -90
           sec "psygridevents market health"; curl -sS -m 8 http://127.0.0.1:10100/market/health | head -c 800; echo
