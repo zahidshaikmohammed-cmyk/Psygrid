@@ -132,9 +132,9 @@ class IndicatorRuntime:
             ordered_symbols = ordered_symbols[stock_range[0] : stock_range[1]]
         selected = {symbol: results[symbol] for symbol in ordered_symbols if symbol in results}
         selected_errors = {symbol: errors[symbol] for symbol in ordered_symbols if symbol in errors}
-        fresh_count = sum(v.get("freshness", {}).get("status") == "FRESH" for v in selected.values())
-        stale_count = sum(v.get("freshness", {}).get("status") == "STALE" for v in selected.values())
-        time_error_count = sum(v.get("freshness", {}).get("status") == "TIME_ERROR" for v in selected.values())
+        fresh_count = sum((v.get("freshness") or {}).get("status") == "FRESH" for v in selected.values())
+        stale_count = sum((v.get("freshness") or {}).get("status") == "STALE" for v in selected.values())
+        time_error_count = sum((v.get("freshness") or {}).get("status") == "TIME_ERROR" for v in selected.values())
         return {
             "service": "PSYGRID_MASTER_INDICATOR",
             "engine_version": "1.0.0",

@@ -66,7 +66,12 @@ class LiveFeed(BaseLiveFeed):
                 future.result(timeout=3.0)
                 self._last_resubscribe[key] = now
             except Exception as exc:
-                self.state.mark_websocket_error(f"RESUBSCRIBE:{type(exc).__name__}:{exc}")
+                # A resubscribe that fails for one stale symbol is not a feed failure: the socket
+                # keeps streaming every other symbol. Record it without flipping the feed to ERROR
+                # (which stuck for the whole session), and stop this pass rather than blocking 3 s
+                # per remaining stale symbol; the next pass retries.
+                self.state.set_feed_status(self.state.feed_status, f"RESUBSCRIBE:{type(exc).__name__}:{exc}")
+                break
 
         # Quote API recovery is genuine current quote data. It never creates a
         # candle and never stores market depth.

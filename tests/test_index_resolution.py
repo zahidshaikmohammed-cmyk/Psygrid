@@ -13,3 +13,16 @@ def test_core_index_resolution_does_not_depend_on_csv_availability():
 def test_all_original_index_specs_remain_present():
     assert len(INDEX_SPECS) == 16
     assert set(INDEX_FALLBACK_IDS) < set(INDEX_SPECS)
+
+
+def test_fallback_ids_match_dhan_instrument_master():
+    # From Dhan's api-scrip-master.csv (INDEX rows), verified 2026-10-05.
+    assert INDEX_FALLBACK_IDS == {
+        "nifty": "13",
+        "banknifty": "25",
+        "sensex": "51",
+        "nifty500": "19",
+        "finnifty": "27",
+        "indiavix": "21",
+        "niftyit": "29",
+    }

@@ -209,3 +209,6 @@ def install(monkeypatch) -> None:
     for name, value in values.items():
         assert hasattr(app_module, name), name
         monkeypatch.setattr(app_module, name, value)
+    # /health judges feed freshness only inside the equity session window; pin the window
+    # closed so the pinned shape does not depend on when the suite runs.
+    monkeypatch.setattr(app_module, "_in_equity_session", lambda _now: False)
