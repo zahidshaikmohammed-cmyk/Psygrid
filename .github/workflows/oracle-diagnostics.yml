@@ -109,6 +109,9 @@ jobs:
           PY
           sec "archive writes today"; ls -la /home/ubuntu/psygrid-data/$(TZ=Asia/Kolkata date +%F) 2>/dev/null || echo "no archive directory for today"
           sec "fd count after endpoint sweep"; ls /proc/$(systemctl show -p MainPID --value psygrid)/fd | wc -l
+          # Isolation test already passed on 2026-10-04; skipped in market hours so psygridevents keeps running.
+          RUN_ISOLATION=0
+          if [ "$RUN_ISOLATION" = 1 ]; then
           sec "isolation: stop psygridevents, PSYGRID must keep serving"
           PID_BEFORE=$(systemctl show -p MainPID --value psygrid)
           sudo systemctl stop psygridevents || true
@@ -118,5 +121,16 @@ jobs:
           sudo systemctl start psygridevents || true
           sleep 5
           systemctl show psygridevents -p ActiveState -p MemoryMax -p CPUWeight -p OOMScoreAdjust -p IOSchedulingClass 2>/dev/null
+          fi
+          sec "market-hours sample"; curl -sS -m 15 http://127.0.0.1:10000/public/live-a.json | python3 -c '
+          import json, sys
+          d = json.load(sys.stdin)
+          s = d.get("stocks") or {}
+          print("session", d.get("session"), "status", d.get("status"), "stocks", len(s))
+          for sym, rec in list(s.items())[:3]:
+              c = rec.get("candles_1m") or []
+              print(sym, "candles", len(c), "last", c[-1] if c else None)
+          '
+          sec "psygridevents market health"; curl -sS -m 8 http://127.0.0.1:10100/market/health | head -c 800; echo
           true
           REMOTE
