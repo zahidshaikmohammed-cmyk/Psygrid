@@ -23,13 +23,15 @@ from runtime_guard import close_market_feed, is_trading_day
 MASTER_URL = "https://images.dhan.co/api-data/api-scrip-master.csv"
 INDEX_SEGMENT = "IDX_I"
 INDEX_INSTRUMENT = "INDEX"
+# Dhan IDX_I security ids, checked against Dhan's instrument master on 2026-10-05
+# (NSE 17 is NIFTY 100 and 26 is not an index there; NIFTY 500 is 19, INDIA VIX is 21).
 INDEX_FALLBACK_IDS = {
     "nifty": "13",
     "banknifty": "25",
     "sensex": "51",
-    "nifty500": "17",
+    "nifty500": "19",
     "finnifty": "27",
-    "indiavix": "26",
+    "indiavix": "21",
     "niftyit": "29",
 }
 

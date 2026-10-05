@@ -513,8 +513,8 @@ class PsygridMasterIndicatorEngine:
                 "source_universe_size": endpoint_payload.get("universe_size"),
                 "processed_count": len(results),
                 "error_count": len(errors),
-                "fresh_count": sum(v.get("freshness", {}).get("status") == "FRESH" for v in results.values()),
-                "stale_count": sum(v.get("freshness", {}).get("status") == "STALE" for v in results.values()),
+                "fresh_count": sum((v.get("freshness") or {}).get("status") == "FRESH" for v in results.values()),
+                "stale_count": sum((v.get("freshness") or {}).get("status") == "STALE" for v in results.values()),
                 "results": results,
                 "errors": errors,
             }
