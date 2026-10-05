@@ -7,8 +7,10 @@ live_core/aggregate.py
 live_core/api.py
 live_core/config.py
 live_core/feed.py
+live_core/gzipjoin.py
 live_core/history.py
 live_core/partition.py
+live_core/redact.py
 live_core/render.py
 live_core/runtime.py
 live_core/state.py
@@ -20,6 +22,7 @@ feed.py
 instrument_master.py
 output.py
 runtime_guard.py
+health_monitor.py
 stocks.json
 deploy/live-core/requirements.txt
 deploy/live-core/psygrid-live-core.service.in

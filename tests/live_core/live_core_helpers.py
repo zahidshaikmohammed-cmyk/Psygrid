@@ -101,8 +101,15 @@ def tick_payload(security_id: str, ltt_epoch: int, ltp: float, cumulative_volume
 
 
 def feed_minutes(state, series_ids, start_epoch: int, minutes: int, base_price: float = 100.0) -> None:
-    """Drive real trades through the state's feed interface: three trades per stock per minute."""
-    cumulative = dict.fromkeys(series_ids, 1000)
+    """Drive real trades through the state's feed interface: three trades per stock per minute.
+
+    Cumulative day volume continues from what each stock has already seen, as Dhan's does.
+    """
+    cumulative = {}
+    for security_id in series_ids:
+        series = state.instruments.get(str(security_id))
+        seen = series.previous_cumulative_volume if series is not None else None
+        cumulative[security_id] = seen if seen is not None else 1000
     for minute in range(minutes):
         for offset, second in enumerate((5, 25, 50)):
             ltt = start_epoch + minute * 60 + second

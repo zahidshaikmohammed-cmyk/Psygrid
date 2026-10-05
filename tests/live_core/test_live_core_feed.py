@@ -263,3 +263,182 @@ def test_stop_landing_between_connect_and_run_still_closes_everything(monkeypatc
     assert not feed.thread_alive()
     assert created and all(market_feed.loop.is_closed() for market_feed in created)
     assert feed.lifecycle()["event_loops_leaked"] == 0
+
+
+class _RunningLoop:
+    """A real asyncio loop on its own thread with a recording websocket, like dhanhq's while streaming."""
+
+    def __init__(self, fail_after=None):
+        self.loop = asyncio.new_event_loop()
+        self.sent: list[dict] = []
+        self.fail_after = fail_after
+        self.thread = threading.Thread(target=self.loop.run_forever, daemon=True)
+        self.thread.start()
+        outer = self
+
+        class _WS:
+            async def send(self, message):
+                if outer.fail_after is not None and len(outer.sent) >= outer.fail_after:
+                    raise ConnectionResetError("socket reset while resubscribing")
+                outer.sent.append(orjson_loads(message))
+
+        self.ws = _WS()
+
+    def close(self):
+        self.loop.call_soon_threadsafe(self.loop.stop)
+        self.thread.join(2)
+        self.loop.close()
+
+
+def orjson_loads(message):
+    import json
+
+    return json.loads(message)
+
+
+def test_one_bad_packet_is_dropped_without_reaching_dhanhq_error_handling(monkeypatch):
+    instruments = _instruments(2)
+    state = _state(instruments)
+    feed = LiveCoreFeed(FakeSettings(), state, instruments)
+    monkeypatch.setattr(feed, "_handle_packet", lambda data: (_ for _ in ()).throw(ValueError("corrupt frame")))
+    for _ in range(5):
+        feed._on_message(None, {"type": "Full Data", "security_id": 2000})  # must not raise into dhanhq
+    assert feed.lifecycle()["packet_errors"] == 5
+    assert state.feed_status != "ERROR"
+    assert len([e for e in state.errors if "packet rejected" in e["error"]]) == 3  # bounded logging
+
+
+def test_stale_stocks_are_resubscribed_in_batches_once_per_cooldown():
+    instruments = [
+        SimpleNamespace(symbol=f"S{i}", security_id=str(5000 + i), exchange_segment="NSE_EQ", instrument="EQUITY")
+        for i in range(250)
+    ]
+    now = {"t": float(START)}
+    state = NodeState(clock=lambda: now["t"])
+    state.begin("2026-10-05", instruments)
+    state.set_session_status("LIVE")
+    feed = LiveCoreFeed(FakeSettings(), state, instruments)
+    running = _RunningLoop()
+    try:
+        market_feed = SimpleNamespace(loop=running.loop, ws=running.ws, _running=True)
+        feed._connected_at = now["t"]
+        for i in range(50):  # 50 stocks have fresh data, 200 have none yet
+            state.update_quote(str(5000 + i), {"LTT_EPOCH": START + 1, "LTP": 10.0, "volume": 1})
+            state.record_live_quote(str(5000 + i), START + 1)
+        state.record_feed_message("Full Data")
+        now["t"] += 100
+        state.record_feed_message("Full Data")
+        assert feed.monitor_tick(market_feed) == "ok" and running.sent == []  # connected < 120 s: nothing yet
+        now["t"] += 30
+        state.record_feed_message("Full Data")
+        assert feed.monitor_tick(market_feed) == "ok"
+        # 130 s after connect: every stock is past 120 s without data, so all 250 resubscribe, in batches of 100.
+        assert [m["InstrumentCount"] for m in running.sent] == [100, 100, 50]
+        assert all(m["RequestCode"] == 21 for m in running.sent)
+        ids = [i["SecurityId"] for m in running.sent for i in m["InstrumentList"]]
+        assert len(ids) == len(set(ids)) == 250
+        assert feed.monitor_tick(market_feed) == "ok" and len(running.sent) == 3  # cooldown: no repeat
+    finally:
+        running.close()
+
+
+def test_a_failed_resubscribe_never_marks_the_feed_error():
+    instruments = _instruments(3)
+    now = {"t": float(START)}
+    state = NodeState(clock=lambda: now["t"])
+    state.begin("2026-10-05", instruments)
+    state.set_session_status("LIVE")
+    state.mark_websocket_connected(3)
+    feed = LiveCoreFeed(FakeSettings(), state, instruments)
+    running = _RunningLoop(fail_after=0)
+    try:
+        feed._connected_at = now["t"]
+        now["t"] += 130
+        state.record_feed_message("Full Data")
+        feed.resubscribe_stale(SimpleNamespace(loop=running.loop, ws=running.ws), now["t"])
+        assert feed.lifecycle()["resubscribe_failures"] == 1
+        assert state.feed_status == "CONNECTED"
+        assert any("resubscribe" in e["error"] for e in state.errors)
+    finally:
+        running.close()
+
+
+def test_a_silent_connection_is_ended_and_reconnected_with_backoff(monkeypatch):
+    """A socket that connects and then delivers nothing (half-open, or dhanhq stuck in its own
+    1-second reconnect loop) is ended so LiveFeed reconnects; every loop is still closed."""
+    created = []
+    original_init = feed_module.MarketFeed.__init__
+
+    def tracking_init(self, *args, **kwargs):
+        original_init(self, *args, **kwargs)
+        created.append(self)
+
+    async def connected_then_silent(self):
+        if self.on_connect:
+            self.on_connect(self)
+        while self._running:
+            await asyncio.sleep(0.01)
+
+    async def disconnect(self):
+        self._running = False
+
+    monkeypatch.setattr(feed_module.MarketFeed, "__init__", tracking_init)
+    monkeypatch.setattr(feed_module.MarketFeed, "_run_async", connected_then_silent)
+    monkeypatch.setattr(feed_module.MarketFeed, "disconnect", disconnect)
+    instruments = _instruments()
+    state = _state(instruments)
+    feed = _fast(LiveCoreFeed(FakeSettings(), state, instruments))
+    feed.MONITOR_INTERVAL_SECONDS = 0.02
+    feed.SILENCE_RECONNECT_SECONDS = 0.2
+    feed.NO_MESSAGE_WATCHDOG_SECONDS = 3600  # isolate the silence watchdog from the startup watchdog
+    feed.start()
+    assert _wait_for(lambda: feed.lifecycle()["silence_reconnects"] >= 3)
+    feed.stop()
+    life = feed.lifecycle()
+    assert life["connection_cycles"] >= 3 and life["event_loops_leaked"] == 0
+    assert all(market_feed.loop.is_closed() for market_feed in created)
+    assert state.websocket_reconnects >= 2  # the last ended cycle may be cut short by stop()
+
+
+def test_a_streaming_connection_is_never_ended_for_silence():
+    instruments = _instruments(1)
+    now = {"t": float(START)}
+    state = NodeState(clock=lambda: now["t"])
+    state.begin("2026-10-05", instruments)
+    state.set_session_status("LIVE")
+    feed = LiveCoreFeed(FakeSettings(), state, instruments)
+    feed._connected_at = now["t"]
+    for _ in range(20):
+        now["t"] += 30
+        state.record_feed_message("Full Data")
+        assert feed.monitor_tick(SimpleNamespace(loop=None, ws=None, _running=True)) == "ok"
+    assert feed.lifecycle()["silence_reconnects"] == 0
+
+
+def test_dhanhq_internal_reconnects_are_counted_and_trigger_gap_refill(monkeypatch):
+    """dhanhq re-opens a dropped socket inside its own loop; that must still count as a reconnect."""
+    reconnected = threading.Event()
+
+    async def drops_and_reconnects_internally(self):
+        for _ in range(3):  # connect, lose the socket, connect again - all inside one run()
+            if self.on_connect:
+                self.on_connect(self)
+            await asyncio.sleep(0.01)
+        reconnected.set()
+        while self._running:
+            await asyncio.sleep(0.01)
+
+    async def disconnect(self):
+        self._running = False
+
+    monkeypatch.setattr(feed_module.MarketFeed, "_run_async", drops_and_reconnects_internally)
+    monkeypatch.setattr(feed_module.MarketFeed, "disconnect", disconnect)
+    instruments = _instruments()
+    state = _state(instruments)
+    feed = LiveCoreFeed(FakeSettings(), state, instruments)
+    feed.start()
+    assert reconnected.wait(5)
+    feed.stop()
+    assert feed.lifecycle()["internal_reconnects"] == 2
+    assert feed.lifecycle()["connection_cycles"] == 1
+    assert state.websocket_reconnects >= 2  # the runtime's gap refill keys off this counter

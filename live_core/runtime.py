@@ -44,7 +44,8 @@ from live_core.partition import (
     load_universe,
     validate_partitions,
 )
-from live_core.state import NodeState
+from live_core.redact import RedactingFilter, redact, register_secret
+from live_core.state import STALE_AFTER_SECONDS, NodeState
 from runtime_guard import is_trading_day, process_stats, raise_nofile_limit
 
 log = logging.getLogger("live_core")
@@ -53,6 +54,7 @@ GAP_REFILL_DELAY_SECONDS = 90.0
 CONFIG_RETRY_SECONDS = 60.0
 AUTH_RETRY_SECONDS = 30.0
 PREPARE_AHEAD = timedelta(minutes=15)
+TRIM_INTERVAL_SECONDS = 60.0
 
 
 def release_memory() -> None:
@@ -90,7 +92,8 @@ class LiveCoreRuntime:
         self.tz = ZoneInfo(psygrid_config.TIMEZONE)
         self.market_start = dt_time(*map(int, psygrid_config.MARKET_START.split(":")))
         self.market_end = dt_time(*map(int, psygrid_config.MARKET_END.split(":")))
-        self.state = NodeState(psygrid_config.TIMEZONE, psygrid_config.MAX_LIVE_AGE_SECONDS, clock=clock)
+        # Data freshness follows the Live Core rule (stale only after 120 s), not the full app's 30 s.
+        self.state = NodeState(psygrid_config.TIMEZONE, STALE_AFTER_SECONDS, clock=clock)
         self._settings_loader = settings_loader or psygrid_config.load_settings
         self._instrument_loader = instrument_loader or psygrid_config.load_instruments
         self._api_factory = api_factory or _default_api_factory
@@ -128,6 +131,7 @@ class LiveCoreRuntime:
         self._prepare_retry_at = 0.0
         self._reconnects_seen = 0
         self._gap_refill_at: float | None = None
+        self._last_trim = 0.0
         self._lock = threading.RLock()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -191,7 +195,7 @@ class LiveCoreRuntime:
             self.settings = self._settings_loader()
             self.config_error = ""
         except Exception as exc:
-            self.config_error = f"{type(exc).__name__}: {exc}"[:500]
+            self.config_error = redact(f"{type(exc).__name__}: {exc}")[:500]
             log.error("live core configuration error: %s", self.config_error)
 
     def start(self) -> None:
@@ -228,7 +232,10 @@ class LiveCoreRuntime:
         return self._instruments
 
     def _authenticate(self) -> dict:
-        self._token_refresher(self.settings)
+        try:
+            self._token_refresher(self.settings)
+        finally:
+            register_secret(getattr(self.settings, "access_token", ""))
         self.dhan_api.settings = self.settings
         try:
             return self.dhan_api.verify_data_access()
@@ -236,7 +243,10 @@ class LiveCoreRuntime:
             if not looks_like_auth_failure(first):
                 raise
             self.state.set_feed_status("TOKEN_REFRESHING", "Dhan token expired/invalid; generating one fresh token")
-            self._token_refresher(self.settings, force=True)
+            try:
+                self._token_refresher(self.settings, force=True)
+            finally:
+                register_secret(getattr(self.settings, "access_token", ""))
             self.dhan_api.settings = self.settings
             return self.dhan_api.verify_data_access()
 
@@ -252,7 +262,7 @@ class LiveCoreRuntime:
                 instruments = self._resolve_instruments(session_date)
                 self.config_error = ""
             except Exception as exc:
-                self.config_error = f"{type(exc).__name__}: {exc}"[:500]
+                self.config_error = redact(f"{type(exc).__name__}: {exc}")[:500]
                 self._retry_at = epoch + CONFIG_RETRY_SECONDS
                 self.state.reset()
                 self.state.set_session_status("CONFIG_ERROR")
@@ -320,6 +330,12 @@ class LiveCoreRuntime:
     def _maintain(self, now: datetime) -> None:
         epoch = now.timestamp()
         self.state.finalize_due(epoch, self.cfg.finalize_grace_seconds)
+        if epoch - self._last_trim >= TRIM_INTERVAL_SECONDS:
+            # Encoded fragments are replaced every minute; hand the freed heap back to the OS so RSS
+            # on a 1 GB VM tracks what is actually live (a few milliseconds, glibc only).
+            self._last_trim = epoch
+            with contextlib.suppress(Exception):
+                ctypes.CDLL("libc.so.6").malloc_trim(0)
         with self.state.lock:
             reconnects = self.state.websocket_reconnects
         if reconnects > self._reconnects_seen:
@@ -372,17 +388,20 @@ class LiveCoreRuntime:
         snap = self.state.snapshot()
         freshness = self.state.freshness()
         feed = self.feed
-        lifecycle = (
-            feed.lifecycle()
-            if feed is not None
-            else {
-                "feed_thread_alive": False,
-                "connection_cycles": 0,
-                "feeds_closed": 0,
-                "event_loops_closed": 0,
-                "event_loops_leaked": 0,
-            }
-        )
+        lifecycle = {
+            "feed_thread_alive": False,
+            "connection_cycles": 0,
+            "feeds_closed": 0,
+            "event_loops_closed": 0,
+            "event_loops_leaked": 0,
+            "packet_errors": 0,
+            "internal_reconnects": 0,
+            "silence_reconnects": 0,
+            "resubscribed_instruments": 0,
+            "resubscribe_failures": 0,
+        }
+        if feed is not None:
+            lifecycle.update(feed.lifecycle())
         history = self.history.status() if self.history is not None else None
         in_hours = self.in_market(now)
         expected = self.partition.size
@@ -415,13 +434,23 @@ class LiveCoreRuntime:
                     f"(max {freshness['max_live_age_seconds']}s)"
                 )
         status = "CONFIG_ERROR" if self.config_error else ("DEGRADED" if reasons else "OK")
+        data_quality = {
+            "rejected_packets": snap["rejected_packets"],
+            "duplicate_trades": snap["duplicate_trades"],
+            "no_trade_today_packets": snap["no_trade_today_packets"],
+            "render_errors": snap["render_errors"],
+            "packet_errors": lifecycle["packet_errors"],
+        }
         return {
-            "service": SERVICE_NAME,
+            "service": "PSYGRID",
+            "runtime": SERVICE_NAME,
             "status": status,
             "reasons": reasons,
             "checked_at": now.isoformat(timespec="seconds"),
             "node_id": self.partition.node_id,
             "node_count": self.partition.node_count,
+            # Independent dimensions: an answering API, a reconnecting socket and fresh data can coexist.
+            "dimensions": _dimensions(snap, freshness, in_hours, expected),
             "partition": self.partition.describe(),
             "session": {
                 "timezone": psygrid_config.TIMEZONE,
@@ -449,13 +478,146 @@ class LiveCoreRuntime:
                 **lifecycle,
             },
             "freshness": freshness,
+            "data_quality": data_quality,
+            # The full PSYGRID /health blocks, with the same keys, for existing monitors.
+            "dhan": {
+                "feed_status": snap["feed_status"],
+                "feed_thread_alive": lifecycle["feed_thread_alive"],
+                "stream_health": freshness["stream_health"],
+                "websocket_reconnects": snap["websocket_reconnects"],
+                "websocket_connected_at": snap["websocket_connected_at"],
+                "last_message_at": snap["last_feed_message_at"],
+                "last_feed_error": snap["last_feed_error"],
+                "token_validity": None,
+            },
+            "data": {
+                "fresh": freshness["fresh"],
+                "last_market_timestamp": freshness["last_market_timestamp"],
+                "last_tick_age_seconds": freshness["last_tick_age_seconds"],
+                "max_live_age_seconds": int(freshness["max_live_age_seconds"]),
+                "stock_count": snap["instrument_count"],
+                "subscribed_count": snap["subscribed_instrument_count"],
+                "live_stock_count": freshness["live_stock_count"],
+                "last_endpoint_generated_at": None,
+            },
+            "index_layer": {"available": False, "feed_status": {}, "error": "not part of the Live Core"},
             "history": history,
             "process": process,
             "memory": self.state.memory_summary(),
             "watchdog": watchdog,
-            "storage": {"market_data_on_disk": False, "archive_enabled": False},
+            "storage": {"market_data_on_disk": False, "archive_enabled": False, "microstructure_enabled": False},
             "errors": list(self.state.errors),
         }
+
+    def ready_payload(self) -> tuple[dict, bool]:
+        """The full PSYGRID /ready contract, for this node's partition."""
+        health = self.node_health()
+        snap = self.state.snapshot()
+        freshness = health["freshness"]
+        expected = self.partition.size
+        ready = bool(
+            snap["session_status"] == "LIVE"
+            and snap["feed_status"] == "CONNECTED"
+            and snap["instrument_count"] == expected
+            and snap["subscribed_instrument_count"] == expected
+            and freshness["live_stock_count"] == expected
+            and freshness["stream_health"] == "FULL_LIVE"
+        )
+        payload = {
+            "service": "PSYGRID",
+            "ready": ready,
+            "node_id": self.partition.node_id,
+            "session_date": snap["session_date"],
+            "session_status": snap["session_status"],
+            "feed_status": snap["feed_status"],
+            "stream_health": freshness["stream_health"],
+            "last_feed_error": snap["last_feed_error"],
+            "last_tick_at": freshness["last_market_timestamp"],
+            "last_tick_age_seconds": freshness["last_tick_age_seconds"],
+            "max_live_age_seconds": int(freshness["max_live_age_seconds"]),
+            "live_stock_count": freshness["live_stock_count"],
+            "subscribed_count": snap["subscribed_instrument_count"],
+            "feed_messages": snap["feed_messages"],
+            "quote_packets": snap["quote_packets"],
+            "live_quotes": snap["live_quotes"],
+            "websocket_reconnects": snap["websocket_reconnects"],
+            "last_message_type": snap["last_message_type"],
+            "last_message_at": snap["last_feed_message_at"],
+            "websocket_connected_at": snap["websocket_connected_at"],
+            "data_plan_status": "UNKNOWN",
+            "data_validity": None,
+            "token_validity": None,
+            "stock_count": snap["instrument_count"],
+            "one_minute_candles_only": True,
+            "depth_enabled": False,
+            "higher_timeframes_enabled": False,
+            "indicators_enabled": False,
+        }
+        return payload, ready
+
+    def public_health(self) -> dict:
+        """``/public/health.json`` in the full PSYGRID's schema (components, counts, overall status)."""
+        from health_monitor import build_health, component_health
+
+        cluster_view = self.cluster_health()
+        nodes = cluster_view["cluster"]["nodes"]
+        now = self._now()
+        in_hours = self.in_market(now)
+        components = []
+        message_times = []
+        for node_id in sorted(nodes, key=int):
+            node = nodes[node_id]
+            if node.get("last_feed_message_at"):
+                message_times.append(node["last_feed_message_at"])
+            live = node.get("session_status") == "LIVE" and node.get("feed_status") == "CONNECTED"
+            components.append(
+                component_health(
+                    name=f"live_core_node_{node_id}",
+                    status=("LIVE" if live else (node.get("feed_status") or "ERROR"))
+                    if node.get("reachable")
+                    else None,
+                    updated_at=node.get("last_feed_message_at"),
+                    expected_refresh_seconds=2.0,
+                    now=now,
+                    last_error=node.get("error") or "",
+                    record_count=node.get("subscribed_instrument_count") or 0,
+                    expected_record_count=node.get("expected_instrument_count")
+                    or build_partition(self.universe, int(node_id), self.partition.node_count).size,
+                    extra={
+                        "session_status": node.get("session_status"),
+                        "feed_status": node.get("feed_status"),
+                        "websocket_reconnects": node.get("websocket_reconnects") or 0,
+                    },
+                )
+            )
+        not_live = [c["source_status"] for c in components if c["source_status"] != "LIVE"]
+        if not any(node.get("reachable") for node in nodes.values()):
+            equity_status = None
+        else:
+            equity_status = not_live[0] if not_live else "LIVE"
+        components.insert(
+            0,
+            component_health(
+                # Same component name as the full PSYGRID's equity feed, for existing monitors.
+                name="equity_990",
+                status=equity_status,
+                updated_at=max(message_times) if message_times else None,
+                expected_refresh_seconds=2.0,
+                now=now,
+                record_count=cluster_view["cluster"]["covered_instrument_count"],
+                expected_record_count=self.universe.size,
+                extra={
+                    "session_status": self.state.session_status,
+                    "feed_status": self.state.feed_status,
+                    "websocket_reconnects": sum(n.get("websocket_reconnects") or 0 for n in nodes.values()),
+                },
+            ),
+        )
+        out_of_session = frozenset() if in_hours else frozenset(c["name"] for c in components)
+        payload = build_health(components, "OPEN" if self.state.session_status == "LIVE" else "CLOSED", out_of_session)
+        payload["archive"] = {"status": "DISABLED"}
+        payload["live_core"] = cluster_view["cluster"]
+        return payload
 
     def cluster_health(self) -> dict:
         local = self.node_health()
@@ -493,6 +655,11 @@ class LiveCoreRuntime:
             partitions_covered = all_reachable and not any(node.get("error") for node in nodes.values())
             coverage = "IDLE_READY" if partitions_covered else "IDLE_NODE_MISSING"
         cluster = {
+            "dimensions": {
+                "http": "AVAILABLE",
+                "nodes_reachable": sum(1 for node in nodes.values() if node.get("reachable")),
+                "coverage": coverage,
+            },
             "node_count": self.partition.node_count,
             "expected_instrument_count": self.universe.size,
             "covered_instrument_count": covered,
@@ -523,10 +690,36 @@ def _node_summary(health: dict, *, reachable: bool, source: str) -> dict:
         "websocket_reconnects": feed.get("websocket_reconnects"),
         "fresh": freshness.get("fresh"),
         "last_tick_age_seconds": freshness.get("last_tick_age_seconds"),
+        "last_feed_message_at": feed.get("last_feed_message_at"),
+        "stale_stock_count": freshness.get("stale_stock_count"),
+        "dimensions": health.get("dimensions"),
         "open_fds": process.get("open_fds"),
         "rss_mb": process.get("rss_mb"),
         "partition": health.get("partition", {}).get("start_index"),
         "partition_end": health.get("partition", {}).get("end_index"),
+    }
+
+
+def _dimensions(snap: dict, freshness: dict, in_hours: bool, expected: int) -> dict:
+    """Feed connection, data freshness and partition coverage as separate, independent states."""
+    session = snap["session_status"]
+    if session != "LIVE":
+        data = "CLOSED" if session == "CLOSED" else "NO_SESSION"
+    elif freshness["live_stock_count"] == 0 and freshness["stale_stock_count"] == 0:
+        data = "NO_DATA"
+    elif not freshness["fresh"]:
+        data = "STALE"
+    elif freshness["stale_stock_count"] or freshness["no_quote_stock_count"]:
+        data = "FRESH_WITH_STALE_STOCKS"
+    else:
+        data = "FRESH"
+    coverage = ("COMPLETE" if snap["instrument_count"] == expected else "INCOMPLETE") if session == "LIVE" else "IDLE"
+    return {
+        "http": "AVAILABLE",
+        "feed": snap["feed_status"] if session == "LIVE" or in_hours else "IDLE",
+        "data": data,
+        "coverage": coverage,
+        "stale_after_seconds": freshness["max_live_age_seconds"],
     }
 
 
@@ -540,6 +733,8 @@ def build_runtime(environ=None) -> LiveCoreRuntime:
 
 def main(argv=None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    for handler in logging.getLogger().handlers:
+        handler.addFilter(RedactingFilter())
     try:
         runtime = build_runtime()
     except (LiveCoreConfigError, PartitionError) as exc:

@@ -277,3 +277,91 @@ def test_a_feed_that_cannot_start_is_retried_not_reported_live(make_runtime):
     runtime.test_clock.set(ist(9, 15, 31))
     runtime.tick()
     assert runtime.state.session_status == "LIVE" and runtime.feed is not None and attempts["n"] == 2
+
+
+def test_a_late_history_answer_never_lands_in_a_later_session(make_runtime):
+    """A history request still in flight when the session ends must not merge into the next one."""
+    from live_core.history import HistoryWorker
+
+    runtime = make_runtime(0, when=ist(10, 0))
+    runtime.tick()
+    monday_worker = HistoryWorker(
+        runtime.state, runtime.test_api, runtime.settings, runtime.feed.instruments, interval_seconds=0
+    )
+    assert monday_worker.session_date == "2026-10-05"
+    runtime.test_clock.set(ist(9, 15, 0, day=(2026, 10, 6)))
+    runtime.tick()  # Tuesday's session has begun with the same security ids
+    start = int(ist(9, 15, 0, day=(2026, 10, 6)).timestamp())
+    runtime.test_api.history = {
+        "RELIANCE": [{"timestamp": start, "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}]
+    }
+    monday_worker._fetch_one(runtime.state.by_symbol["RELIANCE"].security_id)
+    assert runtime.state.by_symbol["RELIANCE"].candle_count() == 0
+
+
+def test_repeated_sessions_never_leak_candles_caches_or_threads(make_runtime):
+    import threading
+
+    from fastapi.testclient import TestClient
+
+    import live_core.render as render
+    from live_core.api import create_app
+
+    runtime = make_runtime(0, when=ist(9, 15))
+    client = TestClient(create_app(runtime, start_runtime=False))
+    threads_before = threading.active_count()
+    for day in range(5, 10):  # Monday 5th .. Friday 9th
+        date = (2026, 10, day)
+        runtime.test_clock.set(ist(9, 15, 0, day=date))
+        runtime.tick()
+        assert runtime.state.session_date == f"2026-10-{day:02d}"
+        assert runtime.state.memory_summary()["completed_candles_in_ram"] == 0  # nothing from yesterday
+        ids = [s.security_id for s in runtime.state.ordered[:50]]
+        runtime.test_clock.set(ist(9, 20, 0, day=date))
+        feed_minutes(runtime.state, ids, int(ist(9, 15, 0, day=date).timestamp()), 4)
+        runtime.tick()
+        payload = client.get("/public/live.json").json()
+        assert payload["session"]["date"] == f"2026-10-{day:02d}"
+        timestamps = {c["timestamp"][:10] for s in payload["stocks"].values() for c in s["candles_1m"]}
+        assert timestamps == {f"2026-10-{day:02d}"}
+        runtime.test_clock.set(ist(15, 15, 0, day=date))
+        runtime.tick()
+        assert render._TIMESTAMP_CACHE == {}
+        assert client.app.state.live_core._cache == {}  # the session's bodies were dropped at the close
+        assert runtime.state.memory_summary()["stocks_in_ram"] == 0
+        closed = client.get("/public/live.json").json()
+        assert closed["status"] == "CLOSED" and closed["stocks"] == {}
+    assert runtime.sessions_started == runtime.sessions_ended == 5
+    assert threading.active_count() <= threads_before + 1
+
+
+def test_unknown_symbols_are_echoed_bounded():
+    from types import SimpleNamespace
+
+    import orjson
+
+    from live_core.render import stock_body
+    from live_core.state import NodeState
+
+    state = NodeState()
+    state.begin("2026-10-05", [SimpleNamespace(symbol="AAA", security_id="1")])
+    body = orjson.loads(stock_body(state, "X" * 5000))
+    assert body["status"] == "NOT_FOUND" and len(body["symbol"]) == 32
+
+
+def test_freed_heap_is_returned_to_the_os_once_a_minute_during_the_session(make_runtime, monkeypatch):
+    import live_core.runtime as runtime_module
+
+    trims = []
+
+    class _Libc:
+        def malloc_trim(self, pad):
+            trims.append(pad)
+
+    monkeypatch.setattr(runtime_module.ctypes, "CDLL", lambda name: _Libc())
+    runtime = make_runtime(0, when=ist(9, 15))
+    runtime.tick()
+    for second in range(0, 180, 1):
+        runtime.test_clock.set(ist(9, 16) + timedelta(seconds=second))
+        runtime.tick()
+    assert 3 <= len(trims) <= 4  # about once a minute, not once a tick

@@ -83,10 +83,9 @@ class LiveCoreConfig:
     peer_timeout_seconds: float = 4.0
     peer_cache_seconds: float = 1.0
     peer_stale_seconds: float = 15.0
-    # Large JSON responses are reused outright for render_cache_seconds, then kept while their
-    # content is unchanged for up to render_max_age_seconds (current_time_ist is the build time).
+    # A large response is reused outright for render_cache_seconds; after that its small head is
+    # rebuilt and its stocks part is re-encoded only if the content changed.
     render_cache_seconds: float = 1.0
-    render_max_age_seconds: float = 5.0
     # Genuine Dhan 1m history for today only, after a mid-session (re)start or a feed gap.
     history_bootstrap: bool = True
     history_interval_seconds: float = 0.5
@@ -121,7 +120,6 @@ class LiveCoreConfig:
             peer_cache_seconds=_float(environ, "LIVE_CORE_PEER_CACHE_SECONDS", 1.0),
             peer_stale_seconds=_float(environ, "LIVE_CORE_PEER_STALE_SECONDS", 15.0),
             render_cache_seconds=_float(environ, "LIVE_CORE_RENDER_CACHE_SECONDS", 1.0),
-            render_max_age_seconds=_float(environ, "LIVE_CORE_RENDER_MAX_AGE_SECONDS", 5.0),
             history_bootstrap=_flag(environ, "LIVE_CORE_HISTORY_BOOTSTRAP", True),
             history_interval_seconds=_float(environ, "LIVE_CORE_HISTORY_INTERVAL_SECONDS", 0.5),
             finalize_grace_seconds=_float(environ, "LIVE_CORE_FINALIZE_GRACE_SECONDS", 3.0),

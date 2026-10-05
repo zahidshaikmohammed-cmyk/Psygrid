@@ -22,8 +22,17 @@ from fastapi import FastAPI, Query, Request, Response
 
 from live_core import SERVICE_NAME
 from live_core.aggregate import FRAGMENTS_PATH, PeerUnavailable, encode_fragments
+from live_core.gzipjoin import CompressedTail, gzip_join
 from live_core.partition import nodes_for_range, shard_ranges
-from live_core.render import assemble, local_fragments, payload_status, stock_body
+from live_core.render import (
+    MAX_SYMBOL_LENGTH,
+    assemble_head,
+    clear_caches,
+    payload_status,
+    snapshot,
+    stock_body,
+    tail_parts,
+)
 from runtime_guard import ServiceWatchdog, http_probe
 
 NO_CACHE_HEADERS = {
@@ -37,29 +46,43 @@ GZIP_LEVEL = 3
 
 
 class _Body:
-    __slots__ = ("_gzip", "_lock", "body", "content_key", "created", "status_code")
+    """A response body: ``head`` alone, or a small per-response ``head`` plus a shared large ``tail``."""
 
-    def __init__(self, body: bytes, status_code: int, created: float):
-        self.body = body
+    __slots__ = ("_gzip", "_lock", "created", "head", "status_code", "tail")
+
+    def __init__(self, body: bytes, status_code: int, created: float, tail: CompressedTail | None = None):
+        self.head = body
+        self.tail = tail
         self.status_code = status_code
         self.created = created
-        self.content_key: tuple | None = None
         self._gzip: bytes | None = None
         self._lock = threading.Lock()
+
+    @property
+    def body(self) -> bytes:
+        return self.head if self.tail is None else self.head + self.tail.data
+
+    def __len__(self) -> int:
+        return len(self.head) + (self.tail.length if self.tail is not None else 0)
 
     def gzipped(self) -> bytes:
         with self._lock:
             if self._gzip is None:
-                self._gzip = gzip.compress(self.body, compresslevel=GZIP_LEVEL, mtime=0)
+                if self.tail is None:
+                    self._gzip = gzip.compress(self.head, compresslevel=GZIP_LEVEL, mtime=0)
+                else:
+                    # The stocks tail was deflated once; only this response's head is compressed now.
+                    self._gzip = gzip_join(self.head, self.tail)
             return self._gzip
 
 
 def _respond(request: Request, entry: _Body) -> Response:
     headers = dict(NO_CACHE_HEADERS)
-    body = entry.body
-    if len(body) >= GZIP_MINIMUM_BYTES and "gzip" in request.headers.get("accept-encoding", "").lower():
-        body = entry.gzipped()
+    if len(entry) >= GZIP_MINIMUM_BYTES and "gzip" in request.headers.get("accept-encoding", "").lower():
         headers["Content-Encoding"] = "gzip"
+        body = entry.gzipped()
+    else:
+        body = entry.body
     return Response(content=body, media_type="application/json", status_code=entry.status_code, headers=headers)
 
 
@@ -76,16 +99,20 @@ class LiveCoreService:
         self.partition = runtime.partition
         self.state = runtime.state
         self._cache: dict[tuple, _Body] = {}
+        self._tails: dict[tuple, tuple] = {}
         self._cache_lock = threading.Lock()
         self._key_locks: dict[tuple, threading.Lock] = {}
 
-    def _cached(self, key: tuple, start: int, end: int, sort_by_symbol: bool) -> _Body:
-        """Serve a large live body, rebuilding it only when its content changed.
+    TAIL_IDLE_SECONDS = 120.0
 
-        Within ``render_cache_seconds`` a body is reused outright. After that the current content
-        versions (this node's state, each peer's not_modified answer) are checked cheaply; the body
-        is re-assembled only if they changed or it is older than ``render_max_age_seconds``. Since
-        candles complete once a minute, a polled live.json is rebuilt about once a minute.
+    def _cached(self, key: tuple, start: int, end: int, sort_by_symbol: bool) -> _Body:
+        """Serve a live body: a fresh head on every build, the stocks tail rebuilt only on change.
+
+        Within ``render_cache_seconds`` a whole body is reused outright (a polling flood costs
+        nothing). After that the body is rebuilt: the head (status, session time, coverage) always,
+        the stocks tail - by far the largest part, and the only costly one to encode and compress -
+        only when a node's content version changed, i.e. when a minute completed. The head's
+        ``current_time_ist`` is therefore never older than ``render_cache_seconds``.
         """
         cfg = self.runtime.cfg
         with self._cache_lock:
@@ -104,27 +131,30 @@ class LiveCoreService:
                 (node_id, node.get("available"), node.get("version"), node.get("stale"), node.get("session_status"))
                 for node_id, node in sorted(nodes.items())
             )
-            if (
-                entry is not None
-                and entry.content_key == content_key
-                and time.monotonic() - entry.created <= cfg.render_max_age_seconds
-            ):
-                return entry
-            entry = self.live_body(start, end, sort_by_symbol=sort_by_symbol, collected=(items, nodes))
-            entry.content_key = content_key
-            del items
             now = time.monotonic()
-            horizon = max(cfg.render_cache_seconds, cfg.render_max_age_seconds)
+            with self._cache_lock:
+                cached_tail = self._tails.get(key)
+            if cached_tail is not None and cached_tail[0] == content_key:
+                tail = cached_tail[1]
+            else:
+                tail = CompressedTail(tail_parts(items, sort_by_symbol=sort_by_symbol))
+            entry = self.live_body(start, end, sort_by_symbol=sort_by_symbol, collected=(items, nodes), tail=tail)
+            del items
             with self._cache_lock:
                 self._cache[key] = entry
-                # Bodies nobody asked for within the horizon are dropped instead of pinning RAM.
-                for other in [k for k, v in self._cache.items() if now - v.created > horizon]:
-                    del self._cache[other]
+                self._tails[key] = (content_key, tail, now)
+                # Bodies and tails nobody asked for recently are dropped instead of pinning RAM.
+                for other in [k for k, v in self._cache.items() if now - v.created > cfg.render_cache_seconds]:
+                    if other != key:
+                        del self._cache[other]
+                for other in [k for k, v in self._tails.items() if now - v[2] > self.TAIL_IDLE_SECONDS]:
+                    del self._tails[other]
             return entry
 
     def clear(self) -> None:
         with self._cache_lock:
             self._cache.clear()
+            self._tails.clear()
 
     # ------------------------------------------------------------------ live payloads
 
@@ -134,15 +164,15 @@ class LiveCoreService:
         for node_id, sub_start, sub_end in nodes_for_range(self.universe.size, self.partition.node_count, start, end):
             expected = sub_end - sub_start
             if node_id == self.partition.node_id:
-                version = self.state.content_version()  # read before the stocks, see fragments()
-                local = local_fragments(self.state, sub_start, sub_end)
-                items.extend(local)
+                local = snapshot(self.state, sub_start, sub_end)
+                items.extend(local.items)
                 nodes[str(node_id)] = {
                     "source": "local",
                     "available": True,
-                    "version": version,
-                    "session_status": self.state.session_status,
-                    "stock_count": len(local),
+                    "version": local.version,
+                    "session_status": local.session_status,
+                    "session_date": local.session_date,
+                    "stock_count": len(local.items),
                     "expected_stock_count": expected,
                     "data_age_seconds": 0.0,
                     "stale": False,
@@ -173,6 +203,7 @@ class LiveCoreService:
                 "available": True,
                 "version": fetched.header.get("version"),
                 "session_status": fetched.header.get("session_status"),
+                "session_date": fetched.header.get("session_date"),
                 "stock_count": len(fetched.items),
                 "expected_stock_count": expected,
                 "data_age_seconds": fetched.age_seconds(time.monotonic()),
@@ -180,12 +211,21 @@ class LiveCoreService:
             }
         return items, nodes
 
-    def live_body(self, start: int, end: int, *, sort_by_symbol: bool, collected=None) -> _Body:
+    def live_body(self, start: int, end: int, *, sort_by_symbol: bool, collected=None, tail=None) -> _Body:
         items, nodes = collected if collected is not None else self.collect(start, end)
         expected = max(0, min(end, self.universe.size) - max(0, start))
         available = [node for node in nodes.values() if node.get("available")]
+        for node in available:
+            # A live partition must deliver every one of its stocks; anything less is not complete.
+            node["missing_stock_count"] = (
+                max(0, node["expected_stock_count"] - node["stock_count"])
+                if node.get("session_status") == "LIVE"
+                else 0
+            )
         coverage = {
-            "complete": bool(nodes) and len(available) == len(nodes),
+            "complete": bool(nodes)
+            and len(available) == len(nodes)
+            and not any(node["missing_stock_count"] for node in available),
             "expected_stock_count": expected,
             "nodes": nodes,
         }
@@ -200,10 +240,8 @@ class LiveCoreService:
                 503,
             )
         local = nodes.get(str(self.partition.node_id))
-        if local is not None:
-            session_status, session_date = self.state.session_status, self.state.session_date
-        else:
-            session_status, session_date = available[0].get("session_status"), self.state.session_date
+        reference = local if local is not None else available[0]
+        session_status, session_date = reference.get("session_status"), reference.get("session_date")
         statuses = [node.get("session_status") for node in available]
         if coverage["complete"] and all(status == "LIVE" for status in statuses):
             status = "OK"
@@ -212,16 +250,17 @@ class LiveCoreService:
             status = "PARTIAL"
         else:
             status = payload_status(str(session_status))
-        body = assemble(
+        if tail is None:
+            tail = CompressedTail(tail_parts(items, sort_by_symbol=sort_by_symbol))
+        head = assemble_head(
             status=status,
             session_status=session_status,
             session_date=session_date,
             universe_size=self.universe.size,
-            items=items,
-            sort_by_symbol=sort_by_symbol,
+            stock_count=len(items),
             extra={"coverage": coverage},
         )
-        return _Body(body, 200, time.monotonic())
+        return _Body(head, 200, time.monotonic(), tail=tail)
 
     def live(self) -> _Body:
         return self._cached(("live",), 0, self.universe.size, True)
@@ -231,7 +270,7 @@ class LiveCoreService:
         return self._cached(("shard", start, end), start, end, False)
 
     def stock(self, symbol: str, local_only: bool = False) -> _Body:
-        symbol = symbol.strip().upper()
+        symbol = symbol.strip().upper()[:MAX_SYMBOL_LENGTH]
         index = self.universe.index_of(symbol)
         if index is None or self.partition.owns_index(index):
             return _Body(stock_body(self.state, symbol), 200, time.monotonic())
@@ -260,23 +299,39 @@ class LiveCoreService:
         return _Body(body, status, time.monotonic())
 
     def fragments(self, start: int, end: int, if_version: str = "") -> bytes:
-        # Read the version before the stocks: a change in between only causes one extra refetch later.
-        version = self.state.content_version()
         start = max(0, start)
         end = min(self.universe.size, end)
         header = {
             "service": SERVICE_NAME,
             "partition": self.partition.describe(),
-            "version": version,
-            "session_status": self.state.session_status,
-            "session_date": self.state.session_date,
             "feed_status": self.state.feed_status,
             "generated_at_epoch": round(time.time(), 3),
         }
+        version = self.state.content_version()
         if if_version and if_version == version:
-            return encode_fragments({**header, "not_modified": True, "item_count": 0}, [])
-        items = local_fragments(self.state, max(start, self.partition.start), min(end, self.partition.end))
-        return encode_fragments({**header, "item_count": len(items)}, items)
+            return encode_fragments(
+                {
+                    **header,
+                    "version": version,
+                    "session_status": self.state.session_status,
+                    "session_date": self.state.session_date,
+                    "not_modified": True,
+                    "item_count": 0,
+                },
+                [],
+            )
+        # The version, session state and stocks are captured together (see render.snapshot).
+        local = snapshot(self.state, max(start, self.partition.start), min(end, self.partition.end))
+        return encode_fragments(
+            {
+                **header,
+                "version": local.version,
+                "session_status": local.session_status,
+                "session_date": local.session_date,
+                "item_count": len(local.items),
+            },
+            local.items,
+        )
 
 
 def root_payload(runtime) -> dict:
@@ -301,7 +356,8 @@ def root_payload(runtime) -> dict:
         "depth_enabled": False,
         "indicators_enabled": False,
         "derivatives_enabled": False,
-        "health_endpoint": "/health",
+        "health_endpoint": "/public/health.json",
+        "service_health_endpoint": "/health",
         "node_health_endpoint": "/health/node",
     }
 
@@ -309,6 +365,7 @@ def root_payload(runtime) -> dict:
 def create_app(runtime, *, start_runtime: bool = True) -> FastAPI:
     service = LiveCoreService(runtime)
     runtime.session_end_hooks.append(service.clear)
+    runtime.session_end_hooks.append(clear_caches)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -354,24 +411,13 @@ def create_app(runtime, *, start_runtime: bool = True) -> FastAPI:
 
     @app.get("/public/health.json", response_class=Response)
     def public_health(request: Request) -> Response:
-        return _respond(request, json_body(runtime.cluster_health()))
+        # The full PSYGRID's /public/health.json schema; the cluster view rides along under "live_core".
+        return _respond(request, json_body(runtime.public_health()))
 
     @app.get("/ready", response_class=Response)
     def ready(request: Request) -> Response:
-        health_now = runtime.node_health()
-        ready_now = bool(
-            health_now["session"]["session_status"] == "LIVE"
-            and health_now["feed"]["feed_status"] == "CONNECTED"
-            and health_now["feed"]["subscribed_instrument_count"] == runtime.partition.size
-            and health_now["freshness"]["fresh"]
-        )
-        return _respond(
-            request,
-            json_body(
-                {"service": SERVICE_NAME, "ready": ready_now, "node_id": runtime.partition.node_id},
-                200 if ready_now else 503,
-            ),
-        )
+        payload, ready_now = runtime.ready_payload()
+        return _respond(request, json_body(payload, 200 if ready_now else 503))
 
     @app.get("/public/live.json", response_class=Response)
     def public_live(request: Request) -> Response:
