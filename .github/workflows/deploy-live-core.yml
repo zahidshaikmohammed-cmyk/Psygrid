@@ -264,4 +264,16 @@ jobs:
           if [ "$ACTION" = deploy ] && [ "$TARGET" = both ]; then require="--require-reachable"; fi
           python3 deploy/live-core/check_health.py cluster "http://${NODE0_HOST}:${PORT}" --wait-seconds 20 $require || status=1
           python3 deploy/live-core/check_health.py live "http://${NODE0_HOST}:${PORT}" --wait-seconds 20 || status=1
+          echo "== response times from the internet (5 rounds, 2 s apart)"
+          for round in 1 2 3 4 5; do
+            for path in /public/live.json /public/live-a.json /public/live-v.json /public/stock/RELIANCE.json /public/stock/MEESHO.json /health; do
+              for enc in gzip identity; do
+                [ "$path" != /public/live.json ] && [ "$enc" = identity ] && continue
+                curl -s -o /dev/null --max-time 60 -H "Accept-Encoding: ${enc}" \
+                  -w "round ${round} ${path} ${enc}: HTTP %{http_code} first-byte %{time_starttransfer}s total %{time_total}s bytes %{size_download}\n" \
+                  "http://${NODE0_HOST}:${PORT}${path}" || echo "round ${round} ${path} ${enc}: failed"
+              done
+            done
+            sleep 2
+          done
           exit $status
