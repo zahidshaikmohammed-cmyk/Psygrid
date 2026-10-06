@@ -82,6 +82,7 @@ Both nodes serve the same routes:
 | `/public/live.json` | local partition + peer partition, sorted by symbol (as the full app) |
 | `/public/live-a.json` .. `live-v.json` | the owning node; canonical order (as the full app) |
 | `/public/stock/{SYMBOL}.json` | the owning node |
+| `/public/live-latest.json?candles=N` | same as `live.json` (all 989 stocks, status, coverage) but each stock keeps only its newest N candles (default 5, 0-60): a few hundred KB, for browsers and light clients |
 | `/health` | this node + every peer's `/health/node` (cluster view, with `dimensions`) |
 | `/public/health.json` | the full PSYGRID's health schema (`equity_990` component etc.); the cluster view rides along under `live_core` |
 | `/health/node` | this node only (used by the systemd watchdog and by peers) |

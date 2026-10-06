@@ -650,3 +650,54 @@ def test_a_wholly_stale_node_is_degraded_but_keeps_serving_its_last_state(make_r
     assert health["status"] == "DEGRADED" and health["dimensions"]["data"] == "STALE"
     payload = client.get("/public/live.json").json()
     assert payload["status"] == "OK" and payload["stock_count"] == 989
+
+
+def test_live_latest_is_the_full_contract_with_only_the_newest_candles(cluster, universe):
+    _node0, _node1, client0, _client1, _router = cluster
+    full = client0.get("/public/live.json").json()
+    for count in (1, 2, 5, 60):
+        response = client0.get(f"/public/live-latest.json?candles={count}")
+        assert response.status_code == 200
+        light = response.json()
+        assert light["status"] == full["status"] == "OK"
+        assert light["stock_count"] == 989 and list(light["stocks"]) == sorted(universe.symbols)
+        assert light["coverage"]["complete"] is True
+        for symbol in ("RELIANCE", universe.symbols[494], universe.symbols[495], universe.symbols[-1]):
+            whole = full["stocks"][symbol]
+            sliced = light["stocks"][symbol]
+            # Identical stock object, only the candle list cut to its newest `count` entries.
+            assert {k: v for k, v in sliced.items() if k != "candles_1m"} == {
+                k: v for k, v in whole.items() if k != "candles_1m"
+            }
+            assert sliced["candles_1m"] == whole["candles_1m"][-count:]
+    none = client0.get("/public/live-latest.json?candles=0").json()
+    assert all(stock["candles_1m"] == [] for stock in none["stocks"].values())
+    assert client0.get("/public/live-latest.json?candles=61").status_code == 422
+    # Even with only 3 candles per stock in this fixture, the light body is smaller.
+    assert len(client0.get("/public/live-latest.json?candles=1").content) < len(
+        client0.get("/public/live.json").content
+    )
+
+
+def test_fragment_last_matches_a_parse_for_every_shape():
+    import orjson
+
+    from live_core.render import fragment_last
+
+    def fragment(candles):
+        return orjson.dumps(
+            {"symbol": "M&M", "security_id": "1", "previous_close": 1.5, "today_open": None, "candles_1m": candles}
+        )
+
+    candles = [
+        {"timestamp": f"2026-10-06 09:{15 + i}:00 IST", "open": 1.0, "high": 2.0, "low": 0.5, "close": 1.5, "volume": i}
+        for i in range(7)
+    ]
+    for total in (0, 1, 3, 7):
+        whole = fragment(candles[:total])
+        for count in (0, 1, 2, 3, 10):
+            expected = candles[:total][-count:] if count else []
+            assert orjson.loads(fragment_last(whole, count))["candles_1m"] == expected
+    # An unexpected layout falls back to a real parse, never a wrong slice.
+    odd = orjson.dumps({"candles_1m": candles[:3], "symbol": "X"})
+    assert orjson.loads(fragment_last(odd, 1))["candles_1m"] == candles[2:3]
