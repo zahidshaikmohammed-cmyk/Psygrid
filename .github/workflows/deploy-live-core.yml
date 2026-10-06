@@ -26,7 +26,7 @@ on:
       action:
         description: status (read-only) or deploy
         type: choice
-        options: [status, deploy]
+        options: [status, deploy, inspect-production]
         default: status
       target:
         description: Which node(s)
@@ -94,7 +94,7 @@ jobs:
   operate:
     needs: test
     # status skips the test job; deploy requires it to pass.
-    if: ${{ always() && (needs.test.result == 'success' || (inputs.action == 'status' && needs.test.result == 'skipped')) }}
+    if: ${{ always() && inputs.action != 'inspect-production' && (needs.test.result == 'success' || (inputs.action == 'status' && needs.test.result == 'skipped')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -263,3 +263,46 @@ jobs:
           python3 deploy/live-core/check_health.py cluster "http://${NODE0_HOST}:${PORT}" --wait-seconds 20 $require || status=1
           python3 deploy/live-core/check_health.py live "http://${NODE0_HOST}:${PORT}" --wait-seconds 20 || status=1
           exit $status
+
+  # Read-only look at the full PSYGRID VM: private network, token configuration (variable NAMES
+  # only, never values), Dhan connections in use, reachability of the Live Core nodes.
+  inspect-production:
+    if: ${{ inputs.action == 'inspect-production' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Inspect the full PSYGRID VM (read-only)
+        env:
+          ORACLE_SSH_KEY: ${{ secrets.ORACLE_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$ORACLE_SSH_KEY" || { echo "secret ORACLE_SSH_KEY is not set"; exit 1; }
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          trap 'rm -f ~/.ssh/psygrid_oracle' EXIT
+          ( umask 077 && printf '%s\n' "$ORACLE_SSH_KEY" > ~/.ssh/psygrid_oracle )
+          unset ORACLE_SSH_KEY
+          ssh-keyscan -H 140.245.226.102 >> ~/.ssh/known_hosts 2>/dev/null
+          ssh -i ~/.ssh/psygrid_oracle -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20 \
+            ubuntu@140.245.226.102 'bash -s' <<'REMOTE'
+          set -u
+          echo "== host"; hostname; echo "private IPs: $(hostname -I)"; nproc; free -m | head -2
+          echo "== deployed commit"; git -C /home/ubuntu/Psygrid log --oneline -1 2>/dev/null || true
+          echo "== env variable NAMES with a value (never values)"
+          for f in /etc/psygrid.env /home/ubuntu/Psygrid/.env; do
+            echo "-- $f"
+            sudo grep -E '^[[:space:]]*(export[[:space:]]+)?[A-Z_][A-Z0-9_]*=.+' "$f" 2>/dev/null \
+              | sed -E 's/^[[:space:]]*(export[[:space:]]+)?([A-Z0-9_]+)=.*/\2/' | sort || echo "(none)"
+          done
+          echo "== psygrid unit"; systemctl show psygrid -p ActiveState -p SubState -p MainPID -p NRestarts -p EnvironmentFiles -p ExecStart
+          echo "== listeners"; sudo ss -ltnpH | awk '{print $4, $6}' | head -20
+          pid="$(systemctl show psygrid -p MainPID --value)"
+          echo "== psygrid established :443 connections by remote address"
+          sudo ss -tnpH state established "( dport = :443 )" 2>/dev/null | grep "pid=${pid}," | awk '{print $4}' | sort | uniq -c || true
+          echo "== reachability of the Live Core nodes from this VM"
+          for url in http://10.0.0.215:10000/health/node http://10.0.0.165:10000/health/node \
+                     http://129.225.112.47:10000/health/node http://140.245.228.101:10000/health/node; do
+            code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$url" || true)"; echo "$url -> ${code}"
+          done
+          echo "== routes"; ip route | head -5
+          REMOTE
+
