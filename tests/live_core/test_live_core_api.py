@@ -162,8 +162,14 @@ def test_peer_failure_is_reported_never_hidden(cluster, universe):
     assert cluster_view["partitions_covered"] is False and cluster_view["coverage_status"] == "LIVE_INCOMPLETE"
     assert cluster_view["covered_instrument_count"] == 495
 
+    peer = node0.peers[1]
+    assert peer.circuit_open()  # a failed peer is not hammered: it is retried after a back-off
+    router.calls.clear()
+    assert client0.get("/public/live.json").json()["status"] == "PARTIAL"
+    assert router.calls == []
     router.down.clear()  # node 1 comes back: coverage recovers without restarting node 0
-    node0.peers[1]._health = None
+    peer._retry_at = 0.0  # the back-off has elapsed
+    peer._health = None
     assert client0.get("/public/live.json").json()["status"] == "OK"
     assert client0.get("/health").json()["cluster"]["partitions_covered"] is True
 
@@ -236,13 +242,17 @@ def test_node_health_reports_every_required_field(cluster):
         assert key in health["process"]
     assert {"fresh", "last_tick_age_seconds", "live_stock_count", "stale_stock_count"} <= set(health["freshness"])
     assert isinstance(health["errors"], list)
-    assert health["storage"] == {"market_data_on_disk": False, "archive_enabled": False}
+    assert health["storage"] == {
+        "market_data_on_disk": False,
+        "archive_enabled": False,
+        "microstructure_enabled": False,
+    }
     assert health["partition"]["expected_instrument_count"] == 495
     cluster_health = client0.get("/health").json()["cluster"]
     assert cluster_health["all_nodes_healthy"] is True and cluster_health["partitions_covered"] is True
     assert cluster_health["coverage_status"] == "LIVE_COMPLETE"
     assert cluster_health["covered_instrument_count"] == 989
-    assert client0.get("/public/health.json").json()["cluster"]["node_count"] == 2
+    assert client0.get("/public/health.json").json()["live_core"]["node_count"] == 2
 
 
 def test_stale_feed_makes_the_node_degraded_but_still_serving(cluster):
@@ -388,19 +398,50 @@ def test_a_restarted_peer_is_never_mistaken_for_its_previous_state(make_runtime,
     assert payload["stocks"][universe.symbols[600]]["candles_1m"] == []
 
 
-def test_unchanged_content_is_served_without_reassembly(cluster):
+def test_unchanged_content_reuses_the_encoded_stocks_and_rebuilds_only_the_head(cluster, monkeypatch):
     node0, _node1, client0, _client1, _router = cluster
-    object.__setattr__(node0.cfg, "render_max_age_seconds", 60.0)
     service = client0.app.state.live_core
+    import live_core.render as render_module
+
     client0.get("/public/live-a.json")
-    first = service._cache[("shard", 0, 45)]
-    client0.get("/public/live-a.json")
-    assert service._cache[("shard", 0, 45)] is first  # same body object: nothing re-assembled
+    first_tail = service._tails[("shard", 0, 45)][1]
+    clock = iter(["2026-10-05 09:18:06 IST", "2026-10-05 09:18:07 IST"])
+
+    class _Now:
+        @staticmethod
+        def now(tz):
+            class _T:
+                def strftime(self, fmt):
+                    return next(clock)
+
+            return _T()
+
+    monkeypatch.setattr(render_module, "datetime", _Now)
+    a = client0.get("/public/live-a.json", headers={"Accept-Encoding": "gzip"}).json()
+    b = client0.get("/public/live-a.json", headers={"Accept-Encoding": "identity"}).json()
+    assert service._tails[("shard", 0, 45)][1] is first_tail  # stocks not re-encoded or re-compressed
+    assert (a["session"]["current_time_ist"], b["session"]["current_time_ist"]) == (
+        "2026-10-05 09:18:06 IST",
+        "2026-10-05 09:18:07 IST",
+    )  # the head is fresh on every build
+    assert a["stocks"] == b["stocks"]
+    monkeypatch.undo()
     series = node0.state.ordered[0]
     node0.state.set_market_reference(series.security_id, previous_close=123.0)
     payload = client0.get("/public/live-a.json").json()
-    assert service._cache[("shard", 0, 45)] is not first
+    assert service._tails[("shard", 0, 45)][1] is not first_tail
     assert payload["stocks"][series.symbol]["previous_close"] == 123.0
+
+
+def test_gzip_and_identity_bodies_are_byte_identical_after_decoding(cluster):
+    import gzip as gzip_module
+
+    _node0, _node1, client0, _client1, _router = cluster
+    service = client0.app.state.live_core
+    entry = service.live()
+    assert gzip_module.decompress(entry.gzipped()) == entry.body
+    payload = orjson.loads(entry.body)
+    assert payload["stock_count"] == 989 and len(payload["stocks"]) == 989
 
 
 def test_session_end_drops_cached_bodies_and_peer_snapshots(cluster):
@@ -427,3 +468,185 @@ def test_misconfigured_nodes_cannot_bounce_a_stock_request_between_them(make_run
     assert response.status_code == 503
     assert len(router.calls) == 1  # one hop, answered NOT_OWNER, never forwarded again
     assert router.clients[NODE0_URL].get("/").json()["live_endpoints"][-1] == "/public/live-v.json"
+
+
+def test_every_response_is_one_coherent_snapshot_while_the_feed_writes(make_runtime):
+    """While the feed completes a minute for every stock at once, a response never shows some
+    stocks with the new minute and others without it."""
+    runtime = make_runtime(0, node_count=1, when=ist(9, 15))
+    runtime.tick()
+    state = runtime.state
+    ids = [series.security_id for series in state.ordered]
+    start = int(ist(9, 15).timestamp())
+    service = TestClient(create_app(runtime, start_runtime=False)).app.state.live_core
+    stop = threading.Event()
+    errors = []
+
+    def writer():
+        minute = 0
+        volume = 1000
+        while not stop.is_set() and minute < 300:
+            volume += 1
+            for security_id in ids:
+                state.update_quote(security_id, {"LTT_EPOCH": start + minute * 60 + 5, "LTP": 100.0, "volume": volume})
+            state.finalize_due(start + (minute + 2) * 60, grace_seconds=3)  # completes every stock in one sweep
+            minute += 1
+
+    def reader():
+        from live_core.render import snapshot
+
+        while not stop.is_set():
+            snap = snapshot(state, 0, 989)
+            counts = {orjson.loads(fragment)["candles_1m"].__len__() for _, _, fragment in snap.items}
+            if len(counts) > 1:
+                errors.append(counts)
+                return
+
+    threads = [threading.Thread(target=writer)] + [threading.Thread(target=reader) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    threads[0].join(60)
+    stop.set()
+    for thread in threads[1:]:
+        thread.join(10)
+    assert not errors, f"a response mixed stocks from different moments: candle counts {errors[0]}"
+    assert service is not None
+
+
+def test_one_stock_that_fails_to_render_never_fails_the_endpoint(cluster, monkeypatch):
+    node0, _node1, client0, _client1, _router = cluster
+    import live_core.render as render_module
+
+    original = render_module._candle_bytes
+    target = node0.state.by_symbol["RELIANCE"]
+    good = client0.get("/public/live.json").json()["stocks"]["RELIANCE"]
+
+    def broken(series, position):
+        if series is target:
+            raise ValueError("corrupt column")
+        return original(series, position)
+
+    monkeypatch.setattr(render_module, "_candle_bytes", broken)
+    node0.state.set_market_reference(target.security_id, previous_close=1.0)  # forces a re-render
+    object.__setattr__(node0.cfg, "render_cache_seconds", 0.0)
+    response = client0.get("/public/live.json")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "OK" and payload["stock_count"] == 989
+    assert payload["stocks"]["RELIANCE"]["candles_1m"] == good["candles_1m"]  # last good encoding served
+    assert node0.state.render_errors >= 1
+    assert client0.get("/health/node").json()["data_quality"]["render_errors"] >= 1
+
+
+def test_a_hung_peer_delays_at_most_one_request_per_back_off(make_runtime):
+    router = Router()
+    node0 = make_runtime(0, when=ist(9, 15), peers={1: NODE1_URL}, peer_timeout_seconds=1.0)
+    node0.tick()
+    hang = threading.Event()
+
+    def hung_get(url, timeout):
+        hang.wait(timeout)  # accepts, never answers, until the client's timeout
+        raise TimeoutError("read timed out")
+
+    node0.peers[1]._get = hung_get
+    client0 = TestClient(create_app(node0, start_runtime=False))
+    timings = []
+    for _ in range(10):
+        started = time.perf_counter()
+        payload = client0.get("/public/live.json").json()
+        timings.append(time.perf_counter() - started)
+        assert payload["status"] == "PARTIAL" and payload["stock_count"] == 495
+    assert timings[0] >= 0.9  # the first request waited for the timeout
+    assert max(timings[1:]) < 0.5, timings  # the open circuit answers the rest immediately
+    assert router.calls == []
+
+
+def test_a_live_peer_missing_stocks_is_partial_not_complete(cluster, universe):
+    _node0, node1, client0, _client1, _router = cluster
+    victim = node1.state.ordered[10]
+    with node1.state.lock:
+        node1.state.ordered.remove(victim)  # the peer serves 493 of its 494 stocks
+        node1.state.version += 1
+    payload = client0.get("/public/live.json").json()
+    assert payload["status"] == "PARTIAL"
+    assert payload["stock_count"] == 988
+    assert payload["coverage"]["complete"] is False
+    assert payload["coverage"]["nodes"]["1"]["missing_stock_count"] == 1
+
+
+def test_reachable_nodes_without_stocks_are_never_complete(make_runtime):
+    """Both nodes up but in CONFIG_ERROR (no Dhan credentials): 0 stocks must not read as complete."""
+    router = Router()
+    node0 = make_runtime(0, when=ist(10, 0), peers={1: NODE1_URL}, peer_get=router.get)
+    node1 = make_runtime(1, when=ist(10, 0), peers={0: NODE0_URL}, peer_get=router.get)
+
+    def no_credentials():
+        raise RuntimeError("Missing required environment variable: DHAN_CLIENT_ID")
+
+    for runtime, url in ((node0, NODE0_URL), (node1, NODE1_URL)):
+        runtime._settings_loader = no_credentials
+        runtime.tick()
+        router.clients[url] = TestClient(create_app(runtime, start_runtime=False))
+    payload = router.clients[NODE0_URL].get("/public/live.json").json()
+    assert payload["status"] == "CONFIG_ERROR"
+    assert payload["stock_count"] == 0
+    assert payload["coverage"]["complete"] is False
+    assert {k: v["missing_stock_count"] for k, v in payload["coverage"]["nodes"].items()} == {"0": 495, "1": 494}
+
+
+def _fresh_cluster_node(make_runtime, n_stale=0):
+    runtime = make_runtime(0, node_count=1, when=ist(9, 15))
+    runtime.tick()
+    clock = runtime.test_clock
+    start = int(ist(9, 15).timestamp())
+    stale_ids = [s.security_id for s in runtime.state.ordered[:n_stale]]
+    fresh_ids = [s.security_id for s in runtime.state.ordered[n_stale:]]
+    clock.set(ist(9, 16, 0))
+    feed_minutes(runtime.state, stale_ids, start, 1)  # last valid data at 09:16:00
+    clock.set(ist(9, 18, 30))
+    feed_minutes(runtime.state, fresh_ids, start + 120, 1)  # last valid data at 09:18:30
+    runtime.state.record_feed_message("Full Data")
+    clock.set(ist(9, 18, 31))  # stale stocks are now 151 s old, the rest 1 s
+    runtime.tick()
+    return runtime, TestClient(create_app(runtime, start_runtime=False))
+
+
+def test_reconnecting_socket_with_fresh_data_is_a_valid_state(make_runtime):
+    runtime, client = _fresh_cluster_node(make_runtime)
+    runtime.state.mark_websocket_reconnecting("websocket closed by peer")
+    health = client.get("/health/node").json()
+    assert health["dimensions"]["http"] == "AVAILABLE"
+    assert health["dimensions"]["feed"] == "RECONNECTING"
+    assert health["dimensions"]["data"] == "FRESH"
+    payload = client.get("/public/live.json").json()
+    assert payload["status"] == "OK" and payload["stock_count"] == 989
+    assert all(stock["candles_1m"] for stock in payload["stocks"].values())  # last valid state served
+
+
+@pytest.mark.parametrize("n_stale", [1, 7])
+def test_stale_stocks_never_fail_the_endpoint_or_the_node(make_runtime, n_stale):
+    runtime, client = _fresh_cluster_node(make_runtime, n_stale)
+    health = client.get("/health/node").json()
+    assert health["status"] == "OK", health["reasons"]
+    assert health["dimensions"] == {
+        "http": "AVAILABLE",
+        "feed": "CONNECTED",
+        "data": "FRESH_WITH_STALE_STOCKS",
+        "coverage": "COMPLETE",
+        "stale_after_seconds": 120.0,
+    }
+    assert health["freshness"]["stale_stock_count"] == n_stale
+    assert len(health["freshness"]["stale_symbols_sample"]) == n_stale
+    payload = client.get("/public/live.json").json()
+    assert payload["status"] == "OK" and payload["stock_count"] == 989
+    stale_symbol = runtime.state.ordered[0].symbol
+    assert payload["stocks"][stale_symbol]["candles_1m"]  # its last valid candles are still served
+
+
+def test_a_wholly_stale_node_is_degraded_but_keeps_serving_its_last_state(make_runtime):
+    runtime, client = _fresh_cluster_node(make_runtime)
+    runtime.test_clock.set(ist(9, 20, 31))  # 121 s after the last packet for every stock
+    health = client.get("/health/node").json()
+    assert health["status"] == "DEGRADED" and health["dimensions"]["data"] == "STALE"
+    payload = client.get("/public/live.json").json()
+    assert payload["status"] == "OK" and payload["stock_count"] == 989

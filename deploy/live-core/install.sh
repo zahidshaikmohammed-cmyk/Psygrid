@@ -18,6 +18,8 @@ APP_USER="${APP_USER:-ubuntu}"
 LIVE_CORE_ROOT="${LIVE_CORE_ROOT:-/home/${APP_USER}/psygrid-live-core}"
 PORT="${PORT:-10000}"
 PEERS="${PEERS:-}"
+# The account's Dhan token authority (the full PSYGRID on the private network); see live_core/auth.py.
+TOKEN_SOURCE="${TOKEN_SOURCE:-}"
 SWAP_MB="${SWAP_MB:-1024}"
 RELEASE_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 UNIT="psygrid-live-core-node${NODE_ID}.service"
@@ -108,12 +110,12 @@ if [ ! -f /etc/psygrid-live-core.env ]; then
   install -m 0600 -o root -g root /dev/null /etc/psygrid-live-core.env
   cat > /etc/psygrid-live-core.env <<'ENVFILE'
 # PSYGRID Live Core Dhan credentials (same account and data plan as the full PSYGRID).
+# Shared-token mode (default): the node consumes ONE current Dhan access token and never generates
+# one, so it cannot invalidate the token of the process that owns token generation.
 # DHAN_CLIENT_ID=
-# Either a daily access token:
 # DHAN_ACCESS_TOKEN=
-# or automatic daily token generation:
-# DHAN_PIN=
-# DHAN_TOTP_SECRET=
+# DHAN_PIN / DHAN_TOTP_SECRET are ignored unless LIVE_CORE_TOKEN_GENERATION=1 (only for a node that
+# is the account's sole token authority).
 # Optional NSE holidays / special sessions (ISO dates, comma separated):
 # PSYGRID_MARKET_HOLIDAYS=
 # PSYGRID_SPECIAL_SESSIONS=
@@ -129,6 +131,7 @@ cat > /etc/psygrid-live-core-node.env <<TOPOLOGY
 # Written by deploy/live-core/install.sh; node identity lives in ${UNIT}.
 LIVE_CORE_PORT=${PORT}
 LIVE_CORE_PEERS=${PEERS}
+LIVE_CORE_TOKEN_SOURCE=${TOKEN_SOURCE}
 TOPOLOGY
 
 # 6. Exactly one Live Core node per VM: retire any other node unit left on this host.

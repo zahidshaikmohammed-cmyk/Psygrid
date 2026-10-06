@@ -127,6 +127,8 @@ jobs:
           NODE1_URL: ${{ vars.LIVE_CORE_NODE1_PRIVATE_URL }}
           RELEASE: ${{ github.sha }}
           ALLOW_CONFIG_ERROR: ${{ inputs.allow_missing_credentials }}
+          # The full PSYGRID on the private network is the account's only Dhan token authority.
+          TOKEN_SOURCE: ${{ vars.LIVE_CORE_TOKEN_SOURCE || 'http://10.0.0.10:10000' }}
         run: |
           set -euo pipefail
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
@@ -208,7 +210,7 @@ jobs:
             ssh $(ssh_opts "$node") "${user}@${host}" "set -euo pipefail
               cd '${dir}' && tar xzf live-core.tgz && rm -f live-core.tgz
               sudo NODE_ID='${node}' NODE_COUNT='${NODE_COUNT}' APP_USER='${user}' LIVE_CORE_ROOT='${root}' \\
-                   PORT='${PORT}' PEERS='${peers}' bash deploy/live-core/install.sh
+                   PORT='${PORT}' PEERS='${peers}' TOKEN_SOURCE='${TOKEN_SOURCE}' bash deploy/live-core/install.sh
               if ! python3 deploy/live-core/check_health.py node http://127.0.0.1:${PORT} \\
                    --expect-node '${node}' --node-count '${NODE_COUNT}' ${health_flags}; then
                 sudo journalctl -u psygrid-live-core-node${node} -n 60 --no-pager

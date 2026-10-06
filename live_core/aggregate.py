@@ -24,6 +24,8 @@ from urllib.parse import quote
 
 import orjson
 
+from live_core.redact import redact
+
 FRAGMENTS_PATH = "/internal/live-core/fragments"
 NODE_HEALTH_PATH = "/health/node"
 
@@ -86,7 +88,15 @@ class PeerFragments:
 
 
 class PeerClient:
-    """Fetches one peer's current state; bounded, cached and failure-tolerant."""
+    """Fetches one peer's current state; bounded, cached and failure-tolerant.
+
+    A failing peer trips a circuit breaker: after a failure it is not contacted again for a
+    back-off (1 s doubling to ``MAX_BACKOFF_SECONDS``), and while one request is already talking to
+    the peer, others do not queue behind it. A peer that hangs (accepts the connection, never
+    answers) therefore delays at most one request per back-off period instead of every request.
+    """
+
+    MAX_BACKOFF_SECONDS = 15.0
 
     def __init__(
         self,
@@ -113,9 +123,25 @@ class PeerClient:
         self._fetch_lock = threading.Lock()
         self._snapshot: PeerFragments | None = None
         self._health: tuple[float, dict] | None = None
+        self._health_lock = threading.Lock()
         self.failures = 0
         self.last_error = ""
         self.last_success_monotonic: float | None = None
+        self._backoff = 0.0
+        self._retry_at = 0.0
+
+    def _usable_cache(self, now: float) -> PeerFragments | None:
+        cached = self._snapshot
+        if cached is not None and now - cached.fetched_monotonic <= self.stale_seconds:
+            return cached
+        return None
+
+    def _open_circuit(self, now: float) -> None:
+        self._backoff = min(self.MAX_BACKOFF_SECONDS, max(1.0, self._backoff * 2))
+        self._retry_at = now + self._backoff
+
+    def circuit_open(self, now: float | None = None) -> bool:
+        return (self._monotonic() if now is None else now) < self._retry_at
 
     def _verify(self, header: dict) -> None:
         expected = self.expected_partition
@@ -136,40 +162,65 @@ class PeerClient:
         A poll sends ``if_version``; an unchanged peer answers with a header-only ``not_modified``
         reply, so steady-state polling moves a few hundred bytes, not the session's candles.
         """
-        with self._fetch_lock:
-            now = self._monotonic()
-            cached = self._snapshot
-            if cached is not None and not cached.stale and now - cached.fetched_monotonic <= self.cache_seconds:
-                return cached
-            start = self.expected_partition["start_index"]
-            end = self.expected_partition["end_index"]
-            url = f"{self.base_url}{FRAGMENTS_PATH}?start={start}&end={end}"
+        now = self._monotonic()
+        if not self._fetch_lock.acquire(blocking=False):
+            # Another request is talking to the peer right now: serve its last answer rather than queue.
+            cached = self._usable_cache(now)
             if cached is not None:
-                url += f"&if_version={quote(str(cached.header.get('version', '')), safe='')}"
-            try:
-                status, body = self._get(url, self.timeout_seconds)
-                if status != 200:
-                    raise PeerUnavailable(f"HTTP {status} from {url}")
-                header, items = decode_fragments(body)
-                self._verify(header)
-                if header.get("not_modified"):
-                    if cached is None or header.get("version") != cached.header.get("version"):
-                        raise PeerUnavailable("peer answered not_modified for a version this node does not hold")
-                    items = cached.items
-                    header = {**header, "item_count": len(items)}
-            except Exception as exc:
-                self.failures += 1
-                self.last_error = f"{type(exc).__name__}: {exc}"[:300]
-                if cached is not None and now - cached.fetched_monotonic <= self.stale_seconds:
-                    cached.stale = True
-                    return cached
-                self._snapshot = None
-                raise PeerUnavailable(self.last_error) from exc
-            result = PeerFragments(header, items, self._monotonic())
-            self._snapshot = result
-            self.last_success_monotonic = result.fetched_monotonic
-            self.last_error = ""
-            return result
+                return cached
+            self._fetch_lock.acquire()
+        try:
+            return self._snapshot_locked()
+        finally:
+            self._fetch_lock.release()
+
+    def _snapshot_locked(self) -> PeerFragments:
+        now = self._monotonic()
+        cached = self._snapshot
+        if cached is not None and not cached.stale and now - cached.fetched_monotonic <= self.cache_seconds:
+            return cached
+        if now < self._retry_at:
+            usable = self._usable_cache(now)
+            if usable is not None:
+                usable.stale = True
+                return usable
+            raise PeerUnavailable(
+                f"{self.last_error or 'peer unavailable'}; next attempt in {self._retry_at - now:.1f}s"
+            )
+        start = self.expected_partition["start_index"]
+        end = self.expected_partition["end_index"]
+        url = f"{self.base_url}{FRAGMENTS_PATH}?start={start}&end={end}"
+        if cached is not None:
+            url += f"&if_version={quote(str(cached.header.get('version', '')), safe='')}"
+        try:
+            status, body = self._get(url, self.timeout_seconds)
+            if status != 200:
+                raise PeerUnavailable(f"HTTP {status} from {url}")
+            header, items = decode_fragments(body)
+            self._verify(header)
+            if header.get("not_modified"):
+                if cached is None or header.get("version") != cached.header.get("version"):
+                    raise PeerUnavailable("peer answered not_modified for a version this node does not hold")
+                items = cached.items
+                header = {**header, "item_count": len(items)}
+        except Exception as exc:
+            self.failures += 1
+            self.last_error = redact(f"{type(exc).__name__}: {exc}")[:300]
+            failed_at = self._monotonic()
+            self._open_circuit(failed_at)
+            usable = self._usable_cache(failed_at)
+            if usable is not None:
+                usable.stale = True
+                return usable
+            self._snapshot = None
+            raise PeerUnavailable(self.last_error) from exc
+        result = PeerFragments(header, items, self._monotonic())
+        self._snapshot = result
+        self.last_success_monotonic = result.fetched_monotonic
+        self.last_error = ""
+        self._backoff = 0.0
+        self._retry_at = 0.0
+        return result
 
     def forget(self) -> None:
         """Drop the cached peer snapshot (session end): no market data outlives the session."""
@@ -186,11 +237,17 @@ class PeerClient:
 
     def stock(self, symbol: str) -> tuple[int, bytes]:
         url = f"{self.base_url}/public/stock/{quote(symbol, safe='')}.json?local=1"
+        now = self._monotonic()
+        if now < self._retry_at:
+            raise PeerUnavailable(
+                f"{self.last_error or 'peer unavailable'}; next attempt in {self._retry_at - now:.1f}s"
+            )
         try:
             status, body = self._get(url, self.timeout_seconds)
         except Exception as exc:
             self.failures += 1
-            self.last_error = f"{type(exc).__name__}: {exc}"[:300]
+            self.last_error = redact(f"{type(exc).__name__}: {exc}")[:300]
+            self._open_circuit(self._monotonic())
             raise PeerUnavailable(self.last_error) from exc
         if status >= 500:
             raise PeerUnavailable(f"HTTP {status} from {url}")
@@ -201,6 +258,19 @@ class PeerClient:
         cached = self._health
         if cached is not None and now - cached[0] <= cache_seconds:
             return cached[1]
+        if not self._health_lock.acquire(blocking=False):
+            if cached is not None:
+                return cached[1]  # another request is probing the peer right now
+            self._health_lock.acquire()
+        try:
+            return self._health_locked(cache_seconds, timeout_seconds)
+        finally:
+            self._health_lock.release()
+
+    def _health_locked(self, cache_seconds: float, timeout_seconds: float) -> dict:
+        cached = self._health
+        if cached is not None and self._monotonic() - cached[0] <= cache_seconds:
+            return cached[1]
         url = f"{self.base_url}{NODE_HEALTH_PATH}"
         try:
             status, body = self._get(url, min(timeout_seconds, self.timeout_seconds))
@@ -209,7 +279,7 @@ class PeerClient:
                 raise PeerUnavailable(f"HTTP {status} from {url}")
             result = {"reachable": True, "health": payload, "error": ""}
         except Exception as exc:
-            result = {"reachable": False, "health": None, "error": f"{type(exc).__name__}: {exc}"[:300]}
+            result = {"reachable": False, "health": None, "error": redact(f"{type(exc).__name__}: {exc}")[:300]}
         self._health = (self._monotonic(), result)
         return result
 
@@ -220,6 +290,7 @@ class PeerClient:
             "base_url": self.base_url,
             "failures": self.failures,
             "last_error": self.last_error,
+            "circuit_open": self.circuit_open(now),
             "last_success_age_seconds": round(now - self.last_success_monotonic, 3)
             if self.last_success_monotonic is not None
             else None,

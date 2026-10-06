@@ -93,7 +93,7 @@ def test_stock_payloads_match_the_full_psygrid_output_byte_for_byte():
     assert orjson.loads(stock_body(core, "NOPE")) == stock_json(full, "NOPE")
 
 
-def test_minute_is_published_after_it_ends_and_late_trades_fold_in():
+def test_published_minute_is_immutable_and_late_trade_volume_carries_forward():
     state = _live_state(1)
     state.update_quote("1000", tick_payload("1000", START + 10, 100.0, 10))
     state.update_quote("1000", tick_payload("1000", START + 40, 101.0, 15))
@@ -101,13 +101,33 @@ def test_minute_is_published_after_it_ends_and_late_trades_fold_in():
     assert state.instruments["1000"].candle_count() == 0
     assert state.finalize_due(START + 60 + 3, grace_seconds=3) == 1
     series = state.instruments["1000"]
-    assert list(series.epochs) == [START] and series.closes[0] == 101.0 and series.volumes[0] == 5
+    published = (
+        list(series.epochs),
+        series.opens[0],
+        series.highs[0],
+        series.lows[0],
+        series.closes[0],
+        series.volumes[0],
+    )
+    assert published == ([START], 100.0, 101.0, 100.0, 101.0, 5)
     version = state.version
-    state.update_quote("1000", tick_payload("1000", START + 59, 99.0, 18))  # late trade for 09:15
-    assert (series.lows[0], series.closes[0], series.volumes[0]) == (99.0, 99.0, 8)
-    assert state.version > version
-    state.update_quote("1000", tick_payload("1000", START - 60, 50.0, 30))  # older minute: ignored
-    assert series.candle_count() == 1 and series.lows[0] == 99.0
+    # A late trade for the published 09:15 minute is dropped, as in the full PSYGRID.
+    assert state.update_quote("1000", tick_payload("1000", START + 59, 99.0, 18)) is False
+    assert state.rejected["late_minute"] == 1
+    assert (
+        list(series.epochs),
+        series.opens[0],
+        series.highs[0],
+        series.lows[0],
+        series.closes[0],
+        series.volumes[0],
+    ) == published
+    assert state.version == version
+    # Its 3 shares are not lost: they are carried into the next trade's volume delta.
+    state.update_quote("1000", tick_payload("1000", START + 61, 102.0, 20))
+    assert series.current[5] == 5
+    state.update_quote("1000", tick_payload("1000", START - 60, 50.0, 30))  # an older minute: ignored
+    assert series.candle_count() == 1 and series.lows[0] == 100.0
 
 
 def test_no_trade_means_no_candle():
@@ -166,24 +186,171 @@ def test_nothing_is_recorded_unless_the_session_is_live():
     assert state.feed_messages == 0 and state.live_quotes == 0
 
 
-def test_stale_data_is_detected_from_packet_receipt_time():
+def _accept(state, security_id, ltt, price=100.0, volume=None):
+    series = state.instruments[security_id]
+    volume = volume if volume is not None else (series.previous_cumulative_volume or 0) + 1
+    accepted = state.update_quote(security_id, tick_payload(security_id, ltt, price, volume))
+    state.record_live_quote(security_id, ltt)
+    return accepted
+
+
+def test_stale_means_last_valid_packet_more_than_120_seconds_old():
     now = {"t": START + 100.0}
     state = _live_state(3, clock=lambda: now["t"])
     for security_id in ("1000", "1001"):
-        state.record_live_quote(security_id, START + 99)
+        assert _accept(state, security_id, START + 99)
     fresh = state.freshness()
     assert fresh["fresh"] is True and fresh["stale"] is False
     assert (fresh["live_stock_count"], fresh["stale_stock_count"], fresh["no_quote_stock_count"]) == (2, 0, 1)
     assert fresh["stream_health"] == "PARTIAL_LIVE"
-    now["t"] += 31
+    assert fresh["max_live_age_seconds"] == 120.0
+    now["t"] += 120.0  # exactly 120 s: still FRESH
+    at_limit = state.freshness()
+    assert at_limit["fresh"] is True and at_limit["live_stock_count"] == 2 and at_limit["stale_stock_count"] == 0
+    now["t"] += 0.001  # just over 120 s: STALE
     stale = state.freshness()
     assert stale["fresh"] is False and stale["stale"] is True
-    assert stale["last_tick_age_seconds"] == 31.0
+    assert stale["last_tick_age_seconds"] == 120.001
     assert (stale["live_stock_count"], stale["stale_stock_count"]) == (0, 2)
+    assert stale["stale_symbols_sample"] == ["RELIANCE", "M&M"]
     assert stale["stream_health"] == "NO_LIVE_QUOTES"
-    # An old exchange timestamp does not make a just-received packet stale.
-    state.record_live_quote("1002", START - 3600)
+    # 60 s and 90 s gaps are not staleness under the locked rule.
+    now["t"] = START + 100.0 + 60.0
     assert state.freshness()["fresh"] is True
+    # An early exchange timestamp on a just-received packet does not make it stale.
+    assert _accept(state, "1002", START - 3600)
+    assert state.freshness()["live_stock_count"] == 3
+
+
+def test_a_rejected_packet_is_not_evidence_of_fresh_data():
+    now = {"t": START + 100.0}
+    state = _live_state(1, clock=lambda: now["t"])
+    state.update_quote("1000", tick_payload("1000", START + 99, float("nan"), 5))
+    state.record_live_quote("1000", START + 99)
+    assert state.freshness()["no_quote_stock_count"] == 1 and state.live_quotes == 0
+
+
+def test_bad_packets_are_rejected_one_by_one_without_touching_any_valid_state():
+    state = _live_state(3)
+    assert _accept(state, "1000", START + 5, 100.0, 1000)
+    assert _accept(state, "1001", START + 5, 200.0, 50)
+    before = (list(state.instruments["1000"].current), state.instruments["1000"].previous_cumulative_volume)
+    bad = [
+        {"LTT_EPOCH": START + 6, "LTP": float("nan"), "volume": 1001},
+        {"LTT_EPOCH": START + 6, "LTP": float("inf"), "volume": 1001},
+        {"LTT_EPOCH": START + 6, "LTP": -5.0, "volume": 1001},
+        {"LTT_EPOCH": START + 6, "LTP": 0.0, "volume": 1001},
+        {"LTT_EPOCH": START + 6, "LTP": 101.0, "volume": -1},
+        {"LTT_EPOCH": START + 6, "LTP": "abc", "volume": 1001},
+        {"LTT_EPOCH": "x", "LTP": 101.0, "volume": 1001},
+        {"LTP": 101.0, "volume": 1001},
+        {"LTT_EPOCH": START + 6, "volume": 1001},
+        {"LTT_EPOCH": START + 6, "LTP": 101.0, "volume": 10**30},
+        None,
+    ]
+    for packet in bad:
+        assert state.update_quote("1000", packet if packet is not None else {}) is False
+    assert (list(state.instruments["1000"].current), state.instruments["1000"].previous_cumulative_volume) == before
+    assert sum(state.rejected.values()) == len(bad)
+    assert state.rejected["non_finite"] == 2 and state.rejected["malformed"] >= 4
+    # The other stock never noticed, and the bad stock keeps taking valid trades.
+    assert state.instruments["1001"].current == [START, 200.0, 200.0, 200.0, 200.0, 0]
+    assert _accept(state, "1000", START + 7, 102.0, 1010)
+    assert state.instruments["1000"].current[2] == 102.0 and state.instruments["1000"].current[5] == 10
+
+
+def test_previous_day_packet_never_creates_a_candle_or_moves_the_volume_baseline():
+    state = _live_state(1)
+    yesterday_close = START - 18 * 3600  # 15:15 IST the previous day
+    assert state.update_quote("1000", tick_payload("1000", yesterday_close, 95.0, 9_000_000)) is False
+    assert state.rejected["outside_session_day"] == 1
+    assert state.instruments["1000"].current is None
+    assert state.instruments["1000"].previous_cumulative_volume is None
+    assert _accept(state, "1000", START + 3, 100.0, 1200)
+    assert _accept(state, "1000", START + 9, 100.5, 1300)
+    state.finalize_all()
+    series = state.instruments["1000"]
+    assert list(series.epochs) == [START] and series.volumes[0] == 100
+
+
+def test_a_volume_regression_is_rejected_instead_of_double_counted():
+    state = _live_state(1)
+    assert _accept(state, "1000", START + 1, 100.0, 5000)
+    assert state.update_quote("1000", tick_payload("1000", START + 2, 100.0, 0)) is False  # corrupt frame
+    assert state.rejected["volume_regressed"] == 1
+    assert _accept(state, "1000", START + 3, 100.0, 5010)
+    assert state.instruments["1000"].current[5] == 10  # not 5010
+
+
+def test_duplicate_packets_are_idempotent():
+    state = _live_state(1)
+    packet = tick_payload("1000", START + 5, 100.0, 1000, 7)
+    for _ in range(10):
+        state.update_quote("1000", dict(packet))
+    state.update_quote("1000", tick_payload("1000", START + 6, 101.0, 1010, 10))
+    for _ in range(10):
+        state.update_quote("1000", tick_payload("1000", START + 6, 101.0, 1010, 10))
+    state.finalize_all()
+    series = state.instruments["1000"]
+    assert list(series.epochs) == [START] and series.volumes[0] == 10 and state.duplicate_trades == 19
+
+
+def test_feed_status_recovers_when_market_data_flows_after_an_error():
+    state = _live_state(1)
+    state.mark_websocket_connected(1)
+    state.mark_websocket_error("websocket: one malformed frame")
+    assert state.feed_status == "ERROR"
+    state.record_feed_message("Full Data")
+    assert state.feed_status == "CONNECTED"
+    assert "malformed" in state.last_feed_error  # the error stays visible
+
+
+def test_historical_bars_are_validated_and_bound_to_their_session():
+    state = _live_state(1)
+    good = {"timestamp": START, "open": 10, "high": 11, "low": 9, "close": 10.5, "volume": 1}
+    bad = [
+        {**good, "timestamp": START + 60, "high": float("nan")},
+        {**good, "timestamp": START + 120, "high": 9.5},  # high below open/close
+        {**good, "timestamp": START + 180, "low": 10.6},  # low above open/close
+        {**good, "timestamp": START - 86_400},  # another day
+    ]
+    assert state.merge_history("1000", [good, *bad]) == 1
+    assert state.merge_history("1000", [{**good, "timestamp": START + 240}], session_date="2026-10-04") == 0
+    assert list(state.instruments["1000"].epochs) == [START]
+
+
+def test_random_valid_streams_match_the_full_psygrid_exactly():
+    """Fuzz parity: any valid packet stream (duplicates, late and out-of-order trades, gaps) gives
+    the same published candles as the full PSYGRID's PsygridState + output.py."""
+    import random
+
+    rng = random.Random(20261005)
+    for _round in range(40):
+        core, full = _live_state(3), _full_state(3)
+        volume = {"1000": 100, "1001": 100, "1002": 100}
+        clock = START
+        packets = []
+        last: dict = {}
+        for _ in range(rng.randint(5, 400)):
+            security_id = rng.choice(["1000", "1001", "1002"])
+            clock += rng.choice([0, 0, 1, 2, 7, 30, 61])
+            ltt = clock - rng.choice([0, 0, 0, 1, 45, 90])  # some trades arrive late
+            if rng.random() < 0.15 and security_id in last:
+                packets.append(last[security_id])  # Dhan re-sending the stock's last packet
+                continue
+            volume[security_id] += rng.choice([0, 1, 5, 100])
+            price = round(rng.uniform(90, 110), 2)
+            last[security_id] = (
+                security_id,
+                tick_payload(security_id, ltt, price, volume[security_id], rng.randint(1, 9)),
+            )
+            packets.append(last[security_id])
+        for security_id, quote in packets:
+            core.update_quote(security_id, dict(quote))
+            full.update_quote(security_id, dict(quote))
+        body = assemble(status="OK", session_status="LIVE", session_date="2026-10-05", universe_size=989,
+                        items=local_fragments(core, 0, 10), sort_by_symbol=True)  # fmt: skip
+        assert orjson.loads(body)["stocks"] == market_live_json(full)["stocks"]
 
 
 def test_reset_drops_every_market_value():
@@ -214,3 +381,21 @@ def test_fragment_cache_extends_in_place_and_rebuilds_after_a_rewrite():
     third = orjson.loads(local_fragments(state, 0, 1)[0][2])
     assert third["candles_1m"][0]["close"] == 1.0 and len(third["candles_1m"]) == 3
     assert series.generation >= 1
+
+
+def test_a_stock_that_has_not_traded_today_never_gets_a_candle():
+    """Dhan repeats yesterday's last trade (date-less HH:MM:SS, read as today) with zero day volume."""
+    now = {"t": START + 3600.0}
+    state = _live_state(1, clock=lambda: now["t"])
+    yesterday_time_read_as_today = START + 300  # 09:20 "today"
+    for _ in range(3):
+        assert state.update_quote("1000", tick_payload("1000", yesterday_time_read_as_today, 95.5, 0)) is True
+        state.record_live_quote("1000", yesterday_time_read_as_today)
+    state.finalize_all()
+    series = state.instruments["1000"]
+    assert series.candle_count() == 0 and series.current is None
+    assert state.no_trade_today_packets == 3
+    assert state.freshness()["live_stock_count"] == 1  # the subscription is alive
+    assert _accept(state, "1000", START + 3500, 96.0, 40)  # first real trade today
+    state.finalize_all()
+    assert list(series.epochs) == [START + 3480] and series.volumes[0] == 40

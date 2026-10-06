@@ -72,6 +72,16 @@ def parse_peers(raw: str, node_id: int, node_count: int) -> dict[int, str]:
     return peers
 
 
+def _token_source(environ: Mapping[str, str]) -> str:
+    raw = str(environ.get("LIVE_CORE_TOKEN_SOURCE", "")).strip().rstrip("/")
+    if not raw:
+        return ""
+    parsed = urlparse(raw)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise LiveCoreConfigError(f"LIVE_CORE_TOKEN_SOURCE is not an http(s) URL: {raw!r}")
+    return raw
+
+
 @dataclass(frozen=True)
 class LiveCoreConfig:
     node_id: int
@@ -83,10 +93,9 @@ class LiveCoreConfig:
     peer_timeout_seconds: float = 4.0
     peer_cache_seconds: float = 1.0
     peer_stale_seconds: float = 15.0
-    # Large JSON responses are reused outright for render_cache_seconds, then kept while their
-    # content is unchanged for up to render_max_age_seconds (current_time_ist is the build time).
+    # A large response is reused outright for render_cache_seconds; after that its small head is
+    # rebuilt and its stocks part is re-encoded only if the content changed.
     render_cache_seconds: float = 1.0
-    render_max_age_seconds: float = 5.0
     # Genuine Dhan 1m history for today only, after a mid-session (re)start or a feed gap.
     history_bootstrap: bool = True
     history_interval_seconds: float = 0.5
@@ -95,6 +104,12 @@ class LiveCoreConfig:
     finalize_grace_seconds: float = 3.0
     http_threads: int = 8
     max_rss_mb: float = 600.0
+    # Off: the node only consumes the shared DHAN_ACCESS_TOKEN and never mints one (see live_core/auth.py).
+    token_generation: bool = False
+    # Base URL of the account's token authority (the full PSYGRID on the private network); the node
+    # takes the Dhan token it currently holds from there. Empty: DHAN_ACCESS_TOKEN from the env file.
+    token_source: str = ""
+    token_poll_seconds: float = 15.0
 
     @classmethod
     def from_environment(cls, environ: Mapping[str, str] | None = None) -> LiveCoreConfig:
@@ -121,12 +136,14 @@ class LiveCoreConfig:
             peer_cache_seconds=_float(environ, "LIVE_CORE_PEER_CACHE_SECONDS", 1.0),
             peer_stale_seconds=_float(environ, "LIVE_CORE_PEER_STALE_SECONDS", 15.0),
             render_cache_seconds=_float(environ, "LIVE_CORE_RENDER_CACHE_SECONDS", 1.0),
-            render_max_age_seconds=_float(environ, "LIVE_CORE_RENDER_MAX_AGE_SECONDS", 5.0),
             history_bootstrap=_flag(environ, "LIVE_CORE_HISTORY_BOOTSTRAP", True),
             history_interval_seconds=_float(environ, "LIVE_CORE_HISTORY_INTERVAL_SECONDS", 0.5),
             finalize_grace_seconds=_float(environ, "LIVE_CORE_FINALIZE_GRACE_SECONDS", 3.0),
             http_threads=http_threads,
             max_rss_mb=_float(environ, "LIVE_CORE_MAX_RSS_MB", 600.0),
+            token_generation=_flag(environ, "LIVE_CORE_TOKEN_GENERATION", False),
+            token_source=_token_source(environ),
+            token_poll_seconds=_float(environ, "LIVE_CORE_TOKEN_POLL_SECONDS", 15.0),
         )
 
     def missing_peers(self) -> list[int]:

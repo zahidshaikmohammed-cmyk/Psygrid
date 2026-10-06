@@ -13,6 +13,7 @@ import threading
 from collections import OrderedDict
 
 from auth_retry import AuthRetryGuard
+from live_core.redact import redact
 
 
 class HistoryWorker:
@@ -20,6 +21,8 @@ class HistoryWorker:
         self.state = state
         self.dhan_api = dhan_api
         self.instruments = {str(item.security_id): item for item in instruments}
+        # Bars are only ever merged into the session they were requested for.
+        self.session_date = state.session_date
         self.interval_seconds = max(0.0, float(interval_seconds))
         self.guard = AuthRetryGuard(settings, dhan_api)
         self._queue: OrderedDict[str, None] = OrderedDict()
@@ -62,10 +65,10 @@ class HistoryWorker:
             rows = self.guard.call(lambda: self.dhan_api.load_today_completed_intraday(item, 1))
         except Exception as exc:
             self.failures += 1
-            self.last_error = f"{item.symbol}: {type(exc).__name__}: {exc}"[:300]
+            self.last_error = redact(f"{item.symbol}: {type(exc).__name__}: {exc}")[:300]
             self.state.record_error(f"history:{self.last_error}")
             return
-        self.candles_merged += self.state.merge_history(security_id, rows or [])
+        self.candles_merged += self.state.merge_history(security_id, rows or [], session_date=self.session_date)
 
     def _run(self) -> None:
         while not self._stop.is_set():

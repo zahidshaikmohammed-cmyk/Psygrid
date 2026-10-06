@@ -48,10 +48,10 @@ or `requirements.txt` was edited. `deploy-oracle.yml` does not know the Live Cor
 **New files:**
 
 ```
-live_core/            __init__ __main__ config partition state feed history render aggregate api runtime
+live_core/            __init__ __main__ config partition state feed history render gzipjoin redact aggregate api runtime
 deploy/live-core/     MANIFEST requirements.txt psygrid-live-core.service.in install.sh check_health.py
 .github/workflows/deploy-live-core.yml
-tests/live_core/      95 tests
+tests/live_core/      170 tests
 docs/live-core/README.md
 ```
 
@@ -82,9 +82,10 @@ Both nodes serve the same routes:
 | `/public/live.json` | local partition + peer partition, sorted by symbol (as the full app) |
 | `/public/live-a.json` .. `live-v.json` | the owning node; canonical order (as the full app) |
 | `/public/stock/{SYMBOL}.json` | the owning node |
-| `/health` and `/public/health.json` | this node + every peer's `/health/node` (cluster view) |
+| `/health` | this node + every peer's `/health/node` (cluster view, with `dimensions`) |
+| `/public/health.json` | the full PSYGRID's health schema (`equity_990` component etc.); the cluster view rides along under `live_core` |
 | `/health/node` | this node only (used by the systemd watchdog and by peers) |
-| `/ready` | 200 only when this node is LIVE, CONNECTED, fully subscribed and fresh |
+| `/ready` | the full PSYGRID's `/ready` keys; 200 only when this node is LIVE, CONNECTED, fully subscribed and every stock fresh |
 | `/internal/live-core/fragments` | this node's current RAM state, for peers |
 
 The payload contract is the full PSYGRID's schema 4.0, including key order. A test feeds identical
@@ -102,8 +103,19 @@ Architectures considered:
    * **Conditional polling.** Node 0 polls with `if_version`. An unchanged peer answers with a
      header-only `not_modified` (a few hundred bytes). Content changes only when minutes close, so
      the full transfer happens about once a minute, over the private VCN, where traffic is free.
-   * **Render caching.** Large bodies are reused while their content versions are unchanged, for
-     up to 5 s (`current_time_ist` is the build time), and their gzip form is cached with them.
+   * **Render caching.** A whole body is reused for `LIVE_CORE_RENDER_CACHE_SECONDS` (1 s). After
+     that only the small head (status, session, `current_time_ist`, coverage) is rebuilt; the
+     stocks part and its raw-deflate stream are reused while the content versions are unchanged,
+     and the gzip response is the new head's deflate joined to the cached tail (CRC combined with
+     `crc32_combine`). A response is therefore never older than 1 s, yet steady-state serving does
+     not re-concatenate or re-compress 40 MB. Cached tails idle for 120 s are dropped.
+   * **Coherent snapshots.** Each stock's encoding is refreshed first (lock per stock), then the
+     version, session state and every fragment are captured under one lock, so a response never
+     mixes stocks from different moments. A stock whose encoding raises is served from its last
+     good encoding and counted (`render_errors`); one bad stock never fails a response.
+   * **Peer circuit breaker.** A failing peer is not contacted again for 1 s doubling to 15 s, and
+     requests never queue behind a request already talking to the peer; they get its last answer.
+     A peer that accepts connections but never answers delays at most one request per back-off.
    * **Only current state is exchanged.** Only the peer's current session crosses the wire; there
      is no history to transfer.
    * **Symmetric routes.** Node 1 serves the same URLs, so it can stand in for node 0.
@@ -118,7 +130,8 @@ Architectures considered:
 * The aggregating node keeps serving its own half.
 * A recent peer snapshot (up to 15 s old) is reused through a brief blip and marked `stale`.
 * After that, `/public/live.json` returns `status: "PARTIAL"` with only the reachable stocks and a
-  `coverage` block naming the missing node.
+  `coverage` block naming the missing node. A LIVE peer that holds fewer stocks than its partition
+  also makes the response `PARTIAL` (`missing_stock_count`).
 * The peer's shards and stocks return HTTP 503 `NODE_UNAVAILABLE`.
 
 Stocks are never invented or silently dropped under an `OK`.
@@ -133,9 +146,27 @@ Stocks are never invented or silently dropped under an `OK`.
 * **Candle rules (as the full app).** The minute comes from the exchange LTT. Volume is the delta
   of Dhan's cumulative volume. A repeated trade is ignored. A Dhan historical bar beats a
   WebSocket-built one. Only completed candles are published.
-* **Publication timing (the one difference from the full app).** A minute is published once it has
-  ended plus 3 s, rather than waiting for the stock's next trade. A late trade is folded into that
-  minute. A minute without trades has no candle.
+* **Publication timing.** A minute is published once it has ended plus 3 s, rather than waiting
+  for the stock's next trade. Once published, a candle is immutable: a trade that arrives later
+  for an already published minute is dropped (`late_minute`), its cumulative volume is carried
+  forward into the next candle, and only an authoritative Dhan historical bar may replace a
+  published candle. A minute without trades has no candle.
+* **Freshness (locked rule).** A stock is stale only when its last accepted packet is more than
+  120 s old (`age_seconds > 120`); at exactly 120 s it is fresh. Only accepted packets refresh a
+  stock. Stale stocks are listed (`stale_symbols_sample`, up to 25) and never stop the node or the
+  cluster from serving.
+* **Data-level isolation (fail soft).** A packet is rejected, counted under `rejected_packets`
+  and otherwise ignored when it is malformed, has a non-finite or non-positive price, exceeds
+  sane bounds, carries an LTT outside today's session day (e.g. yesterday's last trade), belongs to
+  an already published minute, or reports a cumulative volume lower than the baseline. A
+  non-positive or zero day volume (no trade yet today) refreshes the stock but never creates a
+  candle (`no_trade_today_packets`). Repeated trades are counted (`duplicate_trades`). Historical
+  bars are validated the same way (session date, finite values, OHLC geometry) and are never merged
+  after 15:15.
+* **Health dimensions.** `/health` and `/health/node` report `dimensions` separately for `http`,
+  `feed` (CONNECTED, RECONNECTING, ...), `data` (FRESH, FRESH_WITH_STALE_STOCKS, STALE, NO_DATA,
+  CLOSED) and `coverage` (COMPLETE, INCOMPLETE, IDLE). A reconnecting feed with fresh data is not a
+  data failure, and a few stale stocks are `FRESH_WITH_STALE_STOCKS`, not a node failure.
 * **After a restart or a feed reconnect.** Today's genuine Dhan 1m bars are fetched by one thread at
   2 requests/s at most, 90 s after the reconnect, so the gap is filled from Dhan, not guessed.
 * **At 15:15.** The feed is stopped and its loop closed, the history thread stopped, all market state,
@@ -158,20 +189,46 @@ afterwards open. A test reproduces this: the inherited stop waits 8 s and leaves
 `LiveCoreFeed.stop()` only signals thread-safely and lets the feed thread clean up itself. The full
 app's `feed.py` has the same latent race at its 15:15 stop and shutdown. It is not changed here.
 
+Further protections in `live_core/feed.py`:
+
+* **Packet isolation.** An exception while handling one packet is caught and counted
+  (`packet_errors`, logged only for the first 3 and every 1000th). Without this, dhanhq's loop
+  treats it as a connection error and sleeps 1 s, dropping every stock's packets in that second.
+* **Silence watchdog.** With no message for 45 s during the session, the connection is closed and a
+  new cycle started (`silence_reconnects`).
+* **Stale resubscription.** Stocks stale for more than 120 s are re-subscribed on the live
+  connection in batches of 100 (at most 5 batches per pass, each stock at most every 300 s). A
+  failed resubscribe is recorded but does not flip the feed status.
+* **Internal reconnects.** dhanhq reconnects inside one `MarketFeed` without the Live Core seeing a
+  new cycle. Each such reconnect is counted (`internal_reconnects`) and schedules the same 90 s
+  history refill as an outer reconnect, so the gap is filled.
+* **Status recovery.** A feed in ERROR returns to CONNECTED as soon as quote packets flow again.
+* **Credential redaction.** Every stored or logged error passes through `live_core/redact.py`
+  (the Dhan secret values, runtime tokens, URL query strings, JWTs, `token=`/`pin=`-style pairs and
+  long opaque strings) and a logging filter redacts every log record. dhanhq's WebSocket URL
+  carries the token, so this matters for connection errors. Tests scan every endpoint for the
+  configured secrets.
+
 Tests drive dhanhq's real `MarketFeed` (only the network connect is replaced) through hundreds of
 failed connections. Every loop closes, and under uvloop, as in production, descriptor growth over
 300 reconnects is at most 5. With the guard replaced by a bare `close_connection()`, 5 of the 6 lifecycle
 tests fail. HTTP handlers only read RAM: a test keeps the feed failing and reconnecting while every
 endpoint answers 200 in well under a second.
 
-## Resources (measured, two real processes, full 09:15-15:15 session)
+## Resources (measured, two real processes, real dhanhq over a local WebSocket, full 09:15-15:15 session)
 
 | | node 0 (aggregator) | node 1 |
 | --- | --- | --- |
-| idle, process start | ~59 MB | ~59 MB |
-| holding a full day (~178k candles) | ~63 MB | ~62 MB |
-| polled every second for full `live.json` + shards | ~170 MB | ~84 MB |
-| `live.json` (989 stocks x 360 candles) | 40 MB raw / 7 MB gzip; ~6 ms when unchanged, ~0.4 s to rebuild | |
+| idle, holding a full day (~178k candles per node) | ~65 MB | ~65 MB |
+| 3 clients polling full `live.json` + shards every second for 7 min (with `malloc_trim` every 60 s) | 113-135 MB, no upward trend | 84-103 MB |
+| `live.json` (989 stocks x 360 candles) | 38 MB raw / 3.3 MB gzip | |
+| `live.json` steady state (content unchanged) | ~2 ms in-process; 9 ms p50 / 19 ms p95 over HTTP | |
+| `live.json` first request after a minute completes | ~0.35 s over HTTP (up to ~1.4 s in-process under load) | |
+| mixed-endpoint stress (134,087 requests) | 0 errors, p50 7.7 ms, p99 39.6 ms, fds stable at 22-32 | |
+| 60 forced WebSocket drops | fds unchanged, 0 event loops leaked, data FRESH afterwards | |
+
+Polling overhead is about 3% of one core. Real Dhan packet rates and the E2.1.Micro's 1/8 OCPU
+baseline were not available for measurement; see the open risks.
 
 The systemd unit sets `MemoryHigh=650M`, `MemoryMax=800M`, `LimitNOFILE=8192`, `TasksMax=128`,
 `MALLOC_ARENA_MAX=2`. The watchdog stops feeding systemd above 600 MB RSS or 85% of the fd limit.
@@ -185,11 +242,12 @@ feed watchdog, history.
 | `LIVE_CORE_NODE_ID`, `LIVE_CORE_NODE_COUNT` | systemd unit | identity (0/1 of 2) |
 | `LIVE_CORE_PEERS` | `/etc/psygrid-live-core-node.env` (written by deploy) | e.g. node 0: `1=http://10.0.0.12:10000` |
 | `LIVE_CORE_PORT` | same | default 10000 |
-| `DHAN_CLIENT_ID` + `DHAN_ACCESS_TOKEN` or `DHAN_PIN` + `DHAN_TOTP_SECRET` | `/etc/psygrid-live-core.env` (mode 600, on the VM only) | same account and data plan as the full PSYGRID |
+| `DHAN_CLIENT_ID` + `DHAN_ACCESS_TOKEN` | `/etc/psygrid-live-core.env` (mode 600, on the VM only) | the ONE current Dhan token, shared with the token authority (see below) |
+| `LIVE_CORE_TOKEN_GENERATION` (0) | optional | 1 lets the node generate tokens from `DHAN_PIN` + `DHAN_TOTP_SECRET`; only for a node that is the account's sole token authority |
 | `PSYGRID_MARKET_HOLIDAYS`, `PSYGRID_SPECIAL_SESSIONS` | same | trading-day overrides |
 | `LIVE_CORE_HISTORY_BOOTSTRAP` (1), `LIVE_CORE_HISTORY_INTERVAL_SECONDS` (0.5) | optional | Dhan 1m bar refill |
 | `LIVE_CORE_FINALIZE_GRACE_SECONDS` (3) | optional | publish delay after a minute ends |
-| `LIVE_CORE_RENDER_CACHE_SECONDS` (1), `LIVE_CORE_RENDER_MAX_AGE_SECONDS` (5) | optional | response reuse |
+| `LIVE_CORE_RENDER_CACHE_SECONDS` (1) | optional | whole-response reuse window (the stocks part is reused while unchanged) |
 | `LIVE_CORE_PEER_TIMEOUT_SECONDS` (4), `LIVE_CORE_PEER_CACHE_SECONDS` (1), `LIVE_CORE_PEER_STALE_SECONDS` (15) | optional | peer exchange |
 | `LIVE_CORE_MAX_RSS_MB` (600), `LIVE_CORE_HTTP_THREADS` (8) | optional | budgets |
 
@@ -235,6 +293,56 @@ One-time setup:
 Either node can be deployed first. While one is missing, the other serves its half and reports
 `PARTIAL` / `LIVE_INCOMPLETE`.
 
+## Dhan authentication: one token authority
+
+Dhan keeps one live access token per client, and the full PSYGRID generates its token with PIN +
+TOTP and regenerates it on any 401/807. A Live Core node that also generated tokens could
+invalidate production's token, and each would then keep regenerating and knocking the other out.
+
+So a node, by default, is a **shared-token consumer** (`live_core/auth.py`):
+
+* it needs `DHAN_CLIENT_ID` and `DHAN_ACCESS_TOKEN` and nothing else;
+* `DHAN_PIN` / `DHAN_TOTP_SECRET` are ignored even if present (`auth.pin_totp_ignored` in `/health/node`);
+* when Dhan rejects the token, the node reports `AUTH_ERROR`, keeps serving HTTP, retries every
+  60 s with the token it has, and never mints a replacement;
+* `/health/node` shows `auth.token_mode`, `client_id_configured`, `access_token_configured`
+  (booleans only, never values).
+
+**Deployed setup: the full PSYGRID is the token authority.** The deploy workflow sets
+`LIVE_CORE_TOKEN_SOURCE=http://10.0.0.10:10000` (the full PSYGRID's private IP; override with the
+repository variable `LIVE_CORE_TOKEN_SOURCE`). Then a node:
+
+* takes `DHAN_CLIENT_ID` and the access token from the full PSYGRID's `GET /internal/dhan-token`
+  over the private subnet, keeps them in RAM only and registers them with the redactor;
+* re-reads it every 15 s; when the full PSYGRID renews its token, the node switches to it and
+  reconnects its WebSocket at once (no restart, no lost candles);
+* if the full PSYGRID is briefly unreachable, keeps running on the token it has.
+
+On the full PSYGRID (`token_share.py`), the endpoint is off unless `PSYGRID_TOKEN_SHARE_CLIENTS`
+is set (`deploy/psygrid.service.d/20-live-core-token-share.conf`: `10.0.0.215,10.0.0.165`). It
+answers only direct connections from those private, non-loopback addresses, refuses any request
+with proxy headers, never logs the token and sends `Cache-Control: no-store`. No new secret is
+needed anywhere: the nodes need no Dhan credentials at all.
+
+Without a token source, a node uses `DHAN_CLIENT_ID` + `DHAN_ACCESS_TOKEN` from
+`/etc/psygrid-live-core.env`.
+
+## Intentional differences from the full PSYGRID
+
+The full PSYGRID's endpoints are the specification; the Live Core matches their shapes and values
+(golden-shape and value-parity tests). The deliberate differences:
+
+* **Publication timing.** A minute is published 3 s after it ends, not at the stock's next trade.
+* **Published candles are immutable.** A late trade for a published minute is dropped (its volume
+  carries into the next candle) instead of rewriting the minute.
+* **Volume regression.** A cumulative volume lower than the baseline is rejected rather than
+  resetting the baseline.
+* **No trade today.** A zero day-volume packet (e.g. yesterday's last trade echoed at the open)
+  never produces a candle.
+* **Additions only.** `/public/live.json` adds `coverage`; health payloads add Live Core blocks
+  (`dimensions`, `data_quality`, `live_core`). `index_layer.feed_status` reflects the equity feed,
+  as the Live Core has no index layer. No full-PSYGRID key is removed or renamed.
+
 ## Operational notes and open risks
 
 * **Dhan WebSocket connections.** The two nodes use 2 of the account's market-feed WebSocket
@@ -251,3 +359,11 @@ Either node can be deployed first. While one is missing, the other serves its ha
   node's 495-stock refill takes about 4 minutes.
 * **Restarts.** A restart mid-session loses that node's RAM candles until the refill completes;
   the refill restores them from Dhan.
+* **Dhan single live token.** Dhan issues one live access token per client. Giving the nodes their
+  own credentials while the full PSYGRID runs on the same client would invalidate one of them. The
+  nodes stay in `CONFIG_ERROR` until this is decided.
+* **CPU on E2.1.Micro.** The VMs have a 1/8 OCPU baseline. Frequent polling of the full
+  `/public/live.json` (38 MB raw) is the most expensive request; prefer shards or gzip.
+* **dhanhq binary parse errors.** A malformed binary frame raised inside dhanhq itself (before the
+  Live Core's handler) still triggers dhanhq's internal 1 s sleep; this cannot be fixed without
+  patching dhanhq.

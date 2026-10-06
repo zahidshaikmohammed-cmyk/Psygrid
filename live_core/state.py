@@ -11,14 +11,27 @@ It differs only in representation and publication:
 * candles are stored column-wise in ``array`` buffers (48 bytes per candle instead of a ~1 KB dict),
   so a whole session for ~495 stocks stays in single-digit megabytes;
 * the minute a stock's candle covers is published once that minute has ended (plus a grace
-  period) instead of waiting for the stock's next trade; a late trade for that minute is folded
-  into it. No candle is ever created without a real trade or a Dhan historical bar.
+  period) instead of waiting for the stock's next trade. A published candle is never changed by a
+  later WebSocket trade (like the full PSYGRID, a trade older than the newest minute is dropped and
+  its volume carried into the next trade's delta); only an authoritative Dhan historical bar may
+  replace it. No candle is ever created without a real trade or a Dhan historical bar.
+
+Every packet is validated on its own and a bad one is rejected and counted without touching the
+stock's last valid state or any other stock: non-finite or non-positive prices, a trade time
+outside the session's calendar day, and a cumulative volume below the one already seen (which
+would otherwise double-count volume on the next trade). A packet with zero day volume is the
+stock not having traded today: Dhan then repeats the previous day's last trade with a date-less
+time, so it proves the subscription is alive but never creates a candle.
+
+A stock is FRESH while its last valid packet was received at most ``STALE_AFTER_SECONDS`` (120 s)
+ago and STALE after that. Data freshness is kept separate from the feed's connection state.
 
 Nothing in this module touches the disk. ``reset`` drops every market value.
 """
 
 from __future__ import annotations
 
+import math
 import threading
 import time
 import uuid
@@ -27,8 +40,17 @@ from bisect import bisect_left
 from collections import deque
 from datetime import UTC, datetime
 
+from live_core.redact import redact
+
 SOURCE_WEBSOCKET = 0
 SOURCE_HISTORICAL = 1
+# Locked data-freshness rule: a stock is STALE only when its last valid packet is more than this old.
+STALE_AFTER_SECONDS = 120.0
+# Sanity bounds that keep every stored value inside the int64/float64 candle columns.
+MAX_CUMULATIVE_VOLUME = 10**15
+MAX_EPOCH = 4_102_444_800  # 2100-01-01
+MAX_PRICE = 1e9
+REJECT_REASONS = ("malformed", "non_finite", "non_positive", "outside_session_day", "late_minute", "volume_regressed")
 _QUOTE_TYPES = frozenset({"quote data", "quote", "full data", "full"})
 
 
@@ -138,7 +160,9 @@ class StockSeries:
 class NodeState:
     """RAM-only market state for one partition, shaped for ``feed.LiveFeed``."""
 
-    def __init__(self, timezone: str = "Asia/Kolkata", max_live_age_seconds: float = 30.0, clock=time.time):
+    def __init__(
+        self, timezone: str = "Asia/Kolkata", max_live_age_seconds: float = STALE_AFTER_SECONDS, clock=time.time
+    ):
         self.timezone = timezone
         self.max_live_age_seconds = float(max_live_age_seconds)
         self.clock = clock
@@ -171,6 +195,15 @@ class NodeState:
         self.last_tick_received_epoch: float | None = None
         self.last_tick_ltt: int | None = None
         self.websocket_connected_epoch: float | None = None
+        # [day_start, day_end) epochs of the session's calendar day in the exchange timezone.
+        self.session_day_bounds: tuple[int, int] | None = None
+        self.rejected: dict[str, int] = dict.fromkeys(REJECT_REASONS, 0)
+        self.render_errors = 0
+        self.duplicate_trades = 0
+        self.no_trade_today_packets = 0
+        # (security_id, ltt) of the last packet update_quote accepted; record_live_quote only
+        # counts a packet as fresh data when it was accepted.
+        self._accepted: tuple[str, int] | None = None
 
     def reset(self) -> None:
         """Drop every market value; nothing is carried into the next session or written anywhere."""
@@ -185,6 +218,7 @@ class NodeState:
             self.session_date = session_date
             self.session_status = "STARTING"
             self.feed_status = "STARTING"
+            self.session_day_bounds = _day_bounds(session_date, self.timezone)
             for offset, item in enumerate(instruments):
                 series = StockSeries(start_index + offset, str(item.symbol), str(item.security_id))
                 self.instruments[series.security_id] = series
@@ -203,7 +237,7 @@ class NodeState:
 
     def record_error(self, error: str) -> None:
         with self.lock:
-            self.errors.append({"at": datetime.now(UTC).isoformat(timespec="seconds"), "error": str(error)[:500]})
+            self.errors.append({"at": datetime.now(UTC).isoformat(timespec="seconds"), "error": redact(error)[:500]})
 
     # ------------------------------------------------------------------ feed.LiveFeed interface
 
@@ -211,7 +245,7 @@ class NodeState:
         with self.lock:
             self.feed_status = status
             if error:
-                self.last_feed_error = error
+                self.last_feed_error = redact(error)[:500]
                 self.record_error(error)
 
     def mark_websocket_connected(self, subscribed_count: int) -> None:
@@ -225,13 +259,19 @@ class NodeState:
         with self.lock:
             self.feed_status = "RECONNECTING"
             self.websocket_reconnects += 1
-            self.last_feed_error = reason
+            self.last_feed_error = redact(reason)[:500]
+            self.record_error(reason)
+
+    def note_reconnect(self, reason: str) -> None:
+        """Count a reconnect that has already succeeded (the socket is connected again)."""
+        with self.lock:
+            self.websocket_reconnects += 1
             self.record_error(reason)
 
     def mark_websocket_error(self, error: str) -> None:
         with self.lock:
             self.feed_status = "ERROR"
-            self.last_feed_error = error
+            self.last_feed_error = redact(error)[:500]
             self.record_error(error)
 
     def record_feed_message(self, packet_type: str) -> None:
@@ -243,6 +283,11 @@ class NodeState:
             self.last_message_epoch = self.clock()
             if packet_type.lower() in _QUOTE_TYPES:
                 self.quote_packets += 1
+                if self.feed_status == "ERROR":
+                    # Market data is arriving on the socket, so it is connected: a transient error
+                    # (one bad frame, one failed request) must not leave the feed flagged ERROR for
+                    # the rest of the session. The error itself stays in last_feed_error/errors.
+                    self.feed_status = "CONNECTED"
 
     def set_market_reference(self, security_id, *, previous_close=None, today_open=None) -> None:
         with self.lock:
@@ -255,7 +300,7 @@ class NodeState:
                     value = float(value)
                 except (TypeError, ValueError):
                     continue
-                if value > 0 and getattr(series, name) != value:
+                if math.isfinite(value) and value > 0 and getattr(series, name) != value:
                     setattr(series, name, value)
                     changed = True
             if changed:
@@ -267,6 +312,13 @@ class NodeState:
             series = self.instruments.get(str(security_id))
             if series is None or self.session_status != "LIVE":
                 return
+            try:
+                accepted = self._accepted == (series.security_id, int(ltt_epoch))
+            except (TypeError, ValueError):
+                accepted = False
+            self._accepted = None
+            if not accepted:
+                return  # a rejected packet is not evidence of fresh data
             now = self.clock()
             self.live_quotes += 1
             self.last_tick_received_epoch = now
@@ -274,57 +326,78 @@ class NodeState:
             series.last_received = now
             series.last_ltt = int(ltt_epoch)
 
-    def update_quote(self, security_id, quote: dict) -> None:
+    def _reject(self, reason: str) -> bool:
+        self.rejected[reason] = self.rejected.get(reason, 0) + 1
+        return False
+
+    def update_quote(self, security_id, quote: dict) -> bool:
+        """Apply one trade/quote packet to its stock. Returns False when the packet was rejected.
+
+        A rejected packet changes nothing: not the stock's candles, not its volume baseline, not
+        its freshness, and never another stock.
+        """
         with self.lock:
+            self._accepted = None
             series = self.instruments.get(str(security_id))
             if series is None or self.session_status != "LIVE":
-                return
+                return False
             try:
                 ltp = float(quote["LTP"])
                 ltt_epoch = int(quote["LTT_EPOCH"])
                 cumulative_volume = int(quote.get("volume", 0) or 0)
                 ltq = int(quote.get("LTQ", quote.get("ltq", 0)) or 0)
-            except (KeyError, TypeError, ValueError):
-                return
+            except (KeyError, TypeError, ValueError, OverflowError):
+                return self._reject("malformed")
+            if not math.isfinite(ltp):
+                return self._reject("non_finite")
             if ltt_epoch <= 0 or ltp <= 0 or cumulative_volume < 0:
-                return
+                return self._reject("non_positive")
+            if cumulative_volume > MAX_CUMULATIVE_VOLUME or ltt_epoch > MAX_EPOCH or ltp > MAX_PRICE:
+                # Candles are stored in int64/float64 columns; an absurd value must never reach them.
+                return self._reject("malformed")
+            bounds = self.session_day_bounds
+            if bounds is not None and not bounds[0] <= ltt_epoch < bounds[1]:
+                return self._reject("outside_session_day")
+
+            previous_volume = series.previous_cumulative_volume
+            if cumulative_volume == 0 and not previous_volume:
+                # Zero day volume means the stock has not traded today. Dhan's Full packet then carries
+                # the previous day's last trade, whose date-less "HH:MM:SS" time can look like a time
+                # today: it is live evidence of the subscription, but never a candle.
+                series.previous_cumulative_volume = 0
+                self.no_trade_today_packets += 1
+                self._accepted = (series.security_id, ltt_epoch)
+                return True
 
             minute = ltt_epoch - (ltt_epoch % 60)
             current = series.current
-            late_into_last = False
             if current is not None:
                 if minute < current[0]:
-                    return
-                if minute > current[0]:
-                    self._complete_current(series)
-                    current = None
+                    return self._reject("late_minute")
             elif len(series.epochs) and minute <= series.epochs[-1]:
-                # The minute was already published by the timer; fold a late trade into it, never
-                # into an older minute and never into an authoritative historical bar.
-                if minute != series.epochs[-1] or series.sources[-1] != SOURCE_WEBSOCKET:
-                    return
-                late_into_last = True
+                # That minute is already published. Like the full PSYGRID, a trade older than the
+                # newest minute is dropped (its volume is carried into the next trade's delta).
+                return self._reject("late_minute")
 
-            previous_volume = series.previous_cumulative_volume
+            if previous_volume is not None and cumulative_volume < previous_volume:
+                # Dhan's day volume never decreases. Lowering the baseline would count the gap
+                # again on the next trade, so the packet is rejected and the baseline kept.
+                return self._reject("volume_regressed")
+            if current is not None and minute > current[0]:
+                self._complete_current(series)
+                current = None
+            self._accepted = (series.security_id, ltt_epoch)
             if previous_volume is None:
                 previous_volume = cumulative_volume
-            delta_volume = max(0, cumulative_volume - previous_volume)
+            delta_volume = cumulative_volume - previous_volume
             series.previous_cumulative_volume = cumulative_volume
             trade_key = (ltt_epoch, cumulative_volume, ltq, ltp)
             if trade_key == series.last_trade_key:
-                return
+                self.duplicate_trades += 1
+                return True
             series.last_trade_key = trade_key
 
-            if late_into_last:
-                position = len(series.epochs) - 1
-                series.highs[position] = max(series.highs[position], ltp)
-                series.lows[position] = min(series.lows[position], ltp)
-                series.closes[position] = ltp
-                series.volumes[position] += delta_volume
-                series.revision += 1
-                series.generation += 1
-                self.version += 1
-            elif current is None:
+            if current is None:
                 series.current = [minute, ltp, ltp, ltp, ltp, delta_volume]
             else:
                 if ltp > current[2]:
@@ -333,6 +406,7 @@ class NodeState:
                     current[3] = ltp
                 current[4] = ltp
                 current[5] += delta_volume
+            return True
 
     # ------------------------------------------------------------------ candles
 
@@ -361,13 +435,21 @@ class NodeState:
                 if series.current is not None:
                     self._complete_current(series)
 
-    def merge_history(self, security_id, rows) -> int:
-        """Merge genuine Dhan historical 1m bars (dicts from ``dhan_api``). Returns how many were stored."""
+    def merge_history(self, security_id, rows, session_date: str | None = None) -> int:
+        """Merge genuine Dhan historical 1m bars (dicts from ``dhan_api``). Returns how many were stored.
+
+        ``session_date`` is the session the bars were requested for; bars for any other session
+        (a slow request finishing after a day change) are discarded, as are bars outside the
+        session's calendar day and bars with impossible OHLC values.
+        """
         stored = 0
         with self.lock:
+            if session_date is not None and session_date != self.session_date:
+                return 0
             series = self.instruments.get(str(security_id))
             if series is None:
                 return 0
+            bounds = self.session_day_bounds
             for candle in rows:
                 if not isinstance(candle, dict) or candle.get("complete", True) is False:
                     continue
@@ -383,7 +465,13 @@ class NodeState:
                     )
                 except (KeyError, TypeError, ValueError):
                     continue
-                if min(row[1:5]) <= 0 or row[5] < 0:
+                if not all(math.isfinite(value) for value in row[1:5]) or min(row[1:5]) <= 0:
+                    continue
+                if not 0 <= row[5] <= MAX_CUMULATIVE_VOLUME or max(row[1:5]) > MAX_PRICE:
+                    continue
+                if row[2] < max(row[1], row[4]) or row[3] > min(row[1], row[4]):
+                    continue
+                if bounds is not None and not bounds[0] <= row[0] < bounds[1]:
                     continue
                 if series.put_completed(row, SOURCE_HISTORICAL):
                     stored += 1
@@ -412,7 +500,7 @@ class NodeState:
                 )
                 try:
                     volume = int(row.get("volume", 0) or 0)
-                except (TypeError, ValueError):
+                except (TypeError, ValueError, OverflowError):
                     continue
                 if series.previous_cumulative_volume is None:
                     series.previous_cumulative_volume = max(0, volume)
@@ -427,6 +515,7 @@ class NodeState:
         now_epoch = self.clock() if now_epoch is None else now_epoch
         with self.lock:
             live = stale = never = 0
+            stale_symbols: list[str] = []
             for series in self.ordered:
                 received = series.last_received
                 if received is None:
@@ -435,6 +524,8 @@ class NodeState:
                     live += 1
                 else:
                     stale += 1
+                    if len(stale_symbols) < 25:
+                        stale_symbols.append(series.symbol)
             last = self.last_tick_received_epoch
             age = round(max(0.0, now_epoch - last), 3) if last is not None else None
             fresh = bool(self.session_status == "LIVE" and age is not None and age <= self.max_live_age_seconds)
@@ -458,7 +549,20 @@ class NodeState:
                 "live_stock_count": live,
                 "stale_stock_count": stale,
                 "no_quote_stock_count": never,
+                "stale_symbols_sample": stale_symbols,
+                "rule": f"a stock is STALE when its last valid packet is more than {self.max_live_age_seconds:g}s old",
             }
+
+    def stale_security_ids(self, now_epoch: float, older_than: float) -> list[str]:
+        """Security ids with no valid packet for more than ``older_than`` seconds (or none at all)."""
+        with self.lock:
+            if self.session_status != "LIVE":
+                return []
+            return [
+                series.security_id
+                for series in self.ordered
+                if series.last_received is None or now_epoch - series.last_received > older_than
+            ]
 
     def memory_summary(self) -> dict:
         with self.lock:
@@ -492,7 +596,24 @@ class NodeState:
                 "last_message_type": self.last_message_type,
                 "last_feed_message_at": _iso(self.last_message_epoch),
                 "last_feed_message_age_seconds": last_message_age,
+                "rejected_packets": dict(self.rejected),
+                "render_errors": self.render_errors,
+                "duplicate_trades": self.duplicate_trades,
+                "no_trade_today_packets": self.no_trade_today_packets,
             }
+
+
+def _day_bounds(session_date: str, timezone: str) -> tuple[int, int] | None:
+    """Epoch bounds of ``session_date``'s calendar day in ``timezone``."""
+    from zoneinfo import ZoneInfo
+
+    try:
+        day = datetime.fromisoformat(session_date).date()
+        tz = ZoneInfo(timezone)
+    except (TypeError, ValueError, KeyError):
+        return None
+    start = datetime(day.year, day.month, day.day, tzinfo=tz)
+    return int(start.timestamp()), int(start.timestamp()) + 86400
 
 
 def _iso(epoch: float | None) -> str | None:

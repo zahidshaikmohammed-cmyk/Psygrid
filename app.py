@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 import orjson
 import requests
 import uvicorn
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Request, Response
 from starlette.middleware.gzip import GZipMiddleware
 
 from config import MARKET_END, MARKET_START, UNIVERSE_SIZE, load_instruments, load_settings
@@ -41,6 +41,7 @@ from session import SessionManager
 from state_runtime import RuntimeFreshnessState
 from stock_depth import StockDepthManager, stock_depth_json, stock_depth_listing_json
 from stock_options import NIFTY50_SYMBOLS, StockOptionsManager, stock_options_json, stock_options_listing_json
+from token_share import allowed_clients, token_share
 from underlying_indicators import UnderlyingIndicatorRuntime
 
 settings = state = manager = indicator_runtime = index_manager = None
@@ -655,6 +656,18 @@ def ready() -> Response:
         and snap.get("stream_health") == "FULL_LIVE"
     )
     return json_response({"service": "PSYGRID", "ready": ready_now, **snap}, 200 if ready_now else 503)
+
+
+_TOKEN_SHARE_CLIENTS = allowed_clients()
+
+
+@app.get("/internal/dhan-token", response_class=Response)
+def internal_dhan_token(request: Request) -> Response:
+    # This process is the account's only Dhan token authority; the Live Core nodes (private IPs in
+    # PSYGRID_TOKEN_SHARE_CLIENTS) use its current token instead of logging in themselves.
+    client = request.client.host if request.client else None
+    status_code, payload = token_share(settings, client, request.headers, _TOKEN_SHARE_CLIENTS)
+    return json_response(payload, status_code)
 
 
 @app.get("/public/live.json", response_class=Response)

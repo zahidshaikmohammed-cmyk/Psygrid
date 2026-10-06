@@ -25,6 +25,7 @@ SCHEMA_VERSION = "4.0"
 DATA_POLICY = "1M_OHLCV_PLUS_PREVIOUS_CLOSE_AND_TODAY_OPEN"
 
 _TIMESTAMP_CACHE: dict[int, bytes] = {}
+MAX_SYMBOL_LENGTH = 32
 
 
 def _timestamp_bytes(epoch: int) -> bytes:
@@ -35,6 +36,11 @@ def _timestamp_bytes(epoch: int) -> bytes:
         cached = orjson.dumps(_ist_timestamp(epoch))
         _TIMESTAMP_CACHE[epoch] = cached
     return cached
+
+
+def clear_caches() -> None:
+    """Drop the minute->timestamp string cache (called at session end with the market state)."""
+    _TIMESTAMP_CACHE.clear()
 
 
 def _candle_bytes(series, position: int) -> bytes:
@@ -52,7 +58,7 @@ def stock_fragment(state, series) -> bytes:
     """The stock's ``{"symbol": ..., "candles_1m": [...]}`` object as JSON bytes, cached per revision.
 
     Only one encoded copy is kept per stock. A newly completed candle is appended to it; a rewrite
-    (historical merge, late trade, reference price change) re-encodes the stock once.
+    (historical merge, reference price change) re-encodes the stock once.
     """
     with state.lock:
         if series._fragment is not None and series._fragment_revision == series.revision:
@@ -85,15 +91,114 @@ def stock_fragment(state, series) -> bytes:
         return fragment
 
 
-def local_fragments(state, start: int, end: int) -> list[tuple[int, str, bytes]]:
-    """``(universe_index, symbol, fragment)`` for this node's stocks inside the canonical range."""
+def safe_fragment(state, series) -> bytes:
+    """``stock_fragment`` that can never fail the whole response because of one stock.
+
+    If encoding this stock raises, its last good encoding is served (or, if it never had one, its
+    identity with no candles), the failure is counted, and every other stock is unaffected.
+    """
+    try:
+        return stock_fragment(state, series)
+    except Exception as exc:
+        with state.lock:
+            state.render_errors += 1
+            if state.render_errors <= 3:
+                state.record_error(f"render {series.symbol}: {type(exc).__name__}: {exc}")
+        if series._fragment is not None:
+            return series._fragment
+        return b'{"symbol":%s,"security_id":%s,"previous_close":null,"today_open":null,"candles_1m":[]}' % (
+            orjson.dumps(series.symbol),
+            orjson.dumps(series.security_id),
+        )
+
+
+class Snapshot:
+    """A coherent view of this node's stocks: every fragment and the version are from one instant."""
+
+    __slots__ = ("items", "session_date", "session_status", "version")
+
+    def __init__(self, version: str, session_status: str, session_date: str | None, items):
+        self.version = version
+        self.session_status = session_status
+        self.session_date = session_date
+        self.items = items
+
+
+def snapshot(state, start: int, end: int) -> Snapshot:
+    """Snapshot of this node's stocks in the canonical range ``[start, end)``.
+
+    Phase 1 brings every stock's cached encoding up to date while the feed keeps running (the lock
+    is taken per stock). Phase 2 takes the lock once and captures the version, session state and
+    every fragment together, re-encoding only the few stocks that changed in between. A response
+    therefore never mixes stocks from different moments, and no full deep copy is made: fragments
+    are immutable ``bytes`` shared by reference.
+    """
     with state.lock:
         selected = [series for series in state.ordered if start <= series.index < end]
-    return [(series.index, series.symbol, stock_fragment(state, series)) for series in selected]
+    for series in selected:
+        safe_fragment(state, series)
+    with state.lock:
+        selected = [series for series in state.ordered if start <= series.index < end]
+        items = [(series.index, series.symbol, safe_fragment(state, series)) for series in selected]
+        return Snapshot(f"{state.instance}:{state.version}", state.session_status, state.session_date, items)
+
+
+def local_fragments(state, start: int, end: int) -> list[tuple[int, str, bytes]]:
+    """``(universe_index, symbol, fragment)`` for this node's stocks inside the canonical range."""
+    return snapshot(state, start, end).items
 
 
 def payload_status(session_status: str) -> str:
     return "OK" if session_status == "LIVE" else session_status
+
+
+def assemble_head(
+    *,
+    status: str,
+    session_status: str,
+    session_date: str | None,
+    universe_size: int,
+    stock_count: int,
+    extra: dict | None = None,
+) -> bytes:
+    """Everything before the stocks object, ending with ``,"stocks":{`` (rebuilt for every response)."""
+    head = {
+        "service": "PSYGRID",
+        "schema_version": SCHEMA_VERSION,
+        "status": status,
+        "session": {
+            "status": session_status,
+            "date": session_date,
+            "timezone": PUBLIC_TIMEZONE_NAME,
+            "current_time_ist": datetime.now(PUBLIC_TIMEZONE).strftime("%Y-%m-%d %H:%M:%S IST"),
+        },
+        "universe_size": universe_size,
+        "stock_count": stock_count,
+        "data_policy": DATA_POLICY,
+        "synthetic_candles": False,
+    }
+    if extra:
+        head.update(extra)
+    return orjson.dumps(head)[:-1] + b',"stocks":{'
+
+
+def tail_parts(items: list[tuple[int, str, bytes]], *, sort_by_symbol: bool) -> list[bytes]:
+    """The stocks object's members and closing braces as a list of byte pieces.
+
+    Each stock fragment appears by reference (no copy); fragments are never re-parsed.
+    """
+    items = sorted(items, key=lambda item: item[1] if sort_by_symbol else item[0])
+    parts = []
+    for position, (_index, symbol, fragment) in enumerate(items):
+        parts.append(b"%s%s:" % (b"," if position else b"", orjson.dumps(symbol)))
+        parts.append(fragment)
+    parts.append(b"}}\n")
+    return parts
+
+
+def assemble_tail(items: list[tuple[int, str, bytes]], *, sort_by_symbol: bool) -> bytes:
+    """The stocks object's members and the closing braces as one ``bytes``."""
+    return b"".join(tail_parts(items, sort_by_symbol=sort_by_symbol))
 
 
 def assemble(
@@ -107,43 +212,25 @@ def assemble(
     extra: dict | None = None,
 ) -> bytes:
     """Build the full endpoint body from per-stock fragments without re-parsing any of them."""
-    items = sorted(items, key=lambda item: item[1] if sort_by_symbol else item[0])
-    head = {
-        "service": "PSYGRID",
-        "schema_version": SCHEMA_VERSION,
-        "status": status,
-        "session": {
-            "status": session_status,
-            "date": session_date,
-            "timezone": PUBLIC_TIMEZONE_NAME,
-            "current_time_ist": datetime.now(PUBLIC_TIMEZONE).strftime("%Y-%m-%d %H:%M:%S IST"),
-        },
-        "universe_size": universe_size,
-        "stock_count": len(items),
-        "data_policy": DATA_POLICY,
-        "synthetic_candles": False,
-    }
-    if extra:
-        head.update(extra)
-    parts = [orjson.dumps(head)[:-1], b',"stocks":{']
-    for position, (_index, symbol, fragment) in enumerate(items):
-        if position:
-            parts.append(b",")
-        parts.append(orjson.dumps(symbol))
-        parts.append(b":")
-        parts.append(fragment)
-    parts.append(b"}}\n")
-    return b"".join(parts)
+    head = assemble_head(
+        status=status,
+        session_status=session_status,
+        session_date=session_date,
+        universe_size=universe_size,
+        stock_count=len(items),
+        extra=extra,
+    )
+    return head + assemble_tail(items, sort_by_symbol=sort_by_symbol)
 
 
 def stock_body(state, symbol: str) -> bytes:
     """``/public/stock/{symbol}.json`` for a locally owned stock (same shape as ``output.stock_json``)."""
-    symbol = symbol.upper()
+    symbol = symbol.upper()[:MAX_SYMBOL_LENGTH]  # an unknown symbol is echoed back, bounded
     with state.lock:
         series = state.by_symbol.get(symbol)
     if series is None:
         return orjson.dumps(
             {"service": "PSYGRID", "symbol": symbol, "status": "NOT_FOUND"}, option=orjson.OPT_APPEND_NEWLINE
         )
-    fragment = stock_fragment(state, series)
+    fragment = safe_fragment(state, series)
     return b'{"service":"PSYGRID","schema_version":"4.0","status":"OK",' + fragment[1:] + b"\n"
