@@ -26,7 +26,7 @@ on:
       action:
         description: status (read-only) or deploy
         type: choice
-        options: [status, deploy]
+        options: [status, deploy, audit-session]
         default: status
       target:
         description: Which node(s)
@@ -37,6 +37,14 @@ on:
         description: Deploy even if /etc/psygrid-live-core.env has no Dhan credentials yet (nodes report CONFIG_ERROR)
         type: boolean
         default: false
+      audit_minutes:
+        description: audit-session only - how long to sample both nodes (max 350)
+        type: number
+        default: 350
+      loadtest_at_minute:
+        description: audit-session only - minute of the run at which the bounded HTTP load test starts (-1 = none)
+        type: number
+        default: 45
       allow_market_hours:
         description: Deploy during 09:00-15:20 IST on a weekday (restarting a node drops its RAM session)
         type: boolean
@@ -94,7 +102,7 @@ jobs:
   operate:
     needs: test
     # status skips the test job; deploy requires it to pass.
-    if: ${{ always() && (needs.test.result == 'success' || (inputs.action == 'status' && needs.test.result == 'skipped')) }}
+    if: ${{ always() && inputs.action != 'audit-session' && (needs.test.result == 'success' || (inputs.action == 'status' && needs.test.result == 'skipped')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -302,3 +310,62 @@ jobs:
             sleep 2
           done
           exit $status
+
+  # Read-only, all-session resource audit: samples both nodes every 60 s (memory, CPU, steal, load,
+  # fds, threads, feed/freshness) and runs one bounded public HTTP load test part-way through.
+  audit-session:
+    if: ${{ inputs.action == 'audit-session' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 358
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sample both nodes through the session (read-only)
+        env:
+          NODE0_SSH_KEY: ${{ secrets.LIVE_CORE_NODE0_SSH_KEY }}
+          NODE1_SSH_KEY: ${{ secrets.LIVE_CORE_NODE1_SSH_KEY }}
+          SSH_USER: ${{ vars.LIVE_CORE_SSH_USER || 'ubuntu' }}
+          MINUTES: ${{ inputs.audit_minutes }}
+          LOADTEST_AT: ${{ inputs.loadtest_at_minute }}
+        run: |
+          set -uo pipefail
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          trap 'rm -f ~/.ssh/live_core_node0 ~/.ssh/live_core_node1' EXIT
+          ( umask 077 && printf '%s\n' "$NODE0_SSH_KEY" > ~/.ssh/live_core_node0 && printf '%s\n' "$NODE1_SSH_KEY" > ~/.ssh/live_core_node1 )
+          unset NODE0_SSH_KEY NODE1_SSH_KEY
+          for h in "$NODE0_HOST" "$NODE1_HOST"; do ssh-keyscan -H "$h" >> ~/.ssh/known_hosts 2>/dev/null; done
+          sample='N=$1; unit=psygrid-live-core-node$N.service; pid=$(systemctl show $unit -p MainPID --value)
+          cg=/sys/fs/cgroup$(systemctl show $unit -p ControlGroup --value)
+          cpu=$(head -1 /proc/stat); set -- $cpu; tot=$(( $2+$3+$4+$5+$6+$7+$8+$9 )); st=$9
+          h=$(curl -s --max-time 4 http://127.0.0.1:10000/health/node | python3 -c "import json,sys
+          try:
+              h=json.load(sys.stdin); f=h[\"feed\"]; fr=h[\"freshness\"]; m=h[\"memory\"]
+              print(h[\"session\"][\"session_status\"], f[\"feed_status\"], \"pk=%s\" % f[\"quote_packets\"], \"live=%s\" % fr[\"live_stock_count\"], \"stale=%s\" % fr[\"stale_stock_count\"], \"candles=%s\" % m[\"completed_candles_in_ram\"], \"rc=%s\" % f[\"websocket_reconnects\"], \"leak=%s\" % f[\"event_loops_leaked\"])
+          except Exception as e: print(\"health_error\", type(e).__name__)")
+          echo "$(date +%H:%M:%S) n$N rss_kb=$(awk "/VmRSS/{print \$2}" /proc/$pid/status) hwm_kb=$(awk "/VmHWM/{print \$2}" /proc/$pid/status) cpu_ticks=$(awk "{print \$14+\$15}" /proc/$pid/stat) thr=$(awk "/Threads/{print \$2}" /proc/$pid/status) fds=$(sudo ls /proc/$pid/fd | wc -l) cg_mb=$(( $(cat $cg/memory.current) / 1048576 )) cg_peak_mb=$(( $(cat $cg/memory.peak 2>/dev/null || echo 0) / 1048576 )) load=$(cut -d" " -f1 /proc/loadavg) avail_mb=$(awk "/MemAvailable/{print int(\$2/1024)}" /proc/meminfo) swap_used_mb=$(awk "/SwapTotal/{t=\$2}/SwapFree/{f=\$2}END{print int((t-f)/1024)}" /proc/meminfo) sys_tot=$tot sys_steal=$st $h"'
+          end=$(( $(date +%s) + MINUTES * 60 ))
+          started=$(date +%s); loadtest_done=0
+          while [ "$(date +%s)" -lt "$end" ]; do
+            for n in 0 1; do
+              if [ "$n" = 0 ]; then host="$NODE0_HOST"; else host="$NODE1_HOST"; fi
+              ssh -i ~/.ssh/live_core_node$n -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=15 "${SSH_USER}@${host}" "bash -s -- $n" <<<"$sample" || echo "$(date +%H:%M:%S) n$n SAMPLE_FAILED"
+            done
+            elapsed=$(( ($(date +%s) - started) / 60 ))
+            for v in 20 120 240 340; do
+              if [ "$elapsed" -ge "$v" ] && ! grep -qx "$v" validated.txt 2>/dev/null; then
+                echo "$v" >> validated.txt
+                echo "==== real-data validation of /public/live.json (minute ${v}) ===="
+                python3 deploy/live-core/validate_live.py "http://${NODE0_HOST}:${PORT}" || echo "VALIDATION FAILED (minute ${v})"
+              fi
+            done
+            if [ "$LOADTEST_AT" -ge 0 ] && [ "$loadtest_done" = 0 ] && [ "$elapsed" -ge "$LOADTEST_AT" ]; then
+              loadtest_done=1
+              echo "==== bounded public HTTP load test (node 0) ===="
+              python3 deploy/live-core/loadtest.py "http://${NODE0_HOST}:${PORT}" --seconds 30 --pause 15 \
+                --plan health:1,10,50 --plan stock:1,10,50,100 --plan shards:1,5,10,25,50 --plan latest:1,10,25,50 --plan live:1,2,4 \
+                > loadtest.log 2>&1 &
+            fi
+            sleep 60
+          done
+          wait
+          echo "==== load test results ===="; cat loadtest.log 2>/dev/null || echo "(no load test)"
+
