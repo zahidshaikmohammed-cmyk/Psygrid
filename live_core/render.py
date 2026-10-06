@@ -148,6 +148,41 @@ def local_fragments(state, start: int, end: int) -> list[tuple[int, str, bytes]]
     return snapshot(state, start, end).items
 
 
+_CANDLES_KEY = b'"candles_1m":['
+_CANDLE_START = b'{"timestamp":'
+MAX_LATEST_CANDLES = 60
+
+
+def fragment_last(fragment: bytes, count: int) -> bytes:
+    """The stock's JSON object with only its last ``count`` completed candles (a byte slice).
+
+    Stock fragments end with ``"candles_1m":[{...},...]}`` and a candle object never nests, so the
+    last ``count`` candles are found by searching backwards for their opening bytes - no JSON is
+    parsed or re-encoded. Anything unexpected falls back to a parse, never to a wrong slice.
+    """
+    count = max(0, count)
+    head_end = fragment.rfind(_CANDLES_KEY)
+    if head_end < 0 or not fragment.endswith(b"]}"):
+        try:
+            data = orjson.loads(fragment)
+            candles = data.get("candles_1m") or []
+            data["candles_1m"] = candles[len(candles) - count :] if count else []
+            return orjson.dumps(data)
+        except Exception:
+            return fragment
+    body_start = head_end + len(_CANDLES_KEY)
+    body_end = len(fragment) - 2
+    if count == 0 or body_start >= body_end:
+        return fragment[:body_start] + b"]}"
+    position = body_end
+    for _ in range(count):
+        found = fragment.rfind(_CANDLE_START, body_start, position)
+        if found < 0:
+            return fragment  # fewer candles than asked for: all of them
+        position = found
+    return fragment[:body_start] + fragment[position:body_end] + b"]}"
+
+
 def payload_status(session_status: str) -> str:
     return "OK" if session_status == "LIVE" else session_status
 

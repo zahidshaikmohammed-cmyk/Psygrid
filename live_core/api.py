@@ -25,9 +25,11 @@ from live_core.aggregate import FRAGMENTS_PATH, PeerUnavailable, encode_fragment
 from live_core.gzipjoin import CompressedTail, gzip_join
 from live_core.partition import nodes_for_range, shard_ranges
 from live_core.render import (
+    MAX_LATEST_CANDLES,
     MAX_SYMBOL_LENGTH,
     assemble_head,
     clear_caches,
+    fragment_last,
     payload_status,
     snapshot,
     stock_body,
@@ -105,7 +107,7 @@ class LiveCoreService:
 
     TAIL_IDLE_SECONDS = 120.0
 
-    def _cached(self, key: tuple, start: int, end: int, sort_by_symbol: bool) -> _Body:
+    def _cached(self, key: tuple, start: int, end: int, sort_by_symbol: bool, last: int | None = None) -> _Body:
         """Serve a live body: a fresh head on every build, the stocks tail rebuilt only on change.
 
         Within ``render_cache_seconds`` a whole body is reused outright (a polling flood costs
@@ -127,6 +129,9 @@ class LiveCoreService:
             if entry is not None and time.monotonic() - entry.created <= cfg.render_cache_seconds:
                 return entry
             items, nodes = self.collect(start, end)
+            if last is not None:
+                # The light view: each stock keeps only its newest candles (a byte slice per stock).
+                items = [(index, symbol, fragment_last(fragment, last)) for index, symbol, fragment in items]
             content_key = tuple(
                 (node_id, node.get("available"), node.get("version"), node.get("stale"), node.get("session_status"))
                 for node_id, node in sorted(nodes.items())
@@ -262,6 +267,10 @@ class LiveCoreService:
     def live(self) -> _Body:
         return self._cached(("live",), 0, self.universe.size, True)
 
+    def latest(self, candles: int) -> _Body:
+        """``/public/live-latest.json``: every stock, only its last ``candles`` completed candles."""
+        return self._cached(("latest", candles), 0, self.universe.size, True, last=candles)
+
     def shard(self, start: int, end: int) -> _Body:
         # Never sort a shard independently: it is a slice of the canonical universe order.
         return self._cached(("shard", start, end), start, end, False)
@@ -349,6 +358,7 @@ def root_payload(runtime) -> dict:
         "live_endpoints": ["/public/live.json"]
         + [f"/public/live-{name}.json" for name, _, _ in shard_ranges(runtime.universe.size)],
         "stock_endpoint": "/public/stock/{SYMBOL}.json",
+        "latest_endpoint": "/public/live-latest.json?candles=5",
         "live_timeframes": ["1m"],
         "depth_enabled": False,
         "indicators_enabled": False,
@@ -419,6 +429,12 @@ def create_app(runtime, *, start_runtime: bool = True) -> FastAPI:
     @app.get("/public/live.json", response_class=Response)
     def public_live(request: Request) -> Response:
         return _respond(request, service.live())
+
+    @app.get("/public/live-latest.json", response_class=Response)
+    def public_live_latest(request: Request, candles: int = Query(5, ge=0, le=MAX_LATEST_CANDLES)) -> Response:
+        # Same contract as /public/live.json (all stocks, status, coverage) but only each stock's
+        # newest candles: a few hundred KB instead of tens of MB, light enough for any browser.
+        return _respond(request, service.latest(candles))
 
     def shard_route(start: int, end: int):
         def route(request: Request) -> Response:
