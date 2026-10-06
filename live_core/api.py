@@ -216,12 +216,9 @@ class LiveCoreService:
         expected = max(0, min(end, self.universe.size) - max(0, start))
         available = [node for node in nodes.values() if node.get("available")]
         for node in available:
-            # A live partition must deliver every one of its stocks; anything less is not complete.
-            node["missing_stock_count"] = (
-                max(0, node["expected_stock_count"] - node["stock_count"])
-                if node.get("session_status") == "LIVE"
-                else 0
-            )
+            # Complete means every expected stock is present: a reachable node that serves fewer
+            # stocks (not live yet, CONFIG_ERROR, missing instruments) is never complete.
+            node["missing_stock_count"] = max(0, node["expected_stock_count"] - node["stock_count"])
         coverage = {
             "complete": bool(nodes)
             and len(available) == len(nodes)

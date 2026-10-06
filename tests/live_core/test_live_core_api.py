@@ -574,6 +574,26 @@ def test_a_live_peer_missing_stocks_is_partial_not_complete(cluster, universe):
     assert payload["coverage"]["nodes"]["1"]["missing_stock_count"] == 1
 
 
+def test_reachable_nodes_without_stocks_are_never_complete(make_runtime):
+    """Both nodes up but in CONFIG_ERROR (no Dhan credentials): 0 stocks must not read as complete."""
+    router = Router()
+    node0 = make_runtime(0, when=ist(10, 0), peers={1: NODE1_URL}, peer_get=router.get)
+    node1 = make_runtime(1, when=ist(10, 0), peers={0: NODE0_URL}, peer_get=router.get)
+
+    def no_credentials():
+        raise RuntimeError("Missing required environment variable: DHAN_CLIENT_ID")
+
+    for runtime, url in ((node0, NODE0_URL), (node1, NODE1_URL)):
+        runtime._settings_loader = no_credentials
+        runtime.tick()
+        router.clients[url] = TestClient(create_app(runtime, start_runtime=False))
+    payload = router.clients[NODE0_URL].get("/public/live.json").json()
+    assert payload["status"] == "CONFIG_ERROR"
+    assert payload["stock_count"] == 0
+    assert payload["coverage"]["complete"] is False
+    assert {k: v["missing_stock_count"] for k, v in payload["coverage"]["nodes"].items()} == {"0": 495, "1": 494}
+
+
 def _fresh_cluster_node(make_runtime, n_stale=0):
     runtime = make_runtime(0, node_count=1, when=ist(9, 15))
     runtime.tick()
