@@ -67,3 +67,102 @@ def describe(token_generation: bool) -> dict:
         "access_token_configured": bool(_env(_env("DHAN_TOKEN_VAR") or "DHAN_ACCESS_TOKEN")),
         "pin_totp_ignored": bool(pin_totp_present and not token_generation),
     }
+
+
+TOKEN_MODE_AUTHORITY = "SHARED_FROM_AUTHORITY"
+TOKEN_PATH = "/internal/dhan-token"
+
+
+def _requests_get_json(url: str, timeout: float) -> tuple[int, dict]:
+    import requests
+
+    response = requests.get(url, timeout=timeout, headers={"User-Agent": "psygrid-live-core-token"})
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = {}
+    return response.status_code, payload if isinstance(payload, dict) else {}
+
+
+class TokenSource:
+    """The token authority's current Dhan token, fetched over the private network and kept in RAM.
+
+    The full PSYGRID (``LIVE_CORE_TOKEN_SOURCE``, e.g. ``http://10.0.0.10:10000``) is the account's
+    only token generator; this node asks it for the token it holds now. Nothing is written to disk,
+    and the token is registered with the redactor so it can never appear in health, errors or logs.
+    """
+
+    def __init__(self, base_url: str, *, get=None, timeout_seconds: float = 4.0, clock=None):
+        import time
+
+        self.url = base_url.rstrip("/") + TOKEN_PATH
+        self._get = get or _requests_get_json
+        self.timeout_seconds = timeout_seconds
+        self._clock = clock or time.monotonic
+        self.fetches = 0
+        self.failures = 0
+        self.rotations = 0
+        self.last_error = ""
+        self.last_success_at: float | None = None
+        self._current: str | None = None
+
+    def fetch(self) -> tuple[str, str]:
+        """``(client_id, access_token)`` the authority holds now; raises on any problem."""
+        from live_core.redact import redact, register_secret
+
+        self.fetches += 1
+        try:
+            status, payload = self._get(self.url, self.timeout_seconds)
+            token = str(payload.get("access_token") or "").strip()
+            client_id = str(payload.get("client_id") or "").strip()
+            if status != 200 or not token or not client_id:
+                raise RuntimeError(f"token authority answered HTTP {status} {payload.get('status', '')}".strip())
+        except Exception as exc:
+            self.failures += 1
+            self.last_error = redact(f"{type(exc).__name__}: {exc}")[:300]
+            raise SharedTokenRejected(f"cannot get the Dhan token from the token authority: {self.last_error}") from exc
+        register_secret(token)
+        register_secret(client_id)
+        if self._current is not None and token != self._current:
+            self.rotations += 1
+        self._current = token
+        self.last_error = ""
+        self.last_success_at = self._clock()
+        return client_id, token
+
+    def load_settings(self):
+        client_id, token = self.fetch()
+        return psygrid_config.Settings(
+            client_id=client_id, access_token=token, token_source=TOKEN_MODE_AUTHORITY, token_expiry=None
+        )
+
+    def apply(self, settings) -> bool:
+        """Refresh ``settings`` in place from the authority. True when the token changed."""
+        client_id, token = self.fetch()
+        changed = token != getattr(settings, "access_token", "") or client_id != getattr(settings, "client_id", "")
+        settings.client_id = client_id
+        settings.access_token = token
+        settings.token_source = TOKEN_MODE_AUTHORITY
+        return changed
+
+    def refresher(self, settings, force: bool = False) -> None:
+        """Token "refresh" for runtime authentication: take the authority's token, never mint one."""
+        if not force and getattr(settings, "access_token", ""):
+            return
+        if not self.apply(settings) and force:
+            raise SharedTokenRejected(
+                "Dhan rejected the token the authority holds; waiting for the full PSYGRID to renew it"
+            )
+
+    def describe(self) -> dict:
+        age = None if self.last_success_at is None else round(self._clock() - self.last_success_at, 1)
+        return {
+            "token_mode": TOKEN_MODE_AUTHORITY,
+            "token_generation": False,
+            "token_source": self.url.rsplit(TOKEN_PATH, 1)[0],
+            "last_fetch_age_seconds": age,
+            "fetches": self.fetches,
+            "fetch_failures": self.failures,
+            "token_rotations": self.rotations,
+            "last_error": self.last_error,
+        }

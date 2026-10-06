@@ -136,6 +136,20 @@ class LiveCoreFeed(LiveFeed):
             self.resubscribe_stale(feed, now)
         return "ok"
 
+    def force_reconnect(self, reason: str) -> bool:
+        """End the current connection so the next cycle connects afresh (e.g. with a renewed token)."""
+        with self._lock:
+            feed = self._feed
+        thread = self._thread
+        if feed is None or thread is None or not thread.is_alive():
+            return False
+        self.state.mark_websocket_error(reason)
+        feed._running = False
+        loop = getattr(feed, "loop", None)
+        if loop is not None and loop.is_running() and not loop.is_closed():
+            self._request_disconnect(feed, loop, thread)
+        return True
+
     def resubscribe_stale(self, feed, now: float) -> int:
         """Resubscribe stocks with no valid data for longer than the staleness limit, in batches."""
         stale = [

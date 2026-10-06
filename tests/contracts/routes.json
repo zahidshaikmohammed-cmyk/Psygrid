@@ -18,6 +18,12 @@
   ]
  ],
  [
+  "/internal/dhan-token",
+  [
+   "GET"
+  ]
+ ],
+ [
   "/public/live.json",
   [
    "GET"

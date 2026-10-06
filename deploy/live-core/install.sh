@@ -18,6 +18,8 @@ APP_USER="${APP_USER:-ubuntu}"
 LIVE_CORE_ROOT="${LIVE_CORE_ROOT:-/home/${APP_USER}/psygrid-live-core}"
 PORT="${PORT:-10000}"
 PEERS="${PEERS:-}"
+# The account's Dhan token authority (the full PSYGRID on the private network); see live_core/auth.py.
+TOKEN_SOURCE="${TOKEN_SOURCE:-}"
 SWAP_MB="${SWAP_MB:-1024}"
 RELEASE_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 UNIT="psygrid-live-core-node${NODE_ID}.service"
@@ -129,6 +131,7 @@ cat > /etc/psygrid-live-core-node.env <<TOPOLOGY
 # Written by deploy/live-core/install.sh; node identity lives in ${UNIT}.
 LIVE_CORE_PORT=${PORT}
 LIVE_CORE_PEERS=${PEERS}
+LIVE_CORE_TOKEN_SOURCE=${TOKEN_SOURCE}
 TOPOLOGY
 
 # 6. Exactly one Live Core node per VM: retire any other node unit left on this host.

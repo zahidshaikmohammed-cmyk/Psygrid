@@ -86,6 +86,7 @@ class LiveCoreRuntime:
         now=None,
         clock=time.time,
         peer_get=None,
+        token_get=None,
     ):
         self.cfg = cfg
         self.universe = universe
@@ -96,8 +97,17 @@ class LiveCoreRuntime:
         # Data freshness follows the Live Core rule (stale only after 120 s), not the full app's 30 s.
         self.state = NodeState(psygrid_config.TIMEZONE, STALE_AFTER_SECONDS, clock=clock)
         # By default a node consumes the shared Dhan token and never generates one (live_core/auth.py).
+        # With LIVE_CORE_TOKEN_SOURCE it takes the token the full PSYGRID (the token authority) holds.
+        self.token_source = (
+            live_core_auth.TokenSource(cfg.token_source, get=token_get)
+            if cfg.token_source and not cfg.token_generation
+            else None
+        )
+        self._last_token_poll = 0.0
         if cfg.token_generation:
             default_loader, default_refresher = psygrid_config.load_settings, psygrid_config.refresh_access_token
+        elif self.token_source is not None:
+            default_loader, default_refresher = self.token_source.load_settings, self.token_source.refresher
         else:
             default_loader, default_refresher = (
                 live_core_auth.load_shared_settings,
@@ -161,6 +171,7 @@ class LiveCoreRuntime:
     def tick(self, now: datetime | None = None) -> None:
         now = now or self._now()
         if self.in_market(now):
+            self._watch_token(now)
             if self._started_for_date != now.date().isoformat():
                 if self._started_for_date is not None:
                     self._end_session()
@@ -172,6 +183,29 @@ class LiveCoreRuntime:
             self._end_session()
         else:
             self._prepare(now)
+
+    def _watch_token(self, now: datetime) -> None:
+        """Follow the token authority: when it renews its Dhan token, switch to the new one at once."""
+        if self.token_source is None or self.settings is None:
+            return
+        epoch = now.timestamp()
+        if epoch - self._last_token_poll < self.cfg.token_poll_seconds:
+            return
+        self._last_token_poll = epoch
+        try:
+            changed = self.token_source.apply(self.settings)
+        except Exception as exc:  # the authority being briefly unreachable never stops a running feed
+            self.state.record_error(f"token authority: {type(exc).__name__}: {exc}")
+            return
+        if not changed:
+            return
+        log.info("Dhan token renewed by the token authority; switching to it")
+        if self._started_for_date is None:
+            self._retry_at = 0.0  # a session waiting on a rejected token starts now
+        elif self.feed is not None:
+            # The feed, REST client and history worker share this settings object; a fresh
+            # connection picks the new token up.
+            self.feed.force_reconnect("Dhan token renewed by the token authority; reconnecting with it")
 
     def _prepare(self, now: datetime) -> None:
         """Resolve security ids during the 15 minutes before the open, so 09:15 only authenticates."""
@@ -519,7 +553,9 @@ class LiveCoreRuntime:
             "process": process,
             "memory": self.state.memory_summary(),
             "watchdog": watchdog,
-            "auth": live_core_auth.describe(self.cfg.token_generation),
+            "auth": self.token_source.describe()
+            if self.token_source is not None
+            else live_core_auth.describe(self.cfg.token_generation),
             "storage": {"market_data_on_disk": False, "archive_enabled": False, "microstructure_enabled": False},
             "errors": list(self.state.errors),
         }

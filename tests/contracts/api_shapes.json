@@ -120,6 +120,12 @@
   },
   "status_code": 200
  },
+ "/internal/dhan-token": {
+  "shape": {
+   "status": "str"
+  },
+  "status_code": 404
+ },
  "/public/banknifty-depth.json": {
   "shape": {
    "connection_count": "int",

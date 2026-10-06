@@ -78,6 +78,11 @@ class FakeFeed:
     def thread_alive(self):
         return self.started and not self.stopped
 
+    def force_reconnect(self, reason):
+        self.reconnect_reasons = [*getattr(self, "reconnect_reasons", []), reason]
+        self.reconnect_tokens = [*getattr(self, "reconnect_tokens", []), self.settings.access_token]
+        return True
+
     def lifecycle(self):
         return {
             "feed_thread_alive": self.thread_alive(),

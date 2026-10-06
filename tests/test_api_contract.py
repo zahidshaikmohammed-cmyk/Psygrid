@@ -26,7 +26,7 @@ def test_route_table_is_unchanged():
 
 
 def test_every_route_is_pinned():
-    assert len(GOLDEN_ROUTES) == 91
+    assert len(GOLDEN_ROUTES) == 92
     assert sorted(GOLDEN_SHAPES) == sorted(path for path, _ in GOLDEN_ROUTES)
 
 

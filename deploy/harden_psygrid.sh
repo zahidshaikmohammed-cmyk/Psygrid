@@ -7,6 +7,7 @@ cd "$(dirname "$0")/.."
 
 install -d -m 0755 /etc/systemd/system/psygrid.service.d
 install -m 0644 deploy/psygrid.service.d/10-hardening.conf /etc/systemd/system/psygrid.service.d/10-hardening.conf
+install -m 0644 deploy/psygrid.service.d/20-live-core-token-share.conf /etc/systemd/system/psygrid.service.d/20-live-core-token-share.conf
 
 install -d -m 0755 /etc/systemd/journald.conf.d
 if ! cmp -s deploy/journald-psygrid.conf /etc/systemd/journald.conf.d/psygrid.conf; then

@@ -308,9 +308,24 @@ So a node, by default, is a **shared-token consumer** (`live_core/auth.py`):
 * `/health/node` shows `auth.token_mode`, `client_id_configured`, `access_token_configured`
   (booleans only, never values).
 
-The token must be the one the token authority currently holds. After the authority rotates it,
-install the new value in `/etc/psygrid-live-core.env` on both VMs and restart only
-`psygrid-live-core-node<N>`.
+**Deployed setup: the full PSYGRID is the token authority.** The deploy workflow sets
+`LIVE_CORE_TOKEN_SOURCE=http://10.0.0.10:10000` (the full PSYGRID's private IP; override with the
+repository variable `LIVE_CORE_TOKEN_SOURCE`). Then a node:
+
+* takes `DHAN_CLIENT_ID` and the access token from the full PSYGRID's `GET /internal/dhan-token`
+  over the private subnet, keeps them in RAM only and registers them with the redactor;
+* re-reads it every 15 s; when the full PSYGRID renews its token, the node switches to it and
+  reconnects its WebSocket at once (no restart, no lost candles);
+* if the full PSYGRID is briefly unreachable, keeps running on the token it has.
+
+On the full PSYGRID (`token_share.py`), the endpoint is off unless `PSYGRID_TOKEN_SHARE_CLIENTS`
+is set (`deploy/psygrid.service.d/20-live-core-token-share.conf`: `10.0.0.215,10.0.0.165`). It
+answers only direct connections from those private, non-loopback addresses, refuses any request
+with proxy headers, never logs the token and sends `Cache-Control: no-store`. No new secret is
+needed anywhere: the nodes need no Dhan credentials at all.
+
+Without a token source, a node uses `DHAN_CLIENT_ID` + `DHAN_ACCESS_TOKEN` from
+`/etc/psygrid-live-core.env`.
 
 ## Intentional differences from the full PSYGRID
 

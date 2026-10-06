@@ -125,3 +125,119 @@ def test_rejected_shared_token_is_auth_error_not_a_token_war(monkeypatch, univer
         assert no_token_generation == []
     finally:
         runtime.stop()
+
+
+class Authority:
+    """The full PSYGRID's /internal/dhan-token as seen from a node."""
+
+    def __init__(self, token=TOKEN):
+        self.token = token
+        self.down = False
+        self.calls = 0
+
+    def get(self, url, timeout):
+        self.calls += 1
+        assert url == "http://10.0.0.10:10000/internal/dhan-token"
+        if self.down:
+            raise ConnectionRefusedError("connect to 10.0.0.10:10000 refused")
+        return 200, {"status": "OK", "client_id": "1100000001", "access_token": self.token}
+
+
+def _authority_runtime(monkeypatch, universe, instruments, authority, api, when):
+    from live_core_helpers import Clock, FakeFeed
+
+    _clear(monkeypatch)
+    clock = Clock(when)
+    runtime = LiveCoreRuntime(
+        LiveCoreConfig(node_id=0, node_count=2, history_interval_seconds=0.0, token_source="http://10.0.0.10:10000"),
+        universe,
+        build_partition(universe, 0, 2),
+        instrument_loader=lambda: list(instruments),
+        api_factory=lambda settings: api,
+        feed_factory=FakeFeed,
+        now=clock.now,
+        clock=clock.epoch,
+        token_get=authority.get,
+    )
+    return runtime, clock
+
+
+def test_node_takes_the_authoritys_token_and_follows_its_renewal(
+    monkeypatch, universe, instruments, no_token_generation
+):
+    from live_core_helpers import FakeDhanAPI
+
+    authority, api = Authority(), FakeDhanAPI()
+    runtime, clock = _authority_runtime(monkeypatch, universe, instruments, authority, api, ist(9, 15))
+    try:
+        runtime.tick()
+        assert runtime.state.session_status == "LIVE"
+        assert runtime.settings.access_token == TOKEN and runtime.settings.client_id == "1100000001"
+        feed = runtime.feed
+
+        # The authority renews its token mid-session: the node switches within one poll interval.
+        renewed = TOKEN[:-4] + "NEWW"
+        authority.token = renewed
+        clock.set(ist(9, 15, 20))
+        runtime.tick()
+        assert runtime.settings.access_token == renewed
+        assert feed.reconnect_tokens == [renewed]  # reconnected with the new token
+        clock.set(ist(9, 15, 25))
+        runtime.tick()  # polled at most every 15 s, and an unchanged token never reconnects
+        assert feed.reconnect_tokens == [renewed]
+        assert runtime.state.session_status == "LIVE"
+
+        health = runtime.node_health()
+        assert health["auth"]["token_mode"] == "SHARED_FROM_AUTHORITY"
+        assert health["auth"]["token_rotations"] == 1
+        for secret in (TOKEN, renewed):
+            assert secret not in str(health)
+
+        # The authority being briefly unreachable never stops the running feed.
+        authority.down = True
+        clock.set(ist(9, 16, 0))
+        runtime.tick()
+        assert runtime.state.session_status == "LIVE" and runtime.feed is feed
+        assert "refused" in runtime.node_health()["auth"]["last_error"]
+        assert no_token_generation == []
+    finally:
+        runtime.stop()
+
+
+def test_rejected_token_waits_for_the_authority_then_goes_live(monkeypatch, universe, instruments, no_token_generation):
+    from live_core_helpers import FakeDhanAPI
+
+    authority, api = Authority(), FakeDhanAPI()
+    api.verify_error = RuntimeError("Dhan API HTTP error: 401 token expired (807)")
+    runtime, clock = _authority_runtime(monkeypatch, universe, instruments, authority, api, ist(9, 15))
+    try:
+        runtime.tick()
+        assert runtime.state.session_status == "AUTH_ERROR"  # never mints its own token
+        authority.token = TOKEN[:-4] + "NEWW"
+        api.verify_error = None
+        clock.set(ist(9, 15, 20))
+        runtime.tick()  # sees the renewed token and retries at once (not after the 30 s back-off)
+        runtime.tick()
+        assert runtime.state.session_status == "LIVE"
+        assert runtime.settings.access_token.endswith("NEWW")
+        assert no_token_generation == []
+    finally:
+        runtime.stop()
+
+
+def test_authority_unreachable_at_the_open_is_a_visible_config_error(monkeypatch, universe, instruments):
+    from live_core_helpers import FakeDhanAPI
+
+    authority, api = Authority(), FakeDhanAPI()
+    authority.down = True
+    runtime, clock = _authority_runtime(monkeypatch, universe, instruments, authority, api, ist(9, 15))
+    try:
+        runtime.tick()
+        assert runtime.state.session_status == "CONFIG_ERROR"
+        assert "token authority" in runtime.config_error
+        authority.down = False
+        clock.set(ist(9, 16, 5))
+        runtime.tick()
+        assert runtime.state.session_status == "LIVE"
+    finally:
+        runtime.stop()
