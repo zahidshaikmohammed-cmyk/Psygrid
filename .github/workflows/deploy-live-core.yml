@@ -172,6 +172,31 @@ jobs:
             ssh $(ssh_opts "$node") "${user}@${host}" "NODE=${node} PORT=${PORT} bash -s" <<'REMOTE' || return 1
           set -u
           echo "== host"; hostname; . /etc/os-release && echo "$PRETTY_NAME"; uname -m
+          echo "== AUDIT: cpu"; nproc; grep -m1 "model name" /proc/cpuinfo; cat /proc/loadavg; uptime
+          head -1 /proc/stat; grep -E "^(procs_running|procs_blocked|ctxt)" /proc/stat
+          echo "== AUDIT: meminfo"; grep -E "^(MemTotal|MemFree|MemAvailable|Buffers|Cached|SwapTotal|SwapFree|Shmem|SReclaimable|Committed_AS)" /proc/meminfo
+          echo "== AUDIT: vmstat 1s x5 (us sy id wa st)"; vmstat 1 5 2>/dev/null || true
+          echo "== AUDIT: processes"; ps -e --no-headers | wc -l; ps -eo pid,rss,vsz,pcpu,etime,comm --sort=-rss | head -8
+          unit="psygrid-live-core-node${NODE}.service"
+          echo "== AUDIT: unit limits"; systemctl show "$unit" -p MemoryHigh -p MemoryMax -p MemorySwapMax -p TasksMax -p LimitNOFILE -p Environment -p Restart -p RestartUSec -p WatchdogUSec -p CPUQuota -p OOMScoreAdjust -p NRestarts -p ExecMainStartTimestamp
+          cg="/sys/fs/cgroup$(systemctl show "$unit" -p ControlGroup --value)"
+          echo "== AUDIT: cgroup ${cg}"
+          for f in memory.current memory.peak memory.swap.current memory.swap.peak memory.high memory.max pids.current pids.peak; do [ -r "$cg/$f" ] && echo "$f $(cat "$cg/$f")"; done
+          [ -r "$cg/memory.events" ] && sed 's/^/memory.events /' "$cg/memory.events"
+          [ -r "$cg/memory.stat" ] && grep -E "^(anon|file|kernel|sock|shmem) " "$cg/memory.stat" | sed 's/^/memory.stat /'
+          [ -r "$cg/cpu.stat" ] && sed 's/^/cpu.stat /' "$cg/cpu.stat"
+          [ -r "$cg/memory.pressure" ] && sed 's/^/memory.pressure /' "$cg/memory.pressure"
+          [ -r "$cg/cpu.pressure" ] && sed 's/^/cpu.pressure /' "$cg/cpu.pressure"
+          mpid="$(systemctl show "$unit" -p MainPID --value)"
+          if [ -n "$mpid" ] && [ "$mpid" != 0 ]; then
+            echo "== AUDIT: main process ${mpid}"; grep -E "^(VmRSS|VmHWM|VmSize|VmSwap|Threads)" "/proc/${mpid}/status"
+            echo "fds $(sudo ls "/proc/${mpid}/fd" | wc -l)"
+            awk '{print "utime_ticks", $14, "stime_ticks", $15, "start_ticks", $22}' "/proc/${mpid}/stat"; getconf CLK_TCK
+            sudo ss -tnpH 2>/dev/null | grep "pid=${mpid}," | awk '{print $1, $5}' | sort | uniq -c | sort -rn | head
+          fi
+          echo "== AUDIT: kernel OOM / throttling messages"; sudo dmesg -T 2>/dev/null | grep -iE "oom|killed process|out of memory" | tail -5 || true
+          echo "== AUDIT: today's journal for the unit"; sudo journalctl -u "$unit" --since today --no-pager 2>/dev/null | grep -ciE "error|traceback" | sed 's/^/error_lines /'
+          sudo journalctl -u "$unit" --since today --no-pager 2>/dev/null | grep -iE "session|LIVE|CLOSED|closed|ended|token|reconnect|watchdog" | tail -25
           echo "private IPs: $(hostname -I)"
           echo "== python"; for p in python3.12 python3.13 python3.11 python3; do command -v $p >/dev/null && $p -V; done
           echo "== memory"; free -m; swapon --show || true; nproc
