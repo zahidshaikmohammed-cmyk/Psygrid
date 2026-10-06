@@ -167,8 +167,8 @@ def test_feed_messages_build_candles_through_the_production_packet_handler():
     instruments = _instruments(2)
     state = _state(instruments)
     feed = LiveCoreFeed(FakeSettings(), state, instruments)
-    now = int(time.time())
-    minute = now - now % 60 - 120
+    # 10:00 IST on the state's session date ("2026-10-05"); LTTs outside that day are rejected.
+    minute = int(ist(10, 0, day=(2026, 10, 5)).timestamp())
     packets = [
         {"type": "Previous Close", "security_id": 2000, "prev_close": 99.5},
         {"type": "Full Data", "security_id": 2000, "LTP": "100.5", "LTT": minute + 3, "volume": 10, "open": 100.0},

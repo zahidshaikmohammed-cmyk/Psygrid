@@ -108,12 +108,12 @@ if [ ! -f /etc/psygrid-live-core.env ]; then
   install -m 0600 -o root -g root /dev/null /etc/psygrid-live-core.env
   cat > /etc/psygrid-live-core.env <<'ENVFILE'
 # PSYGRID Live Core Dhan credentials (same account and data plan as the full PSYGRID).
+# Shared-token mode (default): the node consumes ONE current Dhan access token and never generates
+# one, so it cannot invalidate the token of the process that owns token generation.
 # DHAN_CLIENT_ID=
-# Either a daily access token:
 # DHAN_ACCESS_TOKEN=
-# or automatic daily token generation:
-# DHAN_PIN=
-# DHAN_TOTP_SECRET=
+# DHAN_PIN / DHAN_TOTP_SECRET are ignored unless LIVE_CORE_TOKEN_GENERATION=1 (only for a node that
+# is the account's sole token authority).
 # Optional NSE holidays / special sessions (ISO dates, comma separated):
 # PSYGRID_MARKET_HOLIDAYS=
 # PSYGRID_SPECIAL_SESSIONS=

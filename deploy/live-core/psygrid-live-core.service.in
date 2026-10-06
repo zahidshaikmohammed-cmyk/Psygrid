@@ -14,7 +14,7 @@ Type=simple
 User=@USER@
 Group=@USER@
 WorkingDirectory=@ROOT@/current
-# Dhan credentials (DHAN_CLIENT_ID plus DHAN_ACCESS_TOKEN or DHAN_PIN/DHAN_TOTP_SECRET); kept on the VM.
+# Dhan credentials (DHAN_CLIENT_ID + the shared DHAN_ACCESS_TOKEN; see live_core/auth.py); kept on the VM.
 EnvironmentFile=/etc/psygrid-live-core.env
 # Topology written by the deploy workflow (LIVE_CORE_PEERS, LIVE_CORE_PORT).
 EnvironmentFile=-/etc/psygrid-live-core-node.env

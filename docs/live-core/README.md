@@ -242,7 +242,8 @@ feed watchdog, history.
 | `LIVE_CORE_NODE_ID`, `LIVE_CORE_NODE_COUNT` | systemd unit | identity (0/1 of 2) |
 | `LIVE_CORE_PEERS` | `/etc/psygrid-live-core-node.env` (written by deploy) | e.g. node 0: `1=http://10.0.0.12:10000` |
 | `LIVE_CORE_PORT` | same | default 10000 |
-| `DHAN_CLIENT_ID` + `DHAN_ACCESS_TOKEN` or `DHAN_PIN` + `DHAN_TOTP_SECRET` | `/etc/psygrid-live-core.env` (mode 600, on the VM only) | same account and data plan as the full PSYGRID |
+| `DHAN_CLIENT_ID` + `DHAN_ACCESS_TOKEN` | `/etc/psygrid-live-core.env` (mode 600, on the VM only) | the ONE current Dhan token, shared with the token authority (see below) |
+| `LIVE_CORE_TOKEN_GENERATION` (0) | optional | 1 lets the node generate tokens from `DHAN_PIN` + `DHAN_TOTP_SECRET`; only for a node that is the account's sole token authority |
 | `PSYGRID_MARKET_HOLIDAYS`, `PSYGRID_SPECIAL_SESSIONS` | same | trading-day overrides |
 | `LIVE_CORE_HISTORY_BOOTSTRAP` (1), `LIVE_CORE_HISTORY_INTERVAL_SECONDS` (0.5) | optional | Dhan 1m bar refill |
 | `LIVE_CORE_FINALIZE_GRACE_SECONDS` (3) | optional | publish delay after a minute ends |
@@ -291,6 +292,25 @@ One-time setup:
 
 Either node can be deployed first. While one is missing, the other serves its half and reports
 `PARTIAL` / `LIVE_INCOMPLETE`.
+
+## Dhan authentication: one token authority
+
+Dhan keeps one live access token per client, and the full PSYGRID generates its token with PIN +
+TOTP and regenerates it on any 401/807. A Live Core node that also generated tokens could
+invalidate production's token, and each would then keep regenerating and knocking the other out.
+
+So a node, by default, is a **shared-token consumer** (`live_core/auth.py`):
+
+* it needs `DHAN_CLIENT_ID` and `DHAN_ACCESS_TOKEN` and nothing else;
+* `DHAN_PIN` / `DHAN_TOTP_SECRET` are ignored even if present (`auth.pin_totp_ignored` in `/health/node`);
+* when Dhan rejects the token, the node reports `AUTH_ERROR`, keeps serving HTTP, retries every
+  60 s with the token it has, and never mints a replacement;
+* `/health/node` shows `auth.token_mode`, `client_id_configured`, `access_token_configured`
+  (booleans only, never values).
+
+The token must be the one the token authority currently holds. After the authority rotates it,
+install the new value in `/etc/psygrid-live-core.env` on both VMs and restart only
+`psygrid-live-core-node<N>`.
 
 ## Intentional differences from the full PSYGRID
 

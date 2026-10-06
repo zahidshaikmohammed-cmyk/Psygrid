@@ -32,6 +32,7 @@ import config as psygrid_config
 from auth_retry import looks_like_auth_failure
 from dhan_auth import DhanTokenRateLimited
 from live_core import SERVICE_NAME
+from live_core import auth as live_core_auth
 from live_core.aggregate import PeerClient
 from live_core.config import LiveCoreConfig, LiveCoreConfigError
 from live_core.feed import LiveCoreFeed
@@ -94,11 +95,19 @@ class LiveCoreRuntime:
         self.market_end = dt_time(*map(int, psygrid_config.MARKET_END.split(":")))
         # Data freshness follows the Live Core rule (stale only after 120 s), not the full app's 30 s.
         self.state = NodeState(psygrid_config.TIMEZONE, STALE_AFTER_SECONDS, clock=clock)
-        self._settings_loader = settings_loader or psygrid_config.load_settings
+        # By default a node consumes the shared Dhan token and never generates one (live_core/auth.py).
+        if cfg.token_generation:
+            default_loader, default_refresher = psygrid_config.load_settings, psygrid_config.refresh_access_token
+        else:
+            default_loader, default_refresher = (
+                live_core_auth.load_shared_settings,
+                live_core_auth.shared_token_refresher,
+            )
+        self._settings_loader = settings_loader or default_loader
         self._instrument_loader = instrument_loader or psygrid_config.load_instruments
         self._api_factory = api_factory or _default_api_factory
         self._feed_factory = feed_factory or LiveCoreFeed
-        self._token_refresher = token_refresher or psygrid_config.refresh_access_token
+        self._token_refresher = token_refresher or default_refresher
         self._now = now or (lambda: datetime.now(self.tz))
         self._clock = clock
         self.peers: dict[int, PeerClient] = {
@@ -242,7 +251,12 @@ class LiveCoreRuntime:
         except Exception as first:
             if not looks_like_auth_failure(first):
                 raise
-            self.state.set_feed_status("TOKEN_REFRESHING", "Dhan token expired/invalid; generating one fresh token")
+            self.state.set_feed_status(
+                "TOKEN_REFRESHING",
+                "Dhan token expired/invalid; generating one fresh token"
+                if self.cfg.token_generation
+                else "Dhan rejected the shared token; this node does not generate tokens",
+            )
             try:
                 self._token_refresher(self.settings, force=True)
             finally:
@@ -505,6 +519,7 @@ class LiveCoreRuntime:
             "process": process,
             "memory": self.state.memory_summary(),
             "watchdog": watchdog,
+            "auth": live_core_auth.describe(self.cfg.token_generation),
             "storage": {"market_data_on_disk": False, "archive_enabled": False, "microstructure_enabled": False},
             "errors": list(self.state.errors),
         }

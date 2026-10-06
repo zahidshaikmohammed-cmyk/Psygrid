@@ -11,6 +11,7 @@ live_core/gzipjoin.py
 live_core/history.py
 live_core/partition.py
 live_core/redact.py
+live_core/auth.py
 live_core/render.py
 live_core/runtime.py
 live_core/state.py

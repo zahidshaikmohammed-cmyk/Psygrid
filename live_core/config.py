@@ -94,6 +94,8 @@ class LiveCoreConfig:
     finalize_grace_seconds: float = 3.0
     http_threads: int = 8
     max_rss_mb: float = 600.0
+    # Off: the node only consumes the shared DHAN_ACCESS_TOKEN and never mints one (see live_core/auth.py).
+    token_generation: bool = False
 
     @classmethod
     def from_environment(cls, environ: Mapping[str, str] | None = None) -> LiveCoreConfig:
@@ -125,6 +127,7 @@ class LiveCoreConfig:
             finalize_grace_seconds=_float(environ, "LIVE_CORE_FINALIZE_GRACE_SECONDS", 3.0),
             http_threads=http_threads,
             max_rss_mb=_float(environ, "LIVE_CORE_MAX_RSS_MB", 600.0),
+            token_generation=_flag(environ, "LIVE_CORE_TOKEN_GENERATION", False),
         )
 
     def missing_peers(self) -> list[int]:
