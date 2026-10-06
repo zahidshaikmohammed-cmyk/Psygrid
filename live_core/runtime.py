@@ -486,6 +486,7 @@ class LiveCoreRuntime:
             "rejected_packets": snap["rejected_packets"],
             "duplicate_trades": snap["duplicate_trades"],
             "no_trade_today_packets": snap["no_trade_today_packets"],
+            "repeated_last_trade_packets": snap["repeated_last_trade_packets"],
             "render_errors": snap["render_errors"],
             "packet_errors": lifecycle["packet_errors"],
         }

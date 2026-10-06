@@ -399,3 +399,62 @@ def test_a_stock_that_has_not_traded_today_never_gets_a_candle():
     assert _accept(state, "1000", START + 3500, 96.0, 40)  # first real trade today
     state.finalize_all()
     assert list(series.epochs) == [START + 3480] and series.volumes[0] == 40
+
+
+def test_a_quiet_stock_repeating_its_last_trade_stays_fresh_without_touching_candles():
+    """Live finding: Dhan re-sends a quiet stock's last trade on every quote/depth change.
+
+    Those packets carry an old trade time and unchanged day volume. They are not late trades: they
+    prove the stock is live (fresh) and must change no candle. A late packet with NEW volume is
+    still rejected.
+    """
+    clock = {"now": START + 10}
+    state = _live_state(1, clock=lambda: clock["now"])
+    state.update_quote("1000", tick_payload("1000", START + 10, 100.0, 10))
+    state.finalize_due(START + 63, grace_seconds=3)
+    series = state.instruments["1000"]
+    published = (list(series.epochs), series.closes[0], series.volumes[0])
+    version = state.version
+
+    # Five minutes later the stock still has not traded, but Dhan keeps re-sending its last trade.
+    clock["now"] = START + 300
+    assert state.update_quote("1000", tick_payload("1000", START + 10, 100.0, 10)) is True
+    state.record_live_quote("1000", START + 10)
+    assert state.rejected["late_minute"] == 0
+    assert state.repeated_last_trade_packets == 1
+    freshness = state.freshness()
+    assert freshness["stale_stock_count"] == 0 and freshness["live_stock_count"] == 1
+    assert (list(series.epochs), series.closes[0], series.volumes[0]) == published
+    assert series.current is None and state.version == version
+
+    # A late packet that does carry new volume is a genuine late trade: still dropped.
+    assert state.update_quote("1000", tick_payload("1000", START + 30, 99.0, 14)) is False
+    assert state.rejected["late_minute"] == 1
+    assert (list(series.epochs), series.closes[0], series.volumes[0]) == published
+
+
+def test_a_mid_session_start_takes_its_volume_baseline_from_a_repeated_last_trade():
+    state = _live_state(1)
+    series = state.instruments["1000"]
+    # History already published 09:15; the first live packet repeats that minute's last trade.
+    stored = state.merge_history(
+        "1000",
+        [
+            {
+                "epoch": START,
+                "timestamp": START,
+                "open": 100.0,
+                "high": 101.0,
+                "low": 99.0,
+                "close": 100.5,
+                "volume": 500,
+            }
+        ],
+        session_date="2026-10-05",
+    )
+    assert stored == 1 and list(series.epochs) == [START]
+    assert state.update_quote("1000", tick_payload("1000", START + 50, 100.5, 5000)) is True
+    assert series.previous_cumulative_volume == 5000
+    # The next real trade gets exactly its own volume, not the whole day's.
+    assert state.update_quote("1000", tick_payload("1000", START + 70, 101.0, 5012)) is True
+    assert series.current[5] == 12

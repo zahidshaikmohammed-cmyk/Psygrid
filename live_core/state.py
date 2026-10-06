@@ -201,6 +201,7 @@ class NodeState:
         self.render_errors = 0
         self.duplicate_trades = 0
         self.no_trade_today_packets = 0
+        self.repeated_last_trade_packets = 0
         # (security_id, ltt) of the last packet update_quote accepted; record_live_quote only
         # counts a packet as fresh data when it was accepted.
         self._accepted: tuple[str, int] | None = None
@@ -371,12 +372,21 @@ class NodeState:
 
             minute = ltt_epoch - (ltt_epoch % 60)
             current = series.current
-            if current is not None:
-                if minute < current[0]:
-                    return self._reject("late_minute")
-            elif len(series.epochs) and minute <= series.epochs[-1]:
-                # That minute is already published. Like the full PSYGRID, a trade older than the
-                # newest minute is dropped (its volume is carried into the next trade's delta).
+            late = (current is not None and minute < current[0]) or (
+                current is None and len(series.epochs) and minute <= series.epochs[-1]
+            )
+            if late:
+                if previous_volume is None or cumulative_volume == previous_volume:
+                    # No new volume: not a late trade but the stock's last trade repeated. Dhan sends
+                    # these on every quote/depth change of a stock that has not traded for a while,
+                    # so it is live evidence of the stock (fresh) that changes no candle. Without a
+                    # baseline yet (a mid-session start), it also sets the volume baseline.
+                    series.previous_cumulative_volume = cumulative_volume
+                    self.repeated_last_trade_packets += 1
+                    self._accepted = (series.security_id, ltt_epoch)
+                    return True
+                # A genuine trade for an already published minute: dropped, never folded in. Its
+                # volume is carried into the next trade's delta, as in the full PSYGRID.
                 return self._reject("late_minute")
 
             if previous_volume is not None and cumulative_volume < previous_volume:
@@ -600,6 +610,7 @@ class NodeState:
                 "render_errors": self.render_errors,
                 "duplicate_trades": self.duplicate_trades,
                 "no_trade_today_packets": self.no_trade_today_packets,
+                "repeated_last_trade_packets": self.repeated_last_trade_packets,
             }
 
 
