@@ -30,6 +30,17 @@ FRAGMENTS_PATH = "/internal/live-core/fragments"
 NODE_HEALTH_PATH = "/health/node"
 
 
+# Circuit-breaker back-off after consecutive failures: bounded, never a retry storm.
+BACKOFF_SCHEDULE_SECONDS = (1.0, 2.0, 5.0, 10.0, 30.0, 60.0)
+
+
+def backoff_after(failures: int) -> float:
+    """Seconds to wait after ``failures`` consecutive failures (1, 2, 5, 10, 30, then 60 s)."""
+    if failures <= 0:
+        return 0.0
+    return BACKOFF_SCHEDULE_SECONDS[min(failures, len(BACKOFF_SCHEDULE_SECONDS)) - 1]
+
+
 class PeerUnavailable(RuntimeError):
     """The peer could not supply a usable answer."""
 
@@ -90,13 +101,14 @@ class PeerFragments:
 class PeerClient:
     """Fetches one peer's current state; bounded, cached and failure-tolerant.
 
-    A failing peer trips a circuit breaker: after a failure it is not contacted again for a
-    back-off (1 s doubling to ``MAX_BACKOFF_SECONDS``), and while one request is already talking to
+    A failing peer trips a circuit breaker: after consecutive failures it is not contacted again
+    for a back-off of 1, 2, 5, 10, 30 and then 60 s (``BACKOFF_SCHEDULE_SECONDS``); the first good
+    answer closes the circuit. While one request is already talking to
     the peer, others do not queue behind it. A peer that hangs (accepts the connection, never
     answers) therefore delays at most one request per back-off period instead of every request.
     """
 
-    MAX_BACKOFF_SECONDS = 15.0
+    MAX_BACKOFF_SECONDS = BACKOFF_SCHEDULE_SECONDS[-1]
 
     def __init__(
         self,
@@ -128,7 +140,11 @@ class PeerClient:
         self.last_error = ""
         self.last_success_monotonic: float | None = None
         self._backoff = 0.0
+        self._consecutive_failures = 0
         self._retry_at = 0.0
+        self._health_failures = 0
+        self._health_retry_at = 0.0
+        self._health_error = ""
 
     def _usable_cache(self, now: float) -> PeerFragments | None:
         cached = self._snapshot
@@ -137,7 +153,8 @@ class PeerClient:
         return None
 
     def _open_circuit(self, now: float) -> None:
-        self._backoff = min(self.MAX_BACKOFF_SECONDS, max(1.0, self._backoff * 2))
+        self._consecutive_failures += 1
+        self._backoff = backoff_after(self._consecutive_failures)
         self._retry_at = now + self._backoff
 
     def circuit_open(self, now: float | None = None) -> bool:
@@ -219,6 +236,7 @@ class PeerClient:
         self.last_success_monotonic = result.fetched_monotonic
         self.last_error = ""
         self._backoff = 0.0
+        self._consecutive_failures = 0
         self._retry_at = 0.0
         return result
 
@@ -267,6 +285,30 @@ class PeerClient:
         finally:
             self._health_lock.release()
 
+    def probe(self, timeout_seconds: float = 2.0) -> dict:
+        """A fresh health probe that leaves the cache ``health()`` serves untouched (readiness checks).
+
+        Skipped while the peer's circuit is open: a peer that is down is not probed again before its back-off.
+        """
+        now = self._monotonic()
+        if now < self._health_retry_at:
+            return {"reachable": False, "health": None, "error": self._health_error or "peer unavailable (backing off)"}
+        url = f"{self.base_url}{NODE_HEALTH_PATH}"
+        try:
+            status, body = self._get(url, min(timeout_seconds, self.timeout_seconds))
+            payload = orjson.loads(body)
+            if status != 200 or not isinstance(payload, dict):
+                raise PeerUnavailable(f"HTTP {status} from {url}")
+        except Exception as exc:
+            self._health_error = redact(f"{type(exc).__name__}: {exc}")[:300]
+            self._health_failures += 1
+            self._health_retry_at = self._monotonic() + backoff_after(self._health_failures)
+            return {"reachable": False, "health": None, "error": self._health_error}
+        self._health_failures = 0
+        self._health_retry_at = 0.0
+        self._health_error = ""
+        return {"reachable": True, "health": payload, "error": ""}
+
     def _health_locked(self, cache_seconds: float, timeout_seconds: float) -> dict:
         cached = self._health
         if cached is not None and self._monotonic() - cached[0] <= cache_seconds:
@@ -291,6 +333,8 @@ class PeerClient:
             "failures": self.failures,
             "last_error": self.last_error,
             "circuit_open": self.circuit_open(now),
+            "consecutive_failures": self._consecutive_failures,
+            "backoff_seconds": self._backoff,
             "last_success_age_seconds": round(now - self.last_success_monotonic, 3)
             if self.last_success_monotonic is not None
             else None,

@@ -26,6 +26,13 @@ time, so it proves the subscription is alive but never creates a candle.
 A stock is FRESH while its last valid packet was received at most ``STALE_AFTER_SECONDS`` (120 s)
 ago and STALE after that. Data freshness is kept separate from the feed's connection state.
 
+Before the open (session status ``PRE_OPEN``, the feed connected ahead of 09:15) packets are
+validated and set each stock's cumulative-volume baseline - exactly what the REST snapshot did
+when the feed only connected at 09:15 - but never create a candle or count as fresh data. The
+first packet received at or after the open switches the session to ``LIVE``. During the session
+a trade whose exchange time is before the open (a pre-open auction print) is live evidence and a
+baseline, never a candle: no candle is published for a minute before 09:15.
+
 Nothing in this module touches the disk. ``reset`` drops every market value.
 """
 
@@ -205,6 +212,14 @@ class NodeState:
         # (security_id, ltt) of the last packet update_quote accepted; record_live_quote only
         # counts a packet as fresh data when it was accepted.
         self._accepted: tuple[str, int] | None = None
+        # Feed liveness, kept apart from per-stock freshness: when the last quote-type frame
+        # arrived, and when a candle was last published (completed or merged).
+        self.last_quote_packet_epoch: float | None = None
+        self.last_candle_published_epoch: float | None = None
+        # The session's 09:15 open (epoch); None when the session was begun without one.
+        self.market_open_epoch: int | None = None
+        self.preopen_packets = 0
+        self.preopen_trade_packets = 0
 
     def reset(self) -> None:
         """Drop every market value; nothing is carried into the next session or written anywhere."""
@@ -212,14 +227,21 @@ class NodeState:
             self._init_runtime()
             self.version += 1
 
-    def begin(self, session_date: str, instruments, start_index: int = 0) -> None:
-        """Start a session for ``instruments`` (canonical order; ``start_index`` is the first's universe index)."""
+    def begin(self, session_date: str, instruments, start_index: int = 0, open_time: str | None = None) -> None:
+        """Start a session for ``instruments`` (canonical order; ``start_index`` is the first's universe index).
+
+        ``open_time`` ("HH:MM", exchange timezone) is the market open: no candle is ever published
+        for a minute before it, and a ``PRE_OPEN`` session turns ``LIVE`` at it.
+        """
         with self.lock:
             self._init_runtime()
             self.session_date = session_date
             self.session_status = "STARTING"
             self.feed_status = "STARTING"
             self.session_day_bounds = _day_bounds(session_date, self.timezone)
+            if open_time and self.session_day_bounds is not None:
+                hour, minute = (int(part) for part in open_time.split(":"))
+                self.market_open_epoch = self.session_day_bounds[0] + hour * 3600 + minute * 60
             for offset, item in enumerate(instruments):
                 series = StockSeries(start_index + offset, str(item.symbol), str(item.security_id))
                 self.instruments[series.security_id] = series
@@ -234,6 +256,16 @@ class NodeState:
     def set_session_status(self, status: str) -> None:
         with self.lock:
             self.session_status = status
+            self.version += 1
+
+    def _open_if_due(self) -> None:
+        """A PRE_OPEN session becomes LIVE at the open, on the first packet that arrives after it."""
+        if (
+            self.session_status == "PRE_OPEN"
+            and self.market_open_epoch is not None
+            and self.clock() >= self.market_open_epoch
+        ):
+            self.session_status = "LIVE"
             self.version += 1
 
     def record_error(self, error: str) -> None:
@@ -277,13 +309,15 @@ class NodeState:
 
     def record_feed_message(self, packet_type: str) -> None:
         with self.lock:
-            if self.session_status != "LIVE":
+            self._open_if_due()
+            if self.session_status not in ("LIVE", "PRE_OPEN"):
                 return
             self.feed_messages += 1
             self.last_message_type = packet_type
             self.last_message_epoch = self.clock()
             if packet_type.lower() in _QUOTE_TYPES:
                 self.quote_packets += 1
+                self.last_quote_packet_epoch = self.last_message_epoch
                 if self.feed_status == "ERROR":
                     # Market data is arriving on the socket, so it is connected: a transient error
                     # (one bad frame, one failed request) must not leave the feed flagged ERROR for
@@ -339,8 +373,9 @@ class NodeState:
         """
         with self.lock:
             self._accepted = None
+            self._open_if_due()
             series = self.instruments.get(str(security_id))
-            if series is None or self.session_status != "LIVE":
+            if series is None or self.session_status not in ("LIVE", "PRE_OPEN"):
                 return False
             try:
                 ltp = float(quote["LTP"])
@@ -367,6 +402,20 @@ class NodeState:
                 # today: it is live evidence of the subscription, but never a candle.
                 series.previous_cumulative_volume = 0
                 self.no_trade_today_packets += 1
+                self._accepted = (series.security_id, ltt_epoch)
+                return True
+
+            opens = self.market_open_epoch
+            if self.session_status == "PRE_OPEN" or (opens is not None and ltt_epoch < opens):
+                # Before the open, or a pre-open print seen during the session: it sets the volume
+                # baseline (as the REST snapshot does) but a minute before 09:15 is never a candle.
+                if previous_volume is not None and cumulative_volume < previous_volume:
+                    return self._reject("volume_regressed")
+                series.previous_cumulative_volume = cumulative_volume
+                if self.session_status == "PRE_OPEN":
+                    self.preopen_packets += 1
+                    return True  # validated, but not fresh market data yet
+                self.preopen_trade_packets += 1
                 self._accepted = (series.security_id, ltt_epoch)
                 return True
 
@@ -425,6 +474,7 @@ class NodeState:
         series.current = None
         if current is not None and series.put_completed(current, SOURCE_WEBSOCKET):
             self.version += 1
+            self.last_candle_published_epoch = self.clock()
 
     def finalize_due(self, now_epoch: float | None = None, grace_seconds: float = 3.0) -> int:
         """Publish every forming candle whose minute ended at least ``grace_seconds`` ago."""
@@ -483,6 +533,8 @@ class NodeState:
                     continue
                 if bounds is not None and not bounds[0] <= row[0] < bounds[1]:
                     continue
+                if self.market_open_epoch is not None and row[0] < self.market_open_epoch:
+                    continue  # no candle before the open, from any source
                 if series.put_completed(row, SOURCE_HISTORICAL):
                     stored += 1
             current = series.current
@@ -493,6 +545,7 @@ class NodeState:
                     series.current = None
             if stored:
                 self.version += 1
+                self.last_candle_published_epoch = self.clock()
         return stored
 
     def seed_from_snapshot(self, snapshot: dict) -> None:
@@ -611,6 +664,11 @@ class NodeState:
                 "duplicate_trades": self.duplicate_trades,
                 "no_trade_today_packets": self.no_trade_today_packets,
                 "repeated_last_trade_packets": self.repeated_last_trade_packets,
+                "preopen_packets": self.preopen_packets,
+                "preopen_trade_packets": self.preopen_trade_packets,
+                "last_quote_packet_at": _iso(self.last_quote_packet_epoch),
+                "last_accepted_packet_at": _iso(self.last_tick_received_epoch),
+                "last_candle_published_at": _iso(self.last_candle_published_epoch),
             }
 
 

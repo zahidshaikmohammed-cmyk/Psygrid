@@ -9,6 +9,7 @@ live_core/config.py
 live_core/feed.py
 live_core/gzipjoin.py
 live_core/history.py
+live_core/metrics.py
 live_core/partition.py
 live_core/redact.py
 live_core/auth.py

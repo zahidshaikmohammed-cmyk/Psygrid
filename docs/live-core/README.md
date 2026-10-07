@@ -140,10 +140,24 @@ Stocks are never invented or silently dropped under an `OK`.
 ## Session and data rules
 
 * **Session window.** Asia/Kolkata, trading days per `runtime_guard.is_trading_day` (weekends,
-  `PSYGRID_MARKET_HOLIDAYS`, `PSYGRID_SPECIAL_SESSIONS`), 09:15-15:15. No Dhan feed outside it.
-* **Before the open.** 09:00-09:15: security ids are resolved. 09:15: authenticate (one forced
-  token refresh on 401/807-809, Dhan's token rate limit respected), one REST quote snapshot for
-  reference prices and the volume baseline, then the WebSocket.
+  `PSYGRID_MARKET_HOLIDAYS`, `PSYGRID_SPECIAL_SESSIONS`). Market 09:15-15:15; the feed runs from
+  09:05 (`LIVE_CORE_PREOPEN_CONNECT_MINUTES`, default 10) to 15:15. No Dhan feed outside it.
+* **Before the open (zero-touch readiness).**
+  * 08:55-09:05 (`PRE_MARKET`): the shared token is loaded and security ids are resolved.
+  * 09:05 (`PRE_OPEN`): authenticate and verify the Dhan data plan (one forced token refresh on
+    401/807-809, Dhan's token rate limit respected), one REST quote snapshot for reference prices
+    and the volume baseline, then the WebSocket. Pre-open packets are validated and set each
+    stock's volume baseline, but never create a candle or count as fresh.
+  * `/health/node` → `readiness.ready_for_market` is true only when the token is available, data
+    access is verified, all instruments are loaded (495 / 494), the socket is connected,
+    subscriptions are complete, valid packets have arrived, the candle engine is ready and the peer
+    answers with the right partition. Any failing check is listed (`failing_checks`, plus a
+    `pre-open: not ready` reason) and retried before 09:15: authentication every 30 s, a feed that
+    cannot connect replaced by the supervisor.
+  * Public payloads keep the full PSYGRID's `CLOSED` status until 09:15.
+* **09:15.** The same session and feed turn `LIVE`, on the first packet after the open or the next
+  loop pass, and the supervisor re-validates the feed with real trades (`RECOVERING` → `LIVE`). No
+  candle is ever published for a minute before 09:15, from the feed or from history.
 * **Candle rules (as the full app).** The minute comes from the exchange LTT. Volume is the delta
   of Dhan's cumulative volume. A repeated trade is ignored. A Dhan historical bar beats a
   WebSocket-built one. Only completed candles are published.
@@ -175,6 +189,56 @@ Stocks are never invented or silently dropped under an `OK`.
   unit runs with `ProtectSystem=strict`, `ProtectHome=read-only` and no writable path. A test also
   records every Python file-write audit event across a whole session and requires none.
 
+## Feed supervision (zero-touch recovery)
+
+One supervisor per node: the session loop (one thread, `_lock`), re-evaluated every second. Its
+state is in `/health/node` → `supervisor` (with the last 30 transitions) and every transition is
+logged to the journal.
+
+| State | Meaning | Leaves by |
+| --- | --- | --- |
+| `CLOSED` | outside the session | the session window opening |
+| `STARTING` → `AUTHENTICATING` | session begun; token + data plan being verified | success, or a retry in 30 s |
+| `CONNECTING` | a new LiveFeed started | the socket connecting |
+| `RECOVERING` | connected, waiting for proof | all four stages, or replacement after 90 s (market hours) |
+| `LIVE` | connected, subscribed, valid packets accepted | silence or an error |
+| `DEGRADED` | feed error, or no accepted packet for 45 s; the feed's own watchdog reconnects | recovery stages again, or replacement after 180 s of silence |
+| `RECONNECTING` | a reconnect or replacement in progress | a new connection attempt (progress), or replacement when stuck 150 s (330 s after a Dhan limit) |
+| `STOPPING` | 15:15 close | `CLOSED` |
+
+* **Staged recovery.** A (re)connected feed is `LIVE` only after all four stages, each counted
+  since the (re)connect: (1) socket connected with every instrument subscribed; (2) a valid quote
+  frame; (3) a packet accepted into state; (4) fresh data from at least 5 stocks. A connection
+  that exists but delivers nothing valid is never `LIVE`.
+* **Zombie feeds.** The 45 s connection watchdog in `LiveCoreFeed` counts *accepted* market
+  packets, not frames. A socket that still delivers frames but no valid quote is a zombie
+  (`zombie_reconnects`) and is reconnected. This watchdog is separate from the 120 s per-stock
+  freshness rule, which is unchanged.
+* **Token renewal = full replacement.** When the token authority renews its token, the old
+  LiveFeed is stopped and a completely new one is built with the renewed token for the same
+  partition. The old feed is never "half reconnected":
+  * it is marked retired, and its writes are detached so even a late callback cannot touch state;
+  * its socket is closed and its pending tasks are cancelled;
+  * its async generators and default executor are shut down, and its private loop is closed.
+
+  The new feed must pass the four stages again.
+* **Hard resets are spaced.** Consecutive replacements that never reach `LIVE` wait 0, 30, 60, 120,
+  then 300 s apart (token renewals are exempt), so Dhan is never stormed.
+* **Market state is never touched by recovery.** Published candles stay. A replacement counts as a
+  reconnect, so 90 s later Dhan's own 1m bars refill the gap. Candles are keyed by minute, so
+  nothing is duplicated.
+
+**Root cause of the 2026-10-07 09:38 stuck feed (reproduced).** The first connection after the data
+plan was paid failed during the handshake. The feed thread's teardown (`close_market_feed`) then
+waited, with no time limit, for the loop's pending tasks, and a websockets task that swallows
+cancellation never finished. The thread hung after printing "Connection closed!", with
+`connection_cycles` stuck at 1 and the status at RECONNECTING until a manual restart.
+
+`close_market_feed_bounded` (Live Core only; the full PSYGRID's `runtime_guard` is untouched) gives
+every teardown step its own timeout and closes the loop regardless. Replaying the same scenario
+for 8 s, the old code stays at 1 connection cycle; the new code keeps reconnecting (71 cycles,
+every loop closed).
+
 ## Feed resilience
 
 Every connection cycle goes through `feed.LiveFeed._run`, whose `finally` calls
@@ -195,8 +259,9 @@ Further protections in `live_core/feed.py`:
 * **Packet isolation.** An exception while handling one packet is caught and counted
   (`packet_errors`, logged only for the first 3 and every 1000th). Without this, dhanhq's loop
   treats it as a connection error and sleeps 1 s, dropping every stock's packets in that second.
-* **Silence watchdog.** With no message for 45 s during the session, the connection is closed and a
-  new cycle started (`silence_reconnects`).
+* **Silence watchdog.** With no *accepted* packet for 45 s during the session, the connection is
+  closed and a new cycle started (`silence_reconnects`; `zombie_reconnects` when frames kept
+  arriving but none was valid).
 * **Stale resubscription.** Stocks stale for more than 120 s are re-subscribed on the live
   connection in batches of 100 (at most 5 batches per pass, each stock at most every 300 s). A
   failed resubscribe is recorded but does not flip the feed status.
@@ -236,6 +301,26 @@ The systemd unit sets `MemoryHigh=650M`, `MemoryMax=800M`, `LimitNOFILE=8192`, `
 `install.sh` adds a 1 GB swap file if the VM has none. Threads: HTTP pool (8), session, feed and
 feed watchdog, history.
 
+## Observability (RAM only)
+
+* **HTTP.** Every request is counted in RAM: requests, 5xx errors, 4xx, active and peak
+  concurrent requests, response bytes, slow requests (≥1 s) and latency buckets. Counts are kept
+  per endpoint family (a fixed list; random paths count as `other`). They appear in `/health/node`
+  → `http`. No body is logged.
+* **Large responses are streamed.** An uncompressed `live.json` is sent as its head followed by the
+  shared per-stock fragments in ≤256 KB chunks. Concurrent requests no longer each hold a ~40 MB
+  joined copy, and the per-tail joined copy is gone. A gzip response is one cached bytes object
+  shared by all requests in the render window.
+* **Per-minute samples.** `GET /health/metrics` returns, for each of the last 480 minutes:
+  * CPU % of one core, RSS, cgroup `memory.current`/`memory.peak`, descriptors and threads;
+  * quote packets (average and peak per second), accepted packets, reconnects and replacements;
+  * HTTP requests, errors, bytes, slow requests and peak concurrency;
+  * live, stale and no-quote stock counts, and the session and supervisor state.
+
+  `market_open_window` pins the 09:15-09:30 samples for the day, so the opening burst can be read
+  at any time until the next session. Samples reset when the process restarts. They are
+  operational metrics, not market data.
+
 ## Configuration
 
 | Variable | Where | Meaning |
@@ -251,6 +336,7 @@ feed watchdog, history.
 | `LIVE_CORE_RENDER_CACHE_SECONDS` (1) | optional | whole-response reuse window (the stocks part is reused while unchanged) |
 | `LIVE_CORE_PEER_TIMEOUT_SECONDS` (4), `LIVE_CORE_PEER_CACHE_SECONDS` (1), `LIVE_CORE_PEER_STALE_SECONDS` (15) | optional | peer exchange |
 | `LIVE_CORE_MAX_RSS_MB` (600), `LIVE_CORE_HTTP_THREADS` (8) | optional | budgets |
+| `LIVE_CORE_PREOPEN_CONNECT_MINUTES` (10) | optional | minutes before 09:15 at which the session authenticates and connects |
 
 `PSYGRID_ARCHIVE` is ignored (a warning is logged).
 

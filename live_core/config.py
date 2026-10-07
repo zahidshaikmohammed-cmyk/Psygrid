@@ -110,6 +110,9 @@ class LiveCoreConfig:
     # takes the Dhan token it currently holds from there. Empty: DHAN_ACCESS_TOKEN from the env file.
     token_source: str = ""
     token_poll_seconds: float = 15.0
+    # Minutes before the 09:15 open at which the session authenticates and connects the feed, so
+    # problems (token, data plan, WebSocket, subscriptions, peers) surface and recover before the open.
+    preopen_connect_minutes: float = 10.0
 
     @classmethod
     def from_environment(cls, environ: Mapping[str, str] | None = None) -> LiveCoreConfig:
@@ -144,6 +147,7 @@ class LiveCoreConfig:
             token_generation=_flag(environ, "LIVE_CORE_TOKEN_GENERATION", False),
             token_source=_token_source(environ),
             token_poll_seconds=_float(environ, "LIVE_CORE_TOKEN_POLL_SECONDS", 15.0),
+            preopen_connect_minutes=_float(environ, "LIVE_CORE_PREOPEN_CONNECT_MINUTES", 10.0),
         )
 
     def missing_peers(self) -> list[int]:

@@ -183,8 +183,14 @@ def fragment_last(fragment: bytes, count: int) -> bytes:
     return fragment[:body_start] + fragment[position:body_end] + b"]}"
 
 
+def public_session_status(session_status):
+    """The session status a public payload shows. Before the open the market is closed, as in the
+    full PSYGRID's contract; the node's pre-open phase (feed already connected) is in /health."""
+    return "CLOSED" if session_status == "PRE_OPEN" else session_status
+
+
 def payload_status(session_status: str) -> str:
-    return "OK" if session_status == "LIVE" else session_status
+    return "OK" if session_status == "LIVE" else public_session_status(session_status)
 
 
 def assemble_head(
@@ -202,7 +208,7 @@ def assemble_head(
         "schema_version": SCHEMA_VERSION,
         "status": status,
         "session": {
-            "status": session_status,
+            "status": public_session_status(session_status),
             "date": session_date,
             "timezone": PUBLIC_TIMEZONE_NAME,
             "current_time_ist": datetime.now(PUBLIC_TIMEZONE).strftime("%Y-%m-%d %H:%M:%S IST"),
