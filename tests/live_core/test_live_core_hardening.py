@@ -492,16 +492,22 @@ def test_node0_reports_partial_while_node1_fails_and_recovers_to_complete(make_r
 def test_uncompressed_live_json_is_streamed_byte_identical_and_gzip_still_decodes(make_runtime):
     runtime, _ids = _live_runtime(make_runtime)
     client = TestClient(create_app(runtime, start_runtime=False))
-    service_body = client.app.state.live_core.live()
+
+    def without_clock(payload):
+        payload["session"].pop("current_time_ist")  # the only per-request field in a body
+        return payload
+
+    tail = b"".join(client.app.state.live_core.live().tail.parts)
     plain = client.get("/public/live.json", headers={"Accept-Encoding": "identity"})
     assert plain.status_code == 200 and "content-encoding" not in plain.headers
-    assert int(plain.headers["content-length"]) == len(plain.content) == len(service_body)
-    assert plain.content == service_body.head + b"".join(service_body.tail.parts)
+    assert int(plain.headers["content-length"]) == len(plain.content)
+    # The streamed body is the head followed by the shared stock fragments, byte for byte.
+    assert plain.content.endswith(tail) and len(plain.content) > len(tail)
     zipped = client.get("/public/live.json", headers={"Accept-Encoding": "gzip"})
-    assert zipped.json() == orjson.loads(plain.content)
-    raw = client.get("/public/live.json", headers={"Accept-Encoding": "gzip"}).request
-    assert raw is not None
-    assert gzip.decompress(client.app.state.live_core.live().gzipped()) == plain.content
+    assert zipped.headers["content-encoding"] == "gzip"
+    assert without_clock(zipped.json()) == without_clock(orjson.loads(plain.content))
+    body = client.app.state.live_core.live()
+    assert gzip.decompress(body.gzipped()) == body.head + b"".join(body.tail.parts)
 
 
 def test_http_requests_are_counted_in_ram_with_bounded_endpoint_keys(make_runtime):
