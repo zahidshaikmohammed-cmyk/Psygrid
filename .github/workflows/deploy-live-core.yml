@@ -9,6 +9,9 @@ name: PSYGRID Live Core Deploy (E2 Micro nodes)
 #            /etc/psygrid-live-core.env, systemd unit state, listeners and health on each node, port 10000
 #            from the internet, and the cluster view from node 0. Changes nothing.
 #   deploy   test, build the manifest-only bundle, install on the selected node(s), verify.
+#   forensics read-only: one day's journal (restarts with systemd's CPU/memory accounting, token
+#            renewals, feed events), kernel OOM messages, pressure/vmstat counters, limits and sar
+#            history on both nodes. Installs, restarts and changes nothing.
 #
 # Repository configuration:
 #   secret   LIVE_CORE_NODE0_SSH_KEY        private key for node 0's VM (required to reach node 0)
@@ -26,7 +29,7 @@ on:
       action:
         description: status (read-only) or deploy
         type: choice
-        options: [status, deploy, audit-session]
+        options: [status, deploy, audit-session, forensics]
         default: status
       target:
         description: Which node(s)
@@ -45,6 +48,10 @@ on:
         description: audit-session only - minute of the run at which the bounded HTTP load test starts (-1 = none)
         type: number
         default: 45
+      forensics_date:
+        description: forensics only - the IST date to inspect (YYYY-MM-DD, default today)
+        type: string
+        default: ""
       allow_market_hours:
         description: Deploy during 09:00-15:20 IST on a weekday (restarting a node drops its RAM session)
         type: boolean
@@ -102,7 +109,7 @@ jobs:
   operate:
     needs: test
     # status skips the test job; deploy requires it to pass.
-    if: ${{ always() && inputs.action != 'audit-session' && (needs.test.result == 'success' || (inputs.action == 'status' && needs.test.result == 'skipped')) }}
+    if: ${{ always() && inputs.action != 'audit-session' && inputs.action != 'forensics' && (needs.test.result == 'success' || (inputs.action == 'status' && needs.test.result == 'skipped')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -368,4 +375,76 @@ jobs:
           done
           wait
           echo "==== load test results ===="; cat loadtest.log 2>/dev/null || echo "(no load test)"
+
+  forensics:
+    if: ${{ inputs.action == 'forensics' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: read-only forensics of one session on both nodes
+        env:
+          NODE0_SSH_KEY: ${{ secrets.LIVE_CORE_NODE0_SSH_KEY }}
+          NODE1_SSH_KEY: ${{ secrets.LIVE_CORE_NODE1_SSH_KEY }}
+          SSH_USER_OVERRIDE: ${{ vars.LIVE_CORE_SSH_USER }}
+          DAY: ${{ inputs.forensics_date }}
+        run: |
+          set -uo pipefail
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          trap 'rm -f ~/.ssh/live_core_node0 ~/.ssh/live_core_node1' EXIT
+          ( umask 077 && printf '%s\n' "$NODE0_SSH_KEY" > ~/.ssh/live_core_node0 && printf '%s\n' "$NODE1_SSH_KEY" > ~/.ssh/live_core_node1 )
+          unset NODE0_SSH_KEY NODE1_SSH_KEY
+          DAY="${DAY:-$(TZ=Asia/Kolkata date +%F)}"
+          ssh_opts() { echo "-i $HOME/.ssh/live_core_node$1 -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20"; }
+          for N in 0 1; do
+            if [ "$N" = 0 ]; then host="$NODE0_HOST"; else host="$NODE1_HOST"; fi
+            echo "################ node ${N} (${host}) - ${DAY} ################"
+            ssh-keyscan -H "$host" >> ~/.ssh/known_hosts 2>/dev/null || true
+            user=""
+            for u in $SSH_USER_OVERRIDE ubuntu opc; do
+              # shellcheck disable=SC2046
+              if ssh $(ssh_opts "$N") "${u}@${host}" true 2>/dev/null; then user="$u"; break; fi
+            done
+            [ -n "$user" ] || { echo "cannot log in to node ${N}"; continue; }
+            # shellcheck disable=SC2046
+            ssh $(ssh_opts "$N") "${user}@${host}" "NODE=${N} DAY=${DAY} bash -s" <<'REMOTE'
+          set -u
+          unit="psygrid-live-core-node${NODE}"
+          since=$(date -d "${DAY} 08:30 +0530" +%s); until=$(date -d "${DAY} 16:30 +0530" +%s)
+          echo "== clock"; date -Is; timedatectl show -p Timezone --value 2>/dev/null; echo "boot $(uptime -s)"; systemctl --version | head -1
+          echo "== limits and accounting (current process)"
+          systemctl show "$unit" -p NRestarts -p ActiveEnterTimestamp -p ExecMainStartTimestamp -p MemoryHigh -p MemoryMax -p TasksMax -p LimitNOFILE -p WatchdogUSec -p MemoryCurrent -p MemoryPeak -p MemorySwapPeak -p CPUUsageNSec 2>/dev/null
+          systemctl show "$unit" -p Environment --value 2>/dev/null | tr ' ' '\n' | grep -E "MAX_RSS|MALLOC|NODE_ID" || true
+          cg="/sys/fs/cgroup/system.slice/${unit}.service"
+          for f in memory.events memory.swap.events memory.pressure cpu.pressure cpu.stat; do [ -r "$cg/$f" ] && { echo "-- $f"; cat "$cg/$f"; }; done
+          echo "== journal persistence"; sudo journalctl --disk-usage 2>/dev/null; sudo journalctl --list-boots --no-pager 2>/dev/null | tail -3
+          echo "== unit journal ${DAY} 08:30-16:30 IST (timestamps in UTC)"
+          sudo journalctl -u "$unit" --since "@${since}" --until "@${until}" --no-pager -o short-iso --utc > /tmp/lc_journal.txt 2>/dev/null
+          echo "lines $(wc -l < /tmp/lc_journal.txt)"
+          echo "-- message classes (count, text with digits masked)"
+          sed -E 's/^[^ ]+ [^ ]+ [^:]+: //; s/[0-9]+(\.[0-9]+)?/N/g' /tmp/lc_journal.txt | sort | uniq -c | sort -rn | head -60
+          echo "-- systemd lifecycle and resource accounting"
+          grep -E "Started|Stopped|Stopping|Consumed|Main process|Watchdog|watchdog|Killing|killed|oom|OOM|Failed|Scheduled restart|memory peak" /tmp/lc_journal.txt | head -80
+          echo "-- token, session, feed and error events (first 150)"
+          grep -iE "token|session|LIVE|AUTH|CONFIG_ERROR|reconnect|disconnect|Connection|80[5-9]|limit|error|Traceback|warning|stuck|replac|silence" /tmp/lc_journal.txt | grep -vE "Consumed" | head -150
+          echo "-- last 20 lines"; tail -20 /tmp/lc_journal.txt
+          rm -f /tmp/lc_journal.txt
+          echo "== kernel ${DAY} (oom / kills / lockups / pressure)"
+          sudo journalctl -k --since "@${since}" --until "@${until}" --no-pager -o short-iso --utc 2>/dev/null | grep -iE "oom|out of memory|killed process|hung task|soft lockup|blocked for|memory cgroup" | head -40 || true
+          echo "== other system warnings ${DAY}"
+          sudo journalctl -p warning --since "@${since}" --until "@${until}" --no-pager -o short-iso --utc 2>/dev/null | grep -v "$unit" | tail -40 || true
+          echo "== since-boot counters"
+          head -1 /proc/stat; grep -E "^btime" /proc/stat; cat /proc/uptime
+          grep -E "^(oom_kill|pswpin|pswpout|pgmajfault) " /proc/vmstat
+          for f in cpu memory io; do echo "-- pressure $f"; cat /proc/pressure/$f 2>/dev/null; done
+          echo "== memory now"; grep -E "^(MemTotal|MemAvailable|SwapTotal|SwapFree)" /proc/meminfo; swapon --show --bytes 2>/dev/null
+          echo "== sar history"
+          if command -v sar >/dev/null; then
+            d=$(date -d "${DAY}" +%d); f="/var/log/sysstat/sa${d}"; [ -r "$f" ] || f="/var/log/sa/sa${d}"
+            if [ -r "$f" ]; then
+              for opt in -u -r -S -q -W; do echo "-- sar $opt"; LC_ALL=C sar $opt -f "$f" -s 03:00:00 -e 11:30:00 2>/dev/null | head -70; done
+            else echo "sar installed but no data file for ${DAY}"; ls /var/log/sysstat /var/log/sa 2>/dev/null | tail -5; fi
+          else echo "sar not installed"; fi
+          echo "== oracle cloud agent / oci cli"; systemctl is-active oracle-cloud-agent 2>/dev/null; command -v oci || echo "oci cli not installed"
+          REMOTE
+          done
 
