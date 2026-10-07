@@ -247,3 +247,34 @@ def test_authority_unreachable_at_the_open_is_a_visible_config_error(monkeypatch
         assert runtime.state.session_status == "LIVE"
     finally:
         runtime.stop()
+
+
+def test_a_token_that_is_not_ready_is_picked_up_within_seconds(monkeypatch, universe, instruments):
+    """The authority has no token yet (e.g. it is still generating the day's token): the node asks
+    again every few seconds, not once a minute, in the pre-market preparation and in the session window."""
+    from live_core_helpers import FakeDhanAPI
+
+    authority, api = Authority(), FakeDhanAPI()
+    authority.down = True
+    runtime, clock = _authority_runtime(monkeypatch, universe, instruments, authority, api, ist(8, 55))
+    try:
+        runtime.tick()
+        assert runtime.settings is None and "token authority" in runtime.config_error
+        authority.down = False
+        clock.set(ist(8, 55, 6))
+        runtime.tick()
+        assert runtime.settings is not None and runtime.config_error == ""
+    finally:
+        runtime.stop()
+
+    authority.down = True
+    runtime, clock = _authority_runtime(monkeypatch, universe, instruments, authority, api, ist(9, 5))
+    try:
+        runtime.tick()
+        assert runtime.state.session_status == "CONFIG_ERROR"
+        authority.down = False
+        clock.set(ist(9, 5, 6))
+        runtime.tick()
+        assert runtime.state.session_status == "PRE_OPEN" and runtime.feed is not None
+    finally:
+        runtime.stop()

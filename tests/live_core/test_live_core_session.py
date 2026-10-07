@@ -433,3 +433,23 @@ def test_a_stuck_feed_is_replaced_but_dhan_cooldowns_are_respected(make_runtime)
     runtime.test_clock.set(ist(9, 36, 31))  # 331 s
     runtime.tick()
     assert runtime.feed is not progressing and runtime.feed_replacements == 2
+
+
+def test_a_start_inside_the_opening_minute_refills_it_from_dhan(make_runtime):
+    """Started at 09:15:20 (e.g. the token arrived late): the first minute is partial, so Dhan's
+    1m bars are taken once it has closed; historical bars replace the partial live ones."""
+    runtime = make_runtime(0, when=ist(9, 15, 20))
+    runtime.tick()
+    assert runtime.state.session_status == "LIVE"
+    assert runtime.history.status()["queued"] == 0
+    runtime.test_clock.set(ist(9, 15, 55))
+    ids = [series.security_id for series in runtime.state.ordered[:10]]
+    feed_minutes(runtime.state, ids, int(ist(9, 15).timestamp()), 1)
+    runtime.tick()
+    assert runtime.supervisor_state == "LIVE"
+    runtime.test_clock.set(ist(9, 16, 49))
+    runtime.tick()
+    assert runtime.history.status()["queued"] == 0 and runtime.test_api.history_calls == []
+    runtime.test_clock.set(ist(9, 16, 50))  # 90 s after the start
+    runtime.tick()
+    assert _wait_for(lambda: len(runtime.test_api.history_calls) == 495)

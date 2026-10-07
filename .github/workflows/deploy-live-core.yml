@@ -9,6 +9,10 @@ name: PSYGRID Live Core Deploy (E2 Micro nodes)
 #            /etc/psygrid-live-core.env, systemd unit state, listeners and health on each node, port 10000
 #            from the internet, and the cluster view from node 0. Changes nothing.
 #   deploy   test, build the manifest-only bundle, install on the selected node(s), verify.
+#   rehearse off-hours dress rehearsal on each node against the real Dhan account, with the
+#            service's own environment and the deployed code (deploy/live-core/rehearse.py): token
+#            from the authority, data access, instruments, snapshot, WebSocket connect + subscribe,
+#            a full feed replacement and bounded teardown. Never restarts or changes the service.
 #
 # Repository configuration:
 #   secret   LIVE_CORE_NODE0_SSH_KEY        private key for node 0's VM (required to reach node 0)
@@ -24,9 +28,9 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: status (read-only) or deploy
+        description: status (read-only), rehearse (off-hours, read-only) or deploy
         type: choice
-        options: [status, deploy]
+        options: [status, rehearse, deploy]
         default: status
       target:
         description: Which node(s)
@@ -94,14 +98,14 @@ jobs:
   operate:
     needs: test
     # status skips the test job; deploy requires it to pass.
-    if: ${{ always() && (needs.test.result == 'success' || (inputs.action == 'status' && needs.test.result == 'skipped')) }}
+    if: ${{ always() && (needs.test.result == 'success' || (inputs.action != 'deploy' && needs.test.result == 'skipped')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
-      - name: Refuse to restart nodes during the market session unless asked
-        if: ${{ inputs.action == 'deploy' && !inputs.allow_market_hours }}
+      - name: Refuse to restart nodes (or rehearse) during the market session unless asked
+        if: ${{ (inputs.action == 'deploy' && !inputs.allow_market_hours) || inputs.action == 'rehearse' }}
         run: |
           set -euo pipefail
           now="$(TZ=Asia/Kolkata date +%u%H%M)"
@@ -195,6 +199,24 @@ jobs:
           REMOTE
           }
 
+          rehearse_node() {
+            local node="$1" host="$2" user
+            echo "================ rehearsal node ${node} (${host}) ================"
+            user="$(login_user "$node" "$host")" || return 1
+            local root="/home/${user}/psygrid-live-core"
+            # shellcheck disable=SC2046
+            scp $(ssh_opts "$node") deploy/live-core/rehearse.py "${user}@${host}:${root}/rehearse.py" || return 1
+            # The service's own environment files, user and working directory; a separate transient
+            # process that binds no port. The service keeps running untouched.
+            # shellcheck disable=SC2046
+            ssh $(ssh_opts "$node") "${user}@${host}" "sudo systemd-run --quiet --wait --pipe --collect \
+                --uid='${user}' --gid='${user}' -p WorkingDirectory='${root}/current' \
+                -p EnvironmentFile=/etc/psygrid-live-core.env -p EnvironmentFile=-/etc/psygrid-live-core-node.env \
+                -E LIVE_CORE_NODE_ID='${node}' -E LIVE_CORE_NODE_COUNT='${NODE_COUNT}' -E PYTHONUNBUFFERED=1 \
+                -E PYTHONDONTWRITEBYTECODE=1 -p RuntimeMaxSec=600 \
+                '${root}/venv/bin/python' '${root}/rehearse.py'; rc=\$?; rm -f '${root}/rehearse.py'; exit \$rc" || return 1
+          }
+
           deploy_node() {
             local node="$1" host="$2" peers="$3" user
             echo "=== deploy node ${node} -> ${host} (peers: ${peers}) ==="
@@ -242,6 +264,8 @@ jobs:
             if [ "$node" = 0 ]; then host="$NODE0_HOST"; peers="1=${NODE1_URL}"; else host="$NODE1_HOST"; peers="0=${NODE0_URL}"; fi
             if [ "$ACTION" = deploy ]; then
               deploy_node "$node" "$host" "$peers" || failed="$failed $node"
+            elif [ "$ACTION" = rehearse ]; then
+              rehearse_node "$node" "$host" || failed="$failed $node"
             else
               status_node "$node" "$host" || failed="$failed $node"
             fi

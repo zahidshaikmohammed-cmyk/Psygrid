@@ -8,12 +8,12 @@ import threading
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timedelta
 from datetime import time as dt_time
 from zoneinfo import ZoneInfo
 
 from backfill import HistoricalBackfill
-from config import refresh_access_token
+from config import _token_expiry_epoch, refresh_access_token
 from dhan_auth import DhanTokenRateLimited, generate_access_token
 from runtime_guard import is_trading_day
 
@@ -41,6 +41,7 @@ class SessionManager:
         self._last_auth_refresh_epoch = 0.0
         self._started_for_date: str | None = None
         self._auth_retry_at = 0.0
+        self._token_retry_at = 0.0
         self._last_reconnect_seen = 0
         self.backfill = HistoricalBackfill(settings, state, dhan_api, instruments)
         # Called after the final candle is closed and before state is wiped.
@@ -86,7 +87,51 @@ class SessionManager:
                 self._check_for_feed_interruption(now)
             elif self._started_for_date is not None:
                 self._end_session()
+            else:
+                self._keep_token_ready(now)
             self.stop_event.wait(2.0)
+
+    # The token is ready before the open (the Live Core nodes connect at 09:05 with this token).
+    TOKEN_PREPARE_MINUTES = 30
+    TOKEN_RETRY_SECONDS = 60.0
+
+    def _keep_token_ready(self, now: datetime) -> None:
+        """Outside market hours, hold a token that lasts through the next session.
+
+        With PIN + TOTP configured, a process without a token (after a restart) generates one at
+        once, and in the 30 minutes before a trading day's open a token that would expire before
+        that day's close is replaced, so the 09:15 session start finds a valid token and the
+        Live Core nodes (GET /internal/dhan-token) have it for their 09:05 pre-open connect.
+        One generation, never during the session; Dhan's rate limit defers a retry.
+        """
+        if now.timestamp() < self._token_retry_at:
+            return
+        if not os.getenv("DHAN_PIN", "").strip() or not os.getenv("DHAN_TOTP_SECRET", "").strip():
+            return  # an explicit environment token is used as configured
+        token = str(getattr(self.settings, "access_token", "") or "")
+        if token:
+            sh, sm = map(int, self.settings.market_start.split(":"))
+            eh, em = map(int, self.settings.market_end.split(":"))
+            opens = now.replace(hour=sh, minute=sm, second=0, microsecond=0)
+            closes = now.replace(hour=eh, minute=em, second=0, microsecond=0)
+            preparing = (
+                is_trading_day(now.date()) and opens - timedelta(minutes=self.TOKEN_PREPARE_MINUTES) <= now < opens
+            )
+            expiry = _token_expiry_epoch(token)
+            if not preparing or expiry is None or expiry > closes.timestamp() + 600:
+                return
+        try:
+            refresh_access_token(self.settings, force=True)
+        except DhanTokenRateLimited as exc:
+            self._token_retry_at = now.timestamp() + exc.retry_after
+            return
+        except Exception as exc:
+            self._token_retry_at = now.timestamp() + self.TOKEN_RETRY_SECONDS
+            self.state.last_feed_error = f"pre-market token: {type(exc).__name__}"
+            return
+        self._token_retry_at = 0.0
+        self.dhan_api.settings = self.settings
+        self.feed.settings = self.settings
 
     def _check_for_feed_interruption(self, now: datetime) -> None:
         with self.state.lock:
