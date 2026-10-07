@@ -16,13 +16,26 @@ it, ``close_market_feed`` can find the loop "running" and skip closing it, or th
 start afterwards and stay open. Here the loop is only ever run by the feed thread: ``stop()``
 signals it thread-safely until the feed thread has exited through its own cleanup.
 
+Teardown is bounded. ``close_market_feed_bounded`` replaces the shared ``close_market_feed`` for
+the Live Core: every step that waits on the feed's loop (disconnect, cancelled tasks, async
+generators, the default executor) has its own timeout, and the loop is closed even when a task
+refuses to finish. On 2026-10-07 a feed thread stopped making progress in that teardown after a
+failed first connection (``connection_cycles`` stayed at 1 until a manual restart); an unbounded
+wait there can no longer hold the feed thread.
+
+A retired feed is detached from the node state: once ``stop()`` begins, every write it would
+make (status, packets, candles, errors) goes to a sink, so a slow or abandoned old feed can never
+overwrite the state of the feed that replaced it.
+
 Three more protections run per connection:
 
 * packet isolation - an exception while handling one packet is counted and dropped. Inside
   dhanhq it would otherwise reach ``on_error`` and pause the whole socket for a second.
-* silence watchdog - if a connected socket delivers no message for ``SILENCE_RECONNECT_SECONDS``
-  (a half-open connection, or dhanhq's own once-a-second internal reconnect loop failing), the
-  connection is ended so ``LiveFeed`` reconnects cleanly with its exponential back-off.
+* silence watchdog - if a connected socket delivers no *accepted* market packet for
+  ``SILENCE_RECONNECT_SECONDS`` during the market session (a half-open connection, dhanhq's own
+  once-a-second internal reconnect loop failing, or a zombie socket that still delivers frames but
+  no valid quote), the connection is ended so ``LiveFeed`` reconnects cleanly with its back-off.
+  This 45 s connection watchdog is separate from the 120 s per-stock freshness rule.
 * stale resubscription - stocks with no valid data for longer than the 120 s staleness limit are
   resubscribed in batches (at most once per ``RESUBSCRIBE_COOLDOWN_SECONDS`` each), like the full
   PSYGRID's resubscribe pass; a failed resubscribe is recorded but never marks the feed ERROR.
@@ -31,6 +44,7 @@ Three more protections run per connection:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import inspect
 import json
 import threading
@@ -39,8 +53,105 @@ import time
 from feed import LiveFeed
 from live_core.state import STALE_AFTER_SECONDS
 
+CLOSE_STEP_SECONDS = 3.0
+
+
+def _run_bounded(loop, awaitable, timeout: float) -> bool:
+    """Run ``awaitable`` on a stopped ``loop`` for at most ``timeout`` seconds. True when it finished."""
+    task = loop.create_task(awaitable)
+    loop.run_until_complete(asyncio.wait({task}, timeout=timeout))
+    if not task.done():
+        task.cancel()
+        loop.run_until_complete(asyncio.wait({task}, timeout=1.0))
+        return False
+    if not task.cancelled():
+        task.exception()  # retrieved, so an expected failure is never logged as "never retrieved"
+    return True
+
+
+def close_market_feed_bounded(feed, step_seconds: float = CLOSE_STEP_SECONDS) -> bool:
+    """Disconnect a dhanhq MarketFeed and close its private event loop, every wait bounded.
+
+    Like ``runtime_guard.close_market_feed`` (disconnect, cancel pending tasks, shut down async
+    generators, close the loop) but no step can block for longer than ``step_seconds``: a task
+    that ignores cancellation is abandoned and the loop is closed anyway, releasing its selector
+    and descriptors. Never raises. Returns True when the loop is closed afterwards (False only for
+    a loop another thread is still running).
+    """
+    if feed is None:
+        return True
+    with contextlib.suppress(Exception):
+        feed._running = False
+    loop = getattr(feed, "loop", None)
+    if loop is None:
+        with contextlib.suppress(Exception):
+            feed.close_connection()
+        return True
+    try:
+        if loop.is_closed():
+            return True
+        if loop.is_running():
+            return False
+    except Exception:
+        return False
+    try:
+        with contextlib.suppress(Exception):
+            _run_bounded(loop, feed.disconnect(), step_seconds)
+        pending = [task for task in asyncio.all_tasks(loop) if not task.done()]
+        for task in pending:
+            task.cancel()
+        if pending:
+            with contextlib.suppress(Exception):
+                loop.run_until_complete(asyncio.wait(pending, timeout=step_seconds))
+        with contextlib.suppress(Exception):
+            _run_bounded(loop, loop.shutdown_asyncgens(), step_seconds)
+        with contextlib.suppress(Exception):
+            _run_bounded(loop, loop.shutdown_default_executor(), step_seconds)
+    finally:
+        with contextlib.suppress(Exception):
+            if not loop.is_running():
+                loop.close()
+        with contextlib.suppress(Exception):
+            asyncio.set_event_loop(None)
+    return loop.is_closed()
+
+
+def _dropped(*_args, **_kwargs):
+    return False
+
+
+class DetachedState:
+    """What a retired feed writes to instead of the node state: reads pass through, writes are dropped."""
+
+    WRITES = frozenset(
+        {
+            "set_feed_status",
+            "mark_websocket_connected",
+            "mark_websocket_reconnecting",
+            "mark_websocket_error",
+            "note_reconnect",
+            "record_feed_message",
+            "set_market_reference",
+            "record_live_quote",
+            "update_quote",
+            "record_error",
+        }
+    )
+
+    def __init__(self, state):
+        object.__setattr__(self, "_state", state)
+
+    def __getattr__(self, name):
+        if name in DetachedState.WRITES:
+            return _dropped
+        return getattr(object.__getattribute__(self, "_state"), name)
+
+    def __setattr__(self, name, value):  # a retired feed never mutates the node state directly either
+        return None
+
 
 class LiveCoreFeed(LiveFeed):
+    CLOSE_STEP_SECONDS = CLOSE_STEP_SECONDS
     MONITOR_INTERVAL_SECONDS = 5.0
     # Connection health, not data freshness: ~495 stocks in Full mode never fall silent together.
     SILENCE_RECONNECT_SECONDS = 45.0
@@ -51,6 +162,10 @@ class LiveCoreFeed(LiveFeed):
 
     def __init__(self, settings, state, instruments):
         super().__init__(settings, state, instruments)
+        self._node_state = state
+        self.retired = False
+        self.abandoned = False
+        self.zombie_reconnects = 0
         self._counter_lock = threading.Lock()
         self.connection_cycles = 0
         self.feeds_closed = 0
@@ -119,13 +234,24 @@ class LiveCoreFeed(LiveFeed):
         now = self.state.clock() if now is None else now
         with self.state.lock:
             last_message = self.state.last_message_epoch
-        last_activity = max(last_message or 0.0, self._connected_at)
+            last_accepted = self.state.last_tick_received_epoch
+        # Connection health is judged on accepted market packets, not on any frame: a socket that
+        # still delivers frames but no valid quote for 45 s is a zombie, not a healthy feed.
+        last_activity = max(last_accepted or 0.0, self._connected_at)
         if now - last_activity > self.SILENCE_RECONNECT_SECONDS:
+            zombie = last_message is not None and last_message > last_activity
             with self._counter_lock:
                 self.silence_reconnects += 1
-            self.state.mark_websocket_error(
-                f"websocket delivered nothing for {int(now - last_activity)}s; forcing a clean reconnect"
-            )
+                if zombie:
+                    self.zombie_reconnects += 1
+            if zombie:
+                message = (
+                    f"websocket alive but no valid market packet accepted for {int(now - last_activity)}s "
+                    "(zombie feed); forcing a clean reconnect"
+                )
+            else:
+                message = f"websocket delivered nothing for {int(now - last_activity)}s; forcing a clean reconnect"
+            self.state.mark_websocket_error(message)
             feed._running = False
             loop = getattr(feed, "loop", None)
             thread = self._thread
@@ -199,9 +325,8 @@ class LiveCoreFeed(LiveFeed):
     def _close_feed(self, feed) -> None:
         if feed is None:
             return
-        super()._close_feed(feed)
-        loop = getattr(feed, "loop", None)
-        closed = loop is None or loop.is_closed()
+        self._connection_stop.set()
+        closed = close_market_feed_bounded(feed, self.CLOSE_STEP_SECONDS)
         with self._counter_lock:
             self.feeds_closed += 1
             if closed:
@@ -211,18 +336,30 @@ class LiveCoreFeed(LiveFeed):
         if not closed:
             self.state.record_error("feed lifecycle: MarketFeed event loop was not closed after its connection ended")
 
-    STOP_TIMEOUT_SECONDS = 10.0
+    # Longer than one bounded teardown (four steps of CLOSE_STEP_SECONDS) plus a disconnect request.
+    STOP_TIMEOUT_SECONDS = 16.0
+
+    def retire(self) -> None:
+        """Detach from the node state: nothing this feed (or its threads) does afterwards reaches it."""
+        if not self.retired:
+            self.retired = True
+            self.state = DetachedState(self._node_state)
 
     def stop(self) -> None:
+        node_state = self._node_state
         self._stop_requested.set()
         self._connection_stop.set()
-        self.state.set_feed_status("STOPPING")
+        self.retire()
+        node_state.set_feed_status("STOPPING")
         thread = self._thread
         disconnected: set[int] = set()
         deadline = time.monotonic() + self.STOP_TIMEOUT_SECONDS
         while thread is not None and thread is not threading.current_thread() and thread.is_alive():
             if time.monotonic() >= deadline:
-                self.state.record_error("feed stop: Dhan feed thread did not exit within the stop timeout")
+                self.abandoned = True
+                node_state.record_error(
+                    "feed stop: Dhan feed thread did not exit within the stop timeout; it is detached and abandoned"
+                )
                 break
             with self._lock:
                 feed = self._feed
@@ -238,7 +375,7 @@ class LiveCoreFeed(LiveFeed):
         self._thread = None
         with self._lock:
             self._feed = None
-        self.state.set_feed_status("STOPPED")
+        node_state.set_feed_status("STOPPED")
 
     @staticmethod
     def _request_disconnect(feed, loop, thread: threading.Thread) -> None:
@@ -266,6 +403,8 @@ class LiveCoreFeed(LiveFeed):
         with self._counter_lock:
             return {
                 "feed_thread_alive": self.thread_alive(),
+                "retired": self.retired,
+                "abandoned": self.abandoned,
                 "connection_cycles": self.connection_cycles,
                 "feeds_closed": self.feeds_closed,
                 "event_loops_closed": self.event_loops_closed,
@@ -273,6 +412,7 @@ class LiveCoreFeed(LiveFeed):
                 "packet_errors": self.packet_errors,
                 "internal_reconnects": self.internal_reconnects,
                 "silence_reconnects": self.silence_reconnects,
+                "zombie_reconnects": self.zombie_reconnects,
                 "resubscribed_instruments": self.resubscribed,
                 "resubscribe_failures": self.resubscribe_failures,
             }

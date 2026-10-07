@@ -175,17 +175,23 @@ def test_node_takes_the_authoritys_token_and_follows_its_renewal(
         assert runtime.settings.access_token == TOKEN and runtime.settings.client_id == "1100000001"
         feed = runtime.feed
 
-        # The authority renews its token mid-session: the node switches within one poll interval.
+        # The authority renews its token mid-session: within one poll interval the old feed is
+        # stopped and a completely new one is built with the renewed token (never half-reconnected).
         renewed = TOKEN[:-4] + "NEWW"
         authority.token = renewed
         clock.set(ist(9, 15, 20))
         runtime.tick()
         assert runtime.settings.access_token == renewed
-        assert feed.reconnect_tokens == [renewed]  # reconnected with the new token
+        assert feed.stopped and runtime.feed is not feed
+        replacement = runtime.feed
+        assert replacement.started and replacement.settings.access_token == renewed
+        assert replacement.instruments == feed.instruments  # the same partition
+        assert getattr(feed, "reconnect_tokens", []) == []  # the old feed object was not reused
         clock.set(ist(9, 15, 25))
-        runtime.tick()  # polled at most every 15 s, and an unchanged token never reconnects
-        assert feed.reconnect_tokens == [renewed]
+        runtime.tick()  # polled at most every 15 s, and an unchanged token never replaces the feed
+        assert runtime.feed is replacement and runtime.token_renewals == 1
         assert runtime.state.session_status == "LIVE"
+        feed = replacement
 
         health = runtime.node_health()
         assert health["auth"]["token_mode"] == "SHARED_FROM_AUTHORITY"

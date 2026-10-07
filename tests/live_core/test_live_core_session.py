@@ -19,12 +19,28 @@ def _wait_for(predicate, timeout=10.0):
     return predicate()
 
 
-def test_no_feed_and_no_dhan_calls_before_the_open(make_runtime):
-    runtime = make_runtime(0, when=ist(9, 14, 59))
+def test_no_feed_and_no_dhan_calls_before_the_pre_open_window(make_runtime):
+    runtime = make_runtime(0, when=ist(9, 4, 59))
     runtime.tick()
     assert runtime.feed is None
     assert runtime.state.session_status == "CLOSED"
     assert runtime.test_api.verify_calls == 0 and runtime.test_refresh_calls == []
+
+
+def test_the_feed_connects_and_is_verified_before_the_open_then_goes_live_at_0915(make_runtime):
+    """Pre-open (09:05-09:15): authenticated, data plan verified and connected, but no candles and a
+    public status of CLOSED. 09:15 turns the same session and feed LIVE."""
+    runtime = make_runtime(0, when=ist(9, 5))
+    runtime.tick()
+    assert runtime.state.session_status == "PRE_OPEN"
+    assert runtime.test_api.verify_calls == 1
+    feed = runtime.feed
+    assert isinstance(feed, FakeFeed) and feed.started
+    assert runtime.node_health()["session"]["market_window"] == "PRE_OPEN"
+    runtime.test_clock.set(ist(9, 15))
+    runtime.tick()
+    assert runtime.state.session_status == "LIVE" and runtime.feed is feed
+    assert runtime.test_api.verify_calls == 1  # the open re-uses the verified session
 
 
 def test_session_opens_at_0915_with_exactly_this_nodes_partition(make_runtime, universe):
@@ -222,7 +238,7 @@ def test_minutes_are_published_by_the_session_loop(make_runtime):
 
 def test_security_ids_are_resolved_before_the_open_once_per_day(make_runtime, instruments):
     calls = []
-    runtime = make_runtime(0, when=ist(8, 59))
+    runtime = make_runtime(0, when=ist(8, 54))
 
     def loader():
         calls.append(runtime.test_clock.now())
@@ -230,20 +246,23 @@ def test_security_ids_are_resolved_before_the_open_once_per_day(make_runtime, in
 
     runtime._instrument_loader = loader
     runtime.tick()
-    assert calls == []  # not before 09:00
-    runtime.test_clock.set(ist(9, 0, 30))
+    assert calls == []  # not before 08:55
+    runtime.test_clock.set(ist(8, 55, 30))
     runtime.tick()
-    runtime.test_clock.set(ist(9, 10))
+    runtime.test_clock.set(ist(9, 0))
     runtime.tick()
-    assert len(calls) == 1
+    assert len(calls) == 1 and runtime.feed is None  # resolved ahead, no feed yet
+    runtime.test_clock.set(ist(9, 5))
+    runtime.tick()
+    assert runtime.state.session_status == "PRE_OPEN" and len(calls) == 1  # the session reuses it
     runtime.test_clock.set(ist(9, 15))
     runtime.tick()
-    assert runtime.state.session_status == "LIVE" and len(calls) == 1  # 09:15 reuses the pre-open result
-    assert runtime.feed is not None and runtime.state.ordered  # no feed or market state before the open
+    assert runtime.state.session_status == "LIVE" and len(calls) == 1
+    assert runtime.feed is not None and runtime.state.ordered
 
 
-def test_a_failed_pre_open_resolution_is_retried_at_the_open(make_runtime, instruments):
-    runtime = make_runtime(0, when=ist(9, 5))
+def test_a_failed_pre_open_resolution_is_retried_when_the_session_starts(make_runtime, instruments):
+    runtime = make_runtime(0, when=ist(8, 58))
     attempts = {"n": 0}
 
     def flaky():
@@ -256,9 +275,12 @@ def test_a_failed_pre_open_resolution_is_retried_at_the_open(make_runtime, instr
     runtime.tick()
     assert runtime.feed is None and runtime.state.session_status == "CLOSED"
     assert any("pre-open" in error["error"] for error in runtime.state.errors)
+    runtime.test_clock.set(ist(9, 5))
+    runtime.tick()
+    assert runtime.state.session_status == "PRE_OPEN" and attempts["n"] == 2  # recovered before the open
     runtime.test_clock.set(ist(9, 15))
     runtime.tick()
-    assert runtime.state.session_status == "LIVE" and attempts["n"] == 2
+    assert runtime.state.session_status == "LIVE"
 
 
 def test_a_feed_that_cannot_start_is_retried_not_reported_live(make_runtime):

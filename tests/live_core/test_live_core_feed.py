@@ -326,17 +326,27 @@ def test_stale_stocks_are_resubscribed_in_batches_once_per_cooldown():
             state.update_quote(str(5000 + i), {"LTT_EPOCH": START + 1, "LTP": 10.0, "volume": 1})
             state.record_live_quote(str(5000 + i), START + 1)
         state.record_feed_message("Full Data")
-        now["t"] += 100
-        state.record_feed_message("Full Data")
-        assert feed.monitor_tick(market_feed) == "ok" and running.sent == []  # connected < 120 s: nothing yet
+
+        def one_accepted_quote():
+            # The socket keeps streaming: one of the 50 live stocks repeats its last trade (accepted).
+            state.record_feed_message("Full Data")
+            state.update_quote("5000", {"LTT_EPOCH": START + 1, "LTP": 10.0, "volume": 1})
+            state.record_live_quote("5000", START + 1)
+
+        for _ in range(4):
+            now["t"] += 25
+            one_accepted_quote()
+            assert feed.monitor_tick(market_feed) == "ok"
+        assert running.sent == []  # connected < 120 s: nothing resubscribed yet
         now["t"] += 30
-        state.record_feed_message("Full Data")
+        one_accepted_quote()
         assert feed.monitor_tick(market_feed) == "ok"
-        # 130 s after connect: every stock is past 120 s without data, so all 250 resubscribe, in batches of 100.
-        assert [m["InstrumentCount"] for m in running.sent] == [100, 100, 50]
+        # 130 s after connect: 249 stocks are past 120 s without data (S5000 is the one still
+        # streaming), so they resubscribe, in batches of 100.
+        assert [m["InstrumentCount"] for m in running.sent] == [100, 100, 49]
         assert all(m["RequestCode"] == 21 for m in running.sent)
         ids = [i["SecurityId"] for m in running.sent for i in m["InstrumentList"]]
-        assert len(ids) == len(set(ids)) == 250
+        assert len(ids) == len(set(ids)) == 249 and "5000" not in ids
         assert feed.monitor_tick(market_feed) == "ok" and len(running.sent) == 3  # cooldown: no repeat
     finally:
         running.close()
@@ -408,9 +418,12 @@ def test_a_streaming_connection_is_never_ended_for_silence():
     state.set_session_status("LIVE")
     feed = LiveCoreFeed(FakeSettings(), state, instruments)
     feed._connected_at = now["t"]
-    for _ in range(20):
+    minute = int(ist(10, 0, day=(2026, 10, 5)).timestamp())
+    for step in range(20):
         now["t"] += 30
         state.record_feed_message("Full Data")
+        state.update_quote("2000", {"LTT_EPOCH": minute + step, "LTP": 100.0, "volume": 10 + step})
+        state.record_live_quote("2000", minute + step)
         assert feed.monitor_tick(SimpleNamespace(loop=None, ws=None, _running=True)) == "ok"
     assert feed.lifecycle()["silence_reconnects"] == 0
 

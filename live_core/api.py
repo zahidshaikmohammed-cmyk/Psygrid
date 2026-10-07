@@ -7,6 +7,11 @@ same URLs, so either node can stand in for the other's consumers.
 
 Endpoint handlers only read RAM and never wait on Dhan, so the API keeps answering while the
 feed is reconnecting, failing or stopped.
+
+Large bodies are streamed: an uncompressed live response is sent as its small head followed by
+the shared per-stock fragments in bounded chunks, so concurrent requests never each hold a full
+copy of a ~40 MB payload. A gzip response is one shared, cached bytes object per body.
+Every request is counted in RAM (``live_core.metrics``); nothing about a request is persisted.
 """
 
 from __future__ import annotations
@@ -19,10 +24,12 @@ from contextlib import asynccontextmanager
 
 import orjson
 from fastapi import FastAPI, Query, Request, Response
+from fastapi.responses import StreamingResponse
 
 from live_core import SERVICE_NAME
 from live_core.aggregate import FRAGMENTS_PATH, PeerUnavailable, encode_fragments
 from live_core.gzipjoin import CompressedTail, gzip_join
+from live_core.metrics import HttpMetrics, MetricsMiddleware
 from live_core.partition import nodes_for_range, shard_ranges
 from live_core.render import (
     MAX_LATEST_CANDLES,
@@ -45,6 +52,7 @@ NO_CACHE_HEADERS = {
 }
 GZIP_MINIMUM_BYTES = 1024
 GZIP_LEVEL = 3
+STREAM_CHUNK_BYTES = 256 * 1024
 
 
 class _Body:
@@ -78,14 +86,41 @@ class _Body:
             return self._gzip
 
 
+async def _stream_parts(head: bytes, parts) -> object:
+    """``head`` then the tail's existing fragment bytes, joined into chunks of at most ~256 KB."""
+    yield head
+    batch: list[bytes] = []
+    size = 0
+    for part in parts:
+        batch.append(part)
+        size += len(part)
+        if size >= STREAM_CHUNK_BYTES:
+            yield b"".join(batch)
+            batch, size = [], 0
+    if batch:
+        yield b"".join(batch)
+
+
 def _respond(request: Request, entry: _Body) -> Response:
     headers = dict(NO_CACHE_HEADERS)
     if len(entry) >= GZIP_MINIMUM_BYTES and "gzip" in request.headers.get("accept-encoding", "").lower():
         headers["Content-Encoding"] = "gzip"
-        body = entry.gzipped()
-    else:
-        body = entry.body
-    return Response(content=body, media_type="application/json", status_code=entry.status_code, headers=headers)
+        # One cached bytes object per body, shared by every request inside the render window.
+        return Response(
+            content=entry.gzipped(), media_type="application/json", status_code=entry.status_code, headers=headers
+        )
+    if entry.tail is None:
+        return Response(
+            content=entry.head, media_type="application/json", status_code=entry.status_code, headers=headers
+        )
+    # Large uncompressed body: streamed from the shared fragments, never joined per request.
+    headers["Content-Length"] = str(len(entry))
+    return StreamingResponse(
+        _stream_parts(entry.head, entry.tail.parts),
+        media_type="application/json",
+        status_code=entry.status_code,
+        headers=headers,
+    )
 
 
 def json_body(payload: dict, status_code: int = 200) -> _Body:
@@ -371,6 +406,8 @@ def root_payload(runtime) -> dict:
 
 def create_app(runtime, *, start_runtime: bool = True) -> FastAPI:
     service = LiveCoreService(runtime)
+    if getattr(runtime, "http_metrics", None) is None:
+        runtime.http_metrics = HttpMetrics()
     runtime.session_end_hooks.append(service.clear)
     runtime.session_end_hooks.append(clear_caches)
 
@@ -401,6 +438,7 @@ def create_app(runtime, *, start_runtime: bool = True) -> FastAPI:
 
     app = FastAPI(title="PSYGRID Live Core", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
     app.state.live_core = service
+    app.add_middleware(MetricsMiddleware, metrics=runtime.http_metrics)
 
     @app.get("/", response_class=Response)
     def root(request: Request) -> Response:
@@ -410,6 +448,24 @@ def create_app(runtime, *, start_runtime: bool = True) -> FastAPI:
     def node_health(request: Request) -> Response:
         # Local only and never waits on a peer: this is what the systemd watchdog and peers probe.
         return _respond(request, json_body(runtime.node_health()))
+
+    @app.get("/health/metrics", response_class=Response)
+    def health_metrics(request: Request, minutes: int = Query(480, ge=1, le=480)) -> Response:
+        # RAM-only operational metrics: HTTP counters and per-minute resource/traffic samples,
+        # including the pinned 09:15-09:30 opening window. Resets when the process restarts.
+        return _respond(
+            request,
+            json_body(
+                {
+                    "service": "PSYGRID",
+                    "runtime": SERVICE_NAME,
+                    "node_id": runtime.partition.node_id,
+                    "http": runtime.http_metrics.snapshot(),
+                    "supervisor": runtime.supervisor_status(),
+                    **runtime.sampler.snapshot(minutes),
+                }
+            ),
+        )
 
     @app.get("/health", response_class=Response)
     def health(request: Request) -> Response:
