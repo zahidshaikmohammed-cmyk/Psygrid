@@ -403,7 +403,25 @@ repository variable `LIVE_CORE_TOKEN_SOURCE`). Then a node:
   over the private subnet, keeps them in RAM only and registers them with the redactor;
 * re-reads it every 15 s; when the full PSYGRID renews its token, the node switches to it and
   reconnects its WebSocket at once (no restart, no lost candles);
-* if the full PSYGRID is briefly unreachable, keeps running on the token it has.
+* if the full PSYGRID is briefly unreachable, keeps running on the token it has;
+* while the authority has no token yet (`503 TOKEN_NOT_READY`) asks again every 5 s, so a token
+  that appears just before (or at) the open is used within seconds.
+
+**The token is ready before the open.** The full PSYGRID used to generate the day's token only at
+its own 09:15 session start, so the nodes' 09:05 pre-open connect could not happen. Its session
+loop now holds a token outside market hours (`SessionManager._keep_token_ready`, PIN + TOTP only):
+after a restart it generates one at once, and from 08:45 on a trading day it replaces a token that
+would expire before that day's close. Its 09:15 session start then reuses that token. One
+generation, never during the session; Dhan's rate limit defers a retry.
+
+A node that still starts inside the opening minute (09:15:xx) refills the minutes it joined part
+way through from Dhan's 1m bars once they have closed (historical bars replace partial live ones).
+
+**Off-hours rehearsal.** `deploy-live-core.yml` with `action=rehearse` runs
+`deploy/live-core/rehearse.py` on each node, next to the running service, with the service's own
+environment and code: token from the authority, data access, instruments and partition, a REST
+snapshot, a real WebSocket connect + full subscription, a complete feed replacement, bounded
+teardown and thread cleanup. It refuses to run during the session and never touches the service.
 
 On the full PSYGRID (`token_share.py`), the endpoint is off unless `PSYGRID_TOKEN_SHARE_CLIENTS`
 is set (`deploy/psygrid.service.d/20-live-core-token-share.conf`: `10.0.0.215,10.0.0.165`). It

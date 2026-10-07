@@ -78,6 +78,9 @@ log = logging.getLogger("live_core")
 
 GAP_REFILL_DELAY_SECONDS = 90.0
 CONFIG_RETRY_SECONDS = 60.0
+# The token comes from the full PSYGRID over the private network: a cheap request, retried quickly
+# so a token that appears at (or just before) the open is picked up within seconds.
+TOKEN_RETRY_SECONDS = 5.0
 AUTH_RETRY_SECONDS = 30.0
 # A feed that has neither a connection, nor data, nor a new connection attempt for this long is
 # stuck (e.g. a reconnect interrupted mid-handshake) and is replaced by a fresh one. Dhan's own
@@ -337,7 +340,7 @@ class LiveCoreRuntime:
                 self.settings = self._settings_loader()
                 self.config_error = ""
             except Exception as exc:  # the session window retries and reports it
-                self._prepare_retry_at = now.timestamp() + CONFIG_RETRY_SECONDS
+                self._prepare_retry_at = now.timestamp() + TOKEN_RETRY_SECONDS
                 self.config_error = redact(f"{type(exc).__name__}: {exc}")[:500]
                 return
         if self._instruments_date == session_date:
@@ -433,14 +436,16 @@ class LiveCoreRuntime:
             epoch = now.timestamp()
             if epoch < self._retry_at:
                 return
+            retry = TOKEN_RETRY_SECONDS
             try:
                 if self.settings is None:
                     self.settings = self._settings_loader()
+                retry = CONFIG_RETRY_SECONDS
                 instruments = self._resolve_instruments(session_date)
                 self.config_error = ""
             except Exception as exc:
                 self.config_error = redact(f"{type(exc).__name__}: {exc}")[:500]
-                self._retry_at = epoch + CONFIG_RETRY_SECONDS
+                self._retry_at = epoch + retry
                 self.state.reset()
                 self.state.set_session_status("CONFIG_ERROR")
                 self.state.set_feed_status("STOPPED", f"configuration: {self.config_error}")
@@ -516,6 +521,10 @@ class LiveCoreRuntime:
             ):
                 # A start after the open (restart, reboot, late deploy): load today's bars so far.
                 self.history.enqueue_all()
+            elif self.cfg.history_bootstrap and self.state.session_status == "LIVE" and now > opened:
+                # Started inside the opening minute (e.g. the token arrived at 09:15): the minutes
+                # before the first packet are partial, so take Dhan's bars once they have closed.
+                self._gap_refill_at = epoch + GAP_REFILL_DELAY_SECONDS
             log.info(
                 "live core node %s session %s %s: %s instruments [%s, %s)",
                 self.partition.node_id,
