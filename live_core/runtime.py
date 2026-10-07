@@ -54,6 +54,11 @@ log = logging.getLogger("live_core")
 GAP_REFILL_DELAY_SECONDS = 90.0
 CONFIG_RETRY_SECONDS = 60.0
 AUTH_RETRY_SECONDS = 30.0
+# A feed that has neither a connection, nor data, nor a new connection attempt for this long is
+# stuck (e.g. a reconnect interrupted mid-handshake) and is replaced by a fresh one. Dhan's own
+# connection/rate-limit cooldown (300 s) is respected with the longer limit.
+FEED_STUCK_SECONDS = 150.0
+FEED_STUCK_LIMIT_COOLDOWN_SECONDS = 330.0
 PREPARE_AHEAD = timedelta(minutes=15)
 TRIM_INTERVAL_SECONDS = 60.0
 
@@ -151,6 +156,8 @@ class LiveCoreRuntime:
         self._reconnects_seen = 0
         self._gap_refill_at: float | None = None
         self._last_trim = 0.0
+        self.feed_replacements = 0
+        self._feed_watch: tuple[int, int, float] | None = None
         self._lock = threading.RLock()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -378,6 +385,7 @@ class LiveCoreRuntime:
     def _maintain(self, now: datetime) -> None:
         epoch = now.timestamp()
         self.state.finalize_due(epoch, self.cfg.finalize_grace_seconds)
+        self._supervise_feed(epoch)
         if epoch - self._last_trim >= TRIM_INTERVAL_SECONDS:
             # Encoded fragments are replaced every minute; hand the freed heap back to the OS so RSS
             # on a 1 GB VM tracks what is actually live (a few milliseconds, glibc only).
@@ -394,6 +402,42 @@ class LiveCoreRuntime:
             self._gap_refill_at = None
             if self.cfg.history_bootstrap and self.history is not None:
                 self.history.enqueue_all()
+
+    def _supervise_feed(self, epoch: float) -> None:
+        """Replace a feed that is stuck: not connected, no data and no new connection attempt."""
+        feed = self.feed
+        if feed is None or not self._instruments:
+            return
+        with self.state.lock:
+            status = self.state.feed_status
+            last_message = self.state.last_message_epoch
+            last_error = self.state.last_feed_error or ""
+        cycles = int(getattr(feed, "connection_cycles", 0) or 0)
+        receiving = last_message is not None and epoch - last_message < FEED_STUCK_SECONDS
+        if status == "CONNECTED" or receiving:
+            self._feed_watch = None
+            return
+        if self._feed_watch is None or self._feed_watch[:2] != (id(feed), cycles):
+            self._feed_watch = (id(feed), cycles, epoch)  # a new feed or connection attempt is progress
+            return
+        limit = FEED_STUCK_LIMIT_COOLDOWN_SECONDS if "limit" in last_error.lower() else FEED_STUCK_SECONDS
+        if epoch - self._feed_watch[2] < limit:
+            return
+        stuck_for = int(epoch - self._feed_watch[2])
+        self.feed_replacements += 1
+        self._feed_watch = None
+        message = f"feed stuck for {stuck_for}s ({status}, no new connection attempt); replacing it"
+        log.warning("live core node %s: %s", self.partition.node_id, message)
+        self.state.record_error(f"feed supervisor: {message}")
+        with contextlib.suppress(Exception):
+            feed.stop()
+        try:
+            replacement = self._feed_factory(self.settings, self.state, self._instruments)
+            replacement.start()
+        except Exception as exc:
+            self.state.set_feed_status("ERROR", f"feed restart: {type(exc).__name__}: {exc}"[:500])
+            return
+        self.feed = replacement
 
     def _end_session(self) -> None:
         with self._lock:
@@ -525,6 +569,7 @@ class LiveCoreRuntime:
                 "quote_packets": snap["quote_packets"],
                 "last_feed_error": snap["last_feed_error"],
                 **lifecycle,
+                "feed_replacements": self.feed_replacements,
             },
             "freshness": freshness,
             "data_quality": data_quality,

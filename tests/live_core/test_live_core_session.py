@@ -365,3 +365,49 @@ def test_freed_heap_is_returned_to_the_os_once_a_minute_during_the_session(make_
         runtime.test_clock.set(ist(9, 16) + timedelta(seconds=second))
         runtime.tick()
     assert 3 <= len(trims) <= 4  # about once a minute, not once a tick
+
+
+def test_a_stuck_feed_is_replaced_but_dhan_cooldowns_are_respected(make_runtime):
+    """Live finding (2026-10-07): a reconnect interrupted mid-handshake left the feed thread with
+    no connection, no data and no new connection attempt. The supervisor replaces such a feed."""
+    from live_core_helpers import FakeFeed
+
+    runtime = make_runtime(0, when=ist(9, 15))
+    runtime.tick()
+    stuck = runtime.feed
+    stuck.connection_cycles = 1
+    runtime.state.mark_websocket_reconnecting("websocket closed by peer")
+
+    runtime.test_clock.set(ist(9, 16))
+    runtime.tick()  # starts watching
+    runtime.test_clock.set(ist(9, 18))
+    runtime.tick()  # 120 s: still within the limit
+    assert runtime.feed is stuck and runtime.feed_replacements == 0
+    runtime.test_clock.set(ist(9, 18, 31))
+    runtime.tick()  # 151 s without a connection, data or a new attempt: replaced
+    assert runtime.feed is not stuck and isinstance(runtime.feed, FakeFeed)
+    assert stuck.stopped and runtime.feed.started
+    assert runtime.feed_replacements == 1
+    assert runtime.node_health()["feed"]["feed_replacements"] == 1
+
+    # A feed that keeps making new connection attempts (normal back-off) is left alone.
+    progressing = runtime.feed
+    progressing.connection_cycles = 1
+    runtime.state.mark_websocket_reconnecting("websocket closed by peer")
+    for minute in range(19, 30):
+        progressing.connection_cycles += 1
+        runtime.test_clock.set(ist(9, minute, 40))
+        runtime.tick()
+    assert runtime.feed is progressing and runtime.feed_replacements == 1
+
+    # Dhan's connection-limit cooldown (300 s) is not cut short.
+    runtime.state.mark_websocket_reconnecting("Dhan rate/connection limit; retrying in 300s")
+    progressing.connection_cycles += 1  # the attempt that hit the limit
+    runtime.test_clock.set(ist(9, 31))
+    runtime.tick()
+    runtime.test_clock.set(ist(9, 35, 30))  # 270 s
+    runtime.tick()
+    assert runtime.feed is progressing
+    runtime.test_clock.set(ist(9, 36, 31))  # 331 s
+    runtime.tick()
+    assert runtime.feed is not progressing and runtime.feed_replacements == 2
