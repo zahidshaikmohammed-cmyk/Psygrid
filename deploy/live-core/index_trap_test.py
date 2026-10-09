@@ -108,7 +108,7 @@ def fetch(api, security_id: str, years: float, say=print):
     return {d: [(t, *v) for t, v in sorted(bars.items())] for d, bars in sorted(days.items())}, log
 
 
-def coverage(name, data, log, say=print):
+def coverage(name, data, log, say=print, reference=None):
     fails = [x for x in log if x[4]]
     say(
         f"{name}: {len(log)} requests ({sum(1 for x in log if x[2] == 90)} x 90-day, "
@@ -119,14 +119,26 @@ def coverage(name, data, log, say=print):
     if not data:
         say("  NO DATA returned")
         return
-    full = sum(1 for bars in data.values() if len(bars) >= 75)
-    by_year = defaultdict(int)
-    for d in data:
-        by_year[d.year] += 1
+    first, last = min(data), max(data)
+    partial = sorted(d for d, bars in data.items() if len(bars) < 75)
+    by_year, gaps = defaultdict(int), defaultdict(list)
+    d = first
+    while d <= last:
+        if d.weekday() < 5:
+            if d in data:
+                by_year[d.year] += 1
+            else:
+                gaps[d.year].append(d)
+        d += timedelta(days=1)
+    say(f"  dates covered {first} .. {last}; sessions {len(data)}; per year {dict(sorted(by_year.items()))}")
     say(
-        f"  sessions {len(data)} from {min(data)} to {max(data)}; {full} with all 75 candles; "
-        f"per year {dict(sorted(by_year.items()))}"
+        "  weekdays with NO data (exchange holidays, ~14-16 a year, or gaps): "
+        + ", ".join(f"{y}: {len(v)}" for y, v in sorted(gaps.items()))
     )
+    say(f"  sessions with fewer than 75 candles: {len(partial)}" + (f" e.g. {partial[:6]}" if partial else ""))
+    if reference:
+        miss = sorted(set(reference) - set(data))
+        say(f"  NIFTY sessions missing here: {len(miss)}" + (f" e.g. {miss[:6]}" if miss else ""))
 
 
 # --------------------------------------------------------------------------- contract calendar
@@ -286,12 +298,13 @@ def stats(rows, key):
 
 
 def run(data, vix, name):
+    """Every signal, with its eligibility under the hard Rs 950 cap (NIFTY only; see report)."""
     sessions = set(data)
     rows, skipped = [], defaultdict(int)
     for d, bars in data.items():
         expiry = expiry_for(d, sessions) if name == "NIFTY" else None
         if name == "NIFTY" and expiry == d:
-            skipped["expiry day"] += 1
+            skipped["expiry day (no trade)"] += 1
             continue
         sig = signal(bars)
         if not sig:
@@ -302,71 +315,68 @@ def run(data, vix, name):
             if t <= bars[sig["entry_i"] - 1][0]:  # VIX known at the signal candle's close
                 v = ohlc[3]
         pts = sig["side"] * (exit_price - sig["entry"])
-        row = {"day": d, "points": pts, "R": pts / sig["risk_pts"], "reason": reason, "vix": v, "risk_rs": None}
+        row = {"day": d, "points": pts, "R": pts / sig["risk_pts"], "reason": reason, "vix": v, "eligible": None}
         if name == "NIFTY":
             if not v:
-                skipped["no VIX at signal (option estimate skipped)"] += 1
+                skipped["no VIX at signal: eligibility unknown, excluded"] += 1
             elif uncertain(d) or uncertain(expiry):
-                skipped["lot/expiry transition window (option estimate skipped)"] += 1
+                skipped["lot/expiry transition window: eligibility unknown, excluded"] += 1
             else:
                 lot = lot_size(expiry)
                 for label, slip in SLIP.items():
-                    pnl, risk_rs, _p0 = option_trade(d, bars, sig, exit_price, exit_i, v, expiry, lot, slip)
+                    pnl, risk_rs, p0 = option_trade(d, bars, sig, exit_price, exit_i, v, expiry, lot, slip)
                     row[label] = pnl
                     row["risk_rs"] = risk_rs
+                row["eligible"] = row["risk_rs"] <= MAX_RISK_RUPEES
                 row["lot"] = lot
+                fee = charges(d, p0 * lot, p0 * lot, SLIP["BASE"], lot)  # charges + BASE slippage, both legs
+                row["net_points"] = pts - fee / (0.5 * lot)  # index points after estimated costs, 1 lot
         rows.append(row)
     return rows, skipped
 
 
-def report(name, rows, skipped):
-    print(f"\n{'=' * 100}\n{name}: {len(rows)} signals" + (f"; skipped {dict(skipped)}" if skipped else ""))
+def _block(title, rows, key):
     if not rows:
+        print(f"   {title}: no trades")
         return
     cut = rows[-1]["day"] - timedelta(days=HOLDOUT_DAYS)
-    early, late = [r for r in rows if r["day"] <= cut], [r for r in rows if r["day"] > cut]
-    print("A. INDEX POINTS per trade, gross (verified from Dhan candles; no option model)")
-    print(f"   ALL                    {stats(rows, 'points')}")
-    print(f"   up to {cut}       {stats(early, 'points')}")
-    print(f"   LAST 12 MONTHS        {stats(late, 'points')}")
+    print(f"   {title}")
+    print(f"     ALL               {stats(rows, key)}")
+    print(f"     LAST 12 MONTHS    {stats([r for r in rows if r['day'] > cut], key)}")
     by_year = defaultdict(list)
     for r in rows:
         by_year[r["day"].year].append(r)
     for y, rs in sorted(by_year.items()):
-        print(f"   {y}                   {stats(rs, 'points')}")
-    vixs = sorted(r["vix"] for r in rows if r["vix"])
-    if vixs:
-        lo_c, hi_c = vixs[len(vixs) // 3], vixs[2 * len(vixs) // 3]
-        for lab, fn in (
-            ("VIX low ", lambda v: v < lo_c),
-            ("VIX mid ", lambda v: lo_c <= v < hi_c),
-            ("VIX high", lambda v: v >= hi_c),
-        ):
-            print(f"   {lab}               {stats([r for r in rows if r['vix'] and fn(r['vix'])], 'points')}")
-    print(f"   R multiples (ALL)      {stats(rows, 'R')}")
-    exits = defaultdict(int)
-    for r in rows:
-        exits[r["reason"]] += 1
-    print(f"   exits {dict(exits)}")
-    if name != "NIFTY":
-        print("B. OPTION ESTIMATE not produced: BANKNIFTY has monthly expiries only since Nov 2024.")
+        print(f"     {y}              {stats(rs, key)}")
+
+
+def report(name, rows, skipped):
+    print(f"\n{'=' * 100}\n{name}: {len(rows)} raw signals" + (f"; {dict(skipped)}" if skipped else ""))
+    if not rows:
         return
-    est = [r for r in rows if r.get("BASE") is not None]
-    ok = [r for r in est if r["risk_rs"] <= MAX_RISK_RUPEES]
+    if name != "NIFTY":
+        print("A. INDEX POINTS, gross, every signal (VERIFIED from Dhan candles). INFORMATIONAL ONLY: the Rs 950")
+        print("   cap cannot be applied (BANKNIFTY has monthly expiries only since Nov 2024 and its historical lot")
+        print("   sizes are not verified here), so there is no eligible BANKNIFTY result.")
+        _block("BANKNIFTY all signals, points", rows, "points")
+        return
+    elig = [r for r in rows if r["eligible"]]
+    over = sum(1 for r in rows if r["eligible"] is False)
+    unknown = sum(1 for r in rows if r["eligible"] is None)
     print(
-        f"B. ESTIMATED OPTION P&L, Rs per 1 lot -- AN ESTIMATE, NOT VERIFIED PROFITABILITY "
-        f"({len(est)} estimable; {len(est) - len(ok)} skipped: risk above Rs {MAX_RISK_RUPEES:.0f})"
+        f"ELIGIBILITY (hard cap: estimated loss at the stop <= Rs {MAX_RISK_RUPEES:.0f} for 1 lot): "
+        f"{len(elig)} eligible, {over} over the cap (excluded), {unknown} unknown (excluded)"
     )
+    print("   NOTE: the cap itself uses the delta-0.5 estimate of the option loss; it is an approximation.")
+    print("A. INDEX POINTS, VERIFIED from Dhan candles (gross = before costs)")
+    _block("ELIGIBLE trades, gross points", elig, "points")
+    _block("ELIGIBLE trades, points after estimated 1-lot costs (BASE slippage)", elig, "net_points")
+    _block(
+        "Context only -- every signal incl. ineligible, gross points (NOT tradable for this account)", rows, "points"
+    )
+    print("B. OPTION P&L, Rs per lot -- MODELLED ESTIMATE (delta 0.5, VIX-based decay), NOT VERIFIED, NOT EVIDENCE")
     for label in SLIP:
-        print(f"   {label:<8} every trade, 1 lot      {stats(est, label)}")
-        print(f"   {label:<8} within Rs {MAX_RISK_RUPEES:.0f} cap       {stats(ok, label)}")
-        print(f"   {label:<8} cap, LAST 12 MONTHS     {stats([r for r in ok if r['day'] > cut], label)}")
-    risks = sorted(r["risk_rs"] for r in est)
-    if risks:
-        print(
-            f"   Estimated loss at the stop per lot: median Rs {risks[len(risks) // 2]:,.0f}, "
-            f"{sum(1 for x in risks if x <= MAX_RISK_RUPEES)} of {len(risks)} within Rs {MAX_RISK_RUPEES:.0f}"
-        )
+        _block(f"ELIGIBLE trades, estimated option P&L, {label} slippage", elig, label)
 
 
 def main() -> int:
@@ -392,10 +402,16 @@ def main() -> int:
 
     say(f"Requesting {years:g} years of 5-minute candles (RAM only): INDIA VIX, NIFTY, BANKNIFTY")
     vix, vlog = fetch(api, VIX_ID, years, say)
-    coverage("INDIA VIX", vix, vlog, say)
+    nifty_sessions = None
+    results = {}
     for name, sid in INDICES.items():
         data, log = fetch(api, sid, years, say)
-        coverage(name, data, log, say)
+        coverage(name, data, log, say, reference=nifty_sessions)
+        if name == "NIFTY":
+            nifty_sessions = list(data)
+            coverage("INDIA VIX", vix, vlog, say, reference=nifty_sessions)
+        results[name] = data
+    for name, data in results.items():
         rows, skipped = run(data, vix, name)
         report(name, rows, skipped)
     print("\nNo thresholds are applied here: these are results for review, not a trading recommendation.")
