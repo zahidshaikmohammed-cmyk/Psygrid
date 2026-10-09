@@ -30,7 +30,7 @@ on:
       action:
         description: status (read-only), rehearse (off-hours, read-only) or deploy
         type: choice
-        options: [status, rehearse, index-test, deploy]
+        options: [status, rehearse, index-test, option-probe, deploy]
         default: status
       target:
         description: Which node(s)
@@ -105,7 +105,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Refuse to restart nodes (or rehearse) during the market session unless asked
-        if: ${{ (inputs.action == 'deploy' && !inputs.allow_market_hours) || inputs.action == 'rehearse' || inputs.action == 'index-test' }}
+        if: ${{ (inputs.action == 'deploy' && !inputs.allow_market_hours) || inputs.action == 'rehearse' || inputs.action == 'index-test' || inputs.action == 'option-probe' }}
         run: |
           set -euo pipefail
           now="$(TZ=Asia/Kolkata date +%u%H%M)"
@@ -218,19 +218,19 @@ jobs:
           }
 
           index_test_node() {
-            local node="$1" host="$2" user
-            echo "================ NIFTY/BANKNIFTY opening-range trap test on node ${node} (RAM only) ================"
+            local node="$1" host="$2" script="${3:-index_trap_test.py}" user
+            echo "================ research script ${script} on node ${node} (RAM only, no orders) ================"
             user="$(login_user "$node" "$host")" || return 1
             local root="/home/${user}/psygrid-live-core"
             # shellcheck disable=SC2046
-            scp $(ssh_opts "$node") deploy/live-core/index_trap_test.py "${user}@${host}:${root}/index_trap_test.py" || return 1
+            scp $(ssh_opts "$node") deploy/live-core/${script} "${user}@${host}:${root}/${script}" || return 1
             # shellcheck disable=SC2046
             ssh $(ssh_opts "$node") "${user}@${host}" "sudo systemd-run --quiet --wait --pipe --collect \
                 --uid='${user}' --gid='${user}' -p WorkingDirectory='${root}/current' \
                 -p EnvironmentFile=/etc/psygrid-live-core.env -p EnvironmentFile=-/etc/psygrid-live-core-node.env \
                 -E LIVE_CORE_NODE_ID='${node}' -E LIVE_CORE_NODE_COUNT='${NODE_COUNT}' -E PYTHONUNBUFFERED=1 \
                 -E PYTHONDONTWRITEBYTECODE=1 -E YEARS=4 -p RuntimeMaxSec=1800 -p MemoryMax=400M \
-                '${root}/venv/bin/python' '${root}/index_trap_test.py'; rc=\$?; rm -f '${root}/index_trap_test.py'; exit \$rc" || return 1
+                '${root}/venv/bin/python' '${root}/${script}'; rc=\$?; rm -f '${root}/${script}'; exit \$rc" || return 1
           }
 
           deploy_node() {
@@ -284,6 +284,8 @@ jobs:
               rehearse_node "$node" "$host" || failed="$failed $node"
             elif [ "$ACTION" = index-test ]; then
               [ "$node" = 0 ] && { index_test_node "$node" "$host" || failed="$failed $node"; }
+            elif [ "$ACTION" = option-probe ]; then
+              [ "$node" = 0 ] && { index_test_node "$node" "$host" option_probe.py || failed="$failed $node"; }
             else
               status_node "$node" "$host" || failed="$failed $node"
             fi
