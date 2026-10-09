@@ -1,34 +1,45 @@
 """NIFTY opening-range TRAP: one pre-registered test on multi-year Dhan index candles. Read-only.
 
-Run by the deploy workflow's `index-test` action on a Live Core node, after hours, with the
-node's own environment: it takes the account's EXISTING token from the token authority (never
-mints one), downloads 5-minute candles for NIFTY 50, BANKNIFTY and INDIA VIX from Dhan's
-/charts/intraday in 90-day pieces into RAM, prints the result and exits. Nothing is written to disk
-and no order is ever placed.
+Run by the deploy workflow's `index-test` action on Live Core node 0, after hours, with the node's
+own environment: it takes the account's EXISTING token from the token authority (never mints one),
+downloads 5-minute candles for NIFTY 50, BANKNIFTY and INDIA VIX from Dhan /charts/intraday into
+RAM, prints the result and exits. Nothing is written to disk; no order is placed; the running
+Live Core service is not touched.
+
+DATA LIMITS (verified, not assumed): Dhan documents intraday OHLC for the last 5 years in 1/5/15/
+25/60-minute candles. The per-request range is NOT documented officially (a third-party guide says
+~90 days), so the script asks for 90-day pieces, falls back to 30-day pieces when a request fails,
+and reports every request and the coverage it actually got.
 
 THE RULES (fixed before any data was seen; nothing here is tuned):
-  Range       OR = high/low of the 09:15, 09:20 and 09:25 five-minute candles (first 15 minutes).
-              No trade when the OR is narrower than 0.15% or wider than 1.0% of the index.
-  Breakout    The FIRST 5-minute close outside the OR, from the 09:30 candle on.
-  Trap        Within the next 3 candles a candle closes back inside the OR. Only the first breakout
-              of the day counts; no re-entry within 3 candles = no trade that day.
-  Entry       Open of the candle after the trap candle, at or before 14:30. Failed up-breakout ->
-              SHORT the index (buy the ATM PUT); failed down-breakout -> LONG (buy the ATM CALL).
-  Stop        Beyond the extreme reached since the breakout, plus 0.03% of the price.
-  Target      The opposite side of the OR. No trade when it is less than 1R away.
-  Time        Exit at the close 60 minutes after entry, or 15:15, whichever is first.
-              Stop is checked before target when one candle touches both.
-  Filters     NIFTY: no trade on the weekly expiry day (Thursday before 2025-09-01, Tuesday after;
-              exchange holidays that move the expiry are ignored -- approximation).
-              One trade per index per day.
-  Size        1 lot. Skip the trade when the estimated option loss at the stop exceeds Rs 950
-              (5% of a Rs 19,000 account).
+  Range     OR = high/low of the 09:15, 09:20 and 09:25 five-minute candles. No trade when the OR is
+            narrower than 0.15% or wider than 1.0% of the index.
+  Breakout  The FIRST 5-minute close outside the OR, from the 09:30 candle on.
+  Trap      Within the next 3 candles a candle closes back inside the OR (only the first breakout
+            of the day counts).
+  Entry     Open of the candle after the trap candle, at or before 14:30. Failed up-breakout ->
+            SHORT the index (buy the ATM PUT); failed down-breakout -> LONG (buy the ATM CALL).
+  Stop      Beyond the extreme since the breakout, plus 0.03% of the price.
+  Target    The opposite side of the OR; no trade when it is less than 1R away.
+  Time      Exit at the close 60 minutes after entry, or 15:15. Stop before target in one candle.
+  Filters   NIFTY: no trade on its weekly expiry day. One trade per index per day.
+  Size      1 lot; skip when the estimated option loss at the stop exceeds Rs 950 (5% of Rs 19,000).
 
-OPTION P&L IS MODELLED, NOT OBSERVED: there is no historical option price data here. Premium =
-0.4 * S * VIX/100 * sqrt(T) (ATM approximation), delta 0.5, time decay = premium(T0) - premium(T1),
-gamma ignored. Costs per lot: brokerage Rs 20 x 2, STT 0.1% of sell premium, NSE 0.03503% of
-premium both sides, SEBI 0.0001%, GST 18%, stamp 0.003% of buy premium, slippage Rs 0.10/unit/side
-(BASE) or Rs 0.50 (ADVERSE). The INDEX-POINTS result needs no option model at all.
+CONTRACT FACTS (from NSE circulars as reported by brokers; transition windows are EXCLUDED from the
+option estimate rather than guessed):
+  NIFTY weekly expiry   Thursday for expiries up to 2025-08-31, Tuesday from 2025-09-01. When that
+                        day is not a trading session in the data (holiday) the expiry is the
+                        previous session.
+  NIFTY lot size        50 -> 25 (contracts expiring from 2024-05-02) -> 75 (contracts listed from
+                        2024-11-20; full from 2024-12-26) -> 65 (weeklies from 2026-01-06).
+  Option charges        STT on the sold premium 0.0625% before 2024-10-01, 0.1% from it; NSE
+                        transaction charge 0.0495% before 2024-10-01, 0.03503% from it; brokerage
+                        Rs 20/order; SEBI Rs 10/crore; GST 18%; stamp 0.003% of the buy premium.
+  Slippage              Rs 0.10 (BASE), 0.50 (ADVERSE), 1.00 (SEVERE) per unit per side.
+
+OPTION P&L IS AN ESTIMATE, NOT OBSERVED: no historical option prices are used. Premium =
+0.4 x S x VIX/100 x sqrt(T), delta 0.5, time decay = premium(T0) - premium(T1), gamma ignored.
+The INDEX-POINTS result needs no option model and is the primary evidence.
 """
 
 from __future__ import annotations
@@ -42,7 +53,7 @@ from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
 IST = ZoneInfo("Asia/Kolkata")
-INDICES = {"NIFTY": ("13", 75), "BANKNIFTY": ("25", 35)}  # Dhan IDX_I security id, lot size
+INDICES = {"NIFTY": "13", "BANKNIFTY": "25"}  # Dhan IDX_I security ids (checked in index_layer.py)
 VIX_ID = "21"
 OR_BARS = 3
 MAX_ENTRY = time(14, 30)
@@ -51,44 +62,112 @@ LAST_EXIT = time(15, 10)  # its close is 15:15
 MIN_OR, MAX_OR = 0.15, 1.0
 BUFFER = 0.0003
 MAX_RISK_RUPEES = 950.0
-SLIP = {"BASE": 0.10, "ADVERSE": 0.50}
+SLIP = {"BASE": 0.10, "ADVERSE": 0.50, "SEVERE": 1.00}
+HOLDOUT_DAYS = 365  # the last 12 months are reported on their own (rules are not tuned on them)
+EXPIRY_SWITCH = date(2025, 9, 1)
+# Windows where the lot size or expiry weekday of the traded contract is uncertain (excluded from the estimate).
+UNCERTAIN = [
+    (date(2024, 4, 25), date(2024, 5, 2)),
+    (date(2024, 11, 20), date(2024, 12, 26)),
+    (date(2025, 8, 25), date(2025, 9, 9)),
+    (date(2025, 12, 23), date(2026, 1, 6)),
+]
 
 
 # --------------------------------------------------------------------------- data
 
 
+def _rows(api, item, start, stop, say):
+    try:
+        rows = api.intraday(item, 5, start, stop)
+        return rows, None
+    except Exception as exc:
+        return None, f"{type(exc).__name__}: {str(exc)[:120]}"
+
+
 def fetch(api, security_id: str, years: float, say=print):
-    """5-minute IDX_I candles in 90-day pieces -> {date: [(time, o, h, l, c)]} (IST)."""
+    """5-minute IDX_I candles -> ({date: [(time, o, h, l, c)]}, request log)."""
     item = SimpleNamespace(security_id=security_id, exchange_segment="IDX_I", instrument="INDEX")
     end = datetime.now(IST).replace(hour=15, minute=30, second=0, microsecond=0)
     start = end - timedelta(days=int(365 * years))
     days: dict = defaultdict(dict)
+    log = []
     cur = start
     while cur < end:
-        stop = min(cur + timedelta(days=89), end)
-        try:
-            rows = api.intraday(item, 5, cur, stop)
-        except Exception as exc:
-            say(f"  {security_id} {cur:%Y-%m-%d}..{stop:%Y-%m-%d}: {type(exc).__name__}: {str(exc)[:120]}")
-            rows = []
-        for r in rows:
+        for span in (89, 29):
+            stop = min(cur + timedelta(days=span), end)
+            rows, err = _rows(api, item, cur, stop, say)
+            if rows is not None:
+                break
+        log.append((cur.date(), stop.date(), span + 1, len(rows) if rows else 0, err if rows is None else None))
+        for r in rows or []:
             ts = datetime.fromtimestamp(int(r["timestamp"]), IST)
             if time(9, 15) <= ts.time() < time(15, 30):
                 days[ts.date()][ts.time()] = (r["open"], r["high"], r["low"], r["close"])
         cur = stop + timedelta(days=1)
-    return {d: [(t, *v) for t, v in sorted(bars.items())] for d, bars in sorted(days.items())}
+    return {d: [(t, *v) for t, v in sorted(bars.items())] for d, bars in sorted(days.items())}, log
+
+
+def coverage(name, data, log, say=print):
+    fails = [x for x in log if x[4]]
+    say(
+        f"{name}: {len(log)} requests ({sum(1 for x in log if x[2] == 90)} x 90-day, "
+        f"{sum(1 for x in log if x[2] == 30)} x 30-day), {len(fails)} failed"
+    )
+    for a, b, _span, _n, err in fails[:5]:
+        say(f"  FAILED {a}..{b}: {err}")
+    if not data:
+        say("  NO DATA returned")
+        return
+    full = sum(1 for bars in data.values() if len(bars) >= 75)
+    by_year = defaultdict(int)
+    for d in data:
+        by_year[d.year] += 1
+    say(
+        f"  sessions {len(data)} from {min(data)} to {max(data)}; {full} with all 75 candles; "
+        f"per year {dict(sorted(by_year.items()))}"
+    )
+
+
+# --------------------------------------------------------------------------- contract calendar
+
+
+def expiry_for(d: date, sessions: set) -> date:
+    """NIFTY weekly expiry on/after d: Thursday up to 2025-08-31, Tuesday after; a holiday moves it
+    to the previous trading session (holidays are read from the sessions in the data)."""
+    wd = 3 if d < EXPIRY_SWITCH else 1
+    exp = d + timedelta(days=(wd - d.weekday()) % 7)
+    if exp >= EXPIRY_SWITCH > d:  # crossing the switch: the first Tuesday on/after the switch
+        exp = EXPIRY_SWITCH + timedelta(days=(1 - EXPIRY_SWITCH.weekday()) % 7)
+    probe = exp
+    while probe not in sessions and probe > d and sessions and probe <= max(sessions):
+        probe -= timedelta(days=1)
+    return probe if probe >= d else exp
+
+
+def lot_size(expiry: date) -> int:
+    if expiry < date(2024, 5, 2):
+        return 50
+    if expiry < date(2024, 12, 26):
+        return 25 if expiry < date(2024, 11, 21) else 75
+    if expiry < date(2026, 1, 6):
+        return 75
+    return 65
+
+
+def uncertain(d: date) -> bool:
+    return any(a <= d <= b for a, b in UNCERTAIN)
+
+
+def charges(d: date, buy_v: float, sell_v: float, slip: float, lot: int) -> float:
+    stt, exch = (0.000625, 0.000495) if d < date(2024, 10, 1) else (0.001, 0.0003503)
+    brokerage = 40.0
+    ex = exch * (buy_v + sell_v)
+    sebi = 0.000001 * (buy_v + sell_v)
+    return brokerage + stt * sell_v + ex + sebi + 0.18 * (brokerage + ex + sebi) + 0.00003 * buy_v + 2 * slip * lot
 
 
 # --------------------------------------------------------------------------- rules
-
-
-def weekly_expiry(d: date) -> bool:
-    return d.weekday() == (3 if d < date(2025, 9, 1) else 1)
-
-
-def next_expiry(d: date) -> date:
-    wd = 3 if d < date(2025, 9, 1) else 1
-    return d + timedelta(days=(wd - d.weekday()) % 7)
 
 
 def signal(bars):
@@ -155,35 +234,29 @@ def manage(bars, sig):
     return bars[last][4], last, "TIME"
 
 
-# --------------------------------------------------------------------------- option model
+# --------------------------------------------------------------------------- option estimate
 
 
 def premium(spot: float, vix: float, years: float) -> float:
     return 0.4 * spot * vix / 100 * math.sqrt(max(years, 1 / 365 / 6.25))
 
 
-def option_trade(d: date, bars, sig, exit_price, exit_i, vix: float, lot: int, slip: float):
-    """Modelled rupee P&L for 1 lot of the ATM option bought in the trade's direction."""
+def option_trade(d: date, bars, sig, exit_price, exit_i, vix: float, expiry: date, lot: int, slip: float):
+    """ESTIMATED rupee P&L for 1 lot of the ATM option bought in the trade's direction."""
     t0 = datetime.combine(d, bars[sig["entry_i"]][0], IST)
     t1 = datetime.combine(d, bars[exit_i][0], IST) + timedelta(minutes=5)
-    exp = datetime.combine(next_expiry(d), time(15, 30), IST)
+    exp = datetime.combine(expiry, time(15, 30), IST)
 
     def yrs(t):
         return max((exp - t).total_seconds(), 0) / (365 * 24 * 3600)
 
     p0 = premium(sig["entry"], vix, yrs(t0))
     p1 = premium(sig["entry"], vix, yrs(t1))
-    move = sig["side"] * (exit_price - sig["entry"])
-    unit = 0.5 * move - (p0 - p1)
+    unit = 0.5 * sig["side"] * (exit_price - sig["entry"]) - (p0 - p1)
     exit_prem = max(p0 + unit, 0.05)
-    buy_v, sell_v = p0 * lot, exit_prem * lot
-    brokerage = 40.0
-    exch = 0.0003503 * (buy_v + sell_v)
-    sebi = 0.000001 * (buy_v + sell_v)
-    costs = (
-        brokerage + 0.001 * sell_v + exch + sebi + 0.18 * (brokerage + exch + sebi) + 0.00003 * buy_v + 2 * slip * lot
-    )
-    risk_rupees = (0.5 * sig["risk_pts"]) * lot + costs
+    costs = charges(d, p0 * lot, exit_prem * lot, slip, lot)
+    stop_unit = 0.5 * sig["risk_pts"] + (p0 - p1)
+    risk_rupees = stop_unit * lot + charges(d, p0 * lot, max(p0 - stop_unit, 0.05) * lot, slip, lot)
     return (exit_prem - p0) * lot - costs, risk_rupees, p0
 
 
@@ -191,7 +264,7 @@ def option_trade(d: date, bars, sig, exit_price, exit_i, vix: float, lot: int, s
 
 
 def stats(rows, key):
-    xs = [r[key] for r in rows]
+    xs = [r[key] for r in rows if r.get(key) is not None]
     if not xs:
         return "no trades"
     wins = [x for x in xs if x > 0]
@@ -208,14 +281,17 @@ def stats(rows, key):
     return (
         f"n {len(xs):>4}  win {len(wins) / len(xs):>4.0%}  avg {sum(xs) / len(xs):>+8.2f}  "
         f"avgWin {sum(wins) / max(1, len(wins)):>+8.2f}  avgLoss {sum(losses) / max(1, len(losses)):>+8.2f}  "
-        f"PF {pf:>5.2f}  total {sum(xs):>+10.1f}  maxDD {dd:>+9.1f}  worst losing streak {worst}"
+        f"PF {pf:>5.2f}  total {sum(xs):>+10.1f}  maxDD {dd:>+9.1f}  worst losing run {worst}"
     )
 
 
-def run(data, vix, name, lot):
-    rows = []
+def run(data, vix, name):
+    sessions = set(data)
+    rows, skipped = [], defaultdict(int)
     for d, bars in data.items():
-        if name == "NIFTY" and weekly_expiry(d):
+        expiry = expiry_for(d, sessions) if name == "NIFTY" else None
+        if name == "NIFTY" and expiry == d:
+            skipped["expiry day"] += 1
             continue
         sig = signal(bars)
         if not sig:
@@ -223,82 +299,79 @@ def run(data, vix, name, lot):
         exit_price, exit_i, reason = manage(bars, sig)
         v = None
         for t, *ohlc in vix.get(d, []):
-            if t <= bars[sig["entry_i"] - 1][0]:
+            if t <= bars[sig["entry_i"] - 1][0]:  # VIX known at the signal candle's close
                 v = ohlc[3]
-        row = {
-            "day": d,
-            "points": sig["side"] * (exit_price - sig["entry"]),
-            "reason": reason,
-            "R": sig["side"] * (exit_price - sig["entry"]) / sig["risk_pts"],
-            "vix": v,
-        }
-        if v and name == "NIFTY":  # the expiry calendar below is NIFTY's weekly one
-            for label, slip in SLIP.items():
-                pnl, risk_rs, _p0 = option_trade(d, bars, sig, exit_price, exit_i, v, lot, slip)
-                row[label] = pnl
-                row["risk_rs"] = risk_rs
+        pts = sig["side"] * (exit_price - sig["entry"])
+        row = {"day": d, "points": pts, "R": pts / sig["risk_pts"], "reason": reason, "vix": v, "risk_rs": None}
+        if name == "NIFTY":
+            if not v:
+                skipped["no VIX at signal (option estimate skipped)"] += 1
+            elif uncertain(d) or uncertain(expiry):
+                skipped["lot/expiry transition window (option estimate skipped)"] += 1
+            else:
+                lot = lot_size(expiry)
+                for label, slip in SLIP.items():
+                    pnl, risk_rs, _p0 = option_trade(d, bars, sig, exit_price, exit_i, v, expiry, lot, slip)
+                    row[label] = pnl
+                    row["risk_rs"] = risk_rs
+                row["lot"] = lot
         rows.append(row)
-    return rows
+    return rows, skipped
 
 
-def report(name, rows, lot):
-    print(f"\n=== {name}  (1 lot = {lot}; trades {len(rows)} on {len({r['day'] for r in rows})} days)")
+def report(name, rows, skipped):
+    print(f"\n{'=' * 100}\n{name}: {len(rows)} signals" + (f"; skipped {dict(skipped)}" if skipped else ""))
     if not rows:
-        return False
-    print("  INDEX POINTS (no option model):  " + stats(rows, "points"))
-    print("  R multiples:                     " + stats(rows, "R"))
-    opt = [r for r in rows if "BASE" in r and r["risk_rs"] <= MAX_RISK_RUPEES]
-    if name != "NIFTY":
-        print("  OPTION P&L not modelled: BANKNIFTY has monthly expiries only (weekly ended Nov 2024).")
-    skipped = sum(1 for r in rows if "BASE" in r and r["risk_rs"] > MAX_RISK_RUPEES)
-    print(f"  OPTION Rs/lot, risk <= Rs {MAX_RISK_RUPEES:.0f} ({skipped} skipped as too risky; MODELLED):")
-    for label in SLIP:
-        print(f"    {label:<8} " + stats(opt, label))
-    half = len(rows) // 2
-    print("  Chronological halves (INDEX POINTS): early " + stats(rows[:half], "points"))
-    print("                                       late  " + stats(rows[half:], "points"))
+        return
+    cut = rows[-1]["day"] - timedelta(days=HOLDOUT_DAYS)
+    early, late = [r for r in rows if r["day"] <= cut], [r for r in rows if r["day"] > cut]
+    print("A. INDEX POINTS per trade, gross (verified from Dhan candles; no option model)")
+    print(f"   ALL                    {stats(rows, 'points')}")
+    print(f"   up to {cut}       {stats(early, 'points')}")
+    print(f"   LAST 12 MONTHS        {stats(late, 'points')}")
     by_year = defaultdict(list)
     for r in rows:
         by_year[r["day"].year].append(r)
     for y, rs in sorted(by_year.items()):
-        print(f"  {y}: " + stats(rs, "points"))
+        print(f"   {y}                   {stats(rs, 'points')}")
     vixs = sorted(r["vix"] for r in rows if r["vix"])
     if vixs:
         lo_c, hi_c = vixs[len(vixs) // 3], vixs[2 * len(vixs) // 3]
         for lab, fn in (
-            ("VIX low", lambda v: v < lo_c),
-            ("VIX mid", lambda v: lo_c <= v < hi_c),
+            ("VIX low ", lambda v: v < lo_c),
+            ("VIX mid ", lambda v: lo_c <= v < hi_c),
             ("VIX high", lambda v: v >= hi_c),
         ):
-            print(f"  {lab:<9}: " + stats([r for r in rows if r["vix"] and fn(r["vix"])], "points"))
+            print(f"   {lab}               {stats([r for r in rows if r['vix'] and fn(r['vix'])], 'points')}")
+    print(f"   R multiples (ALL)      {stats(rows, 'R')}")
     exits = defaultdict(int)
     for r in rows:
         exits[r["reason"]] += 1
-    print(f"  exits: {dict(exits)}")
-    late = rows[half:]
-    adv = [r["ADVERSE"] for r in opt]
-    years = [sum(r["points"] for r in rs) for rs in by_year.values()]
-    adv_ok = (sum(adv) > 0) if name == "NIFTY" else True  # BANKNIFTY: points only
-    ok = (
-        len(rows) >= 100
-        and sum(r["points"] for r in late) > 0
-        and adv_ok
-        and sum(1 for y in years if y > 0) >= 0.75 * len(years)
-    )
+    print(f"   exits {dict(exits)}")
+    if name != "NIFTY":
+        print("B. OPTION ESTIMATE not produced: BANKNIFTY has monthly expiries only since Nov 2024.")
+        return
+    est = [r for r in rows if r.get("BASE") is not None]
+    ok = [r for r in est if r["risk_rs"] <= MAX_RISK_RUPEES]
     print(
-        f"  VERDICT: {'PASSES the pre-set bar' if ok else 'FAILS the pre-set bar'} "
-        "(>= 100 trades, late half positive in points, modelled option P&L positive at ADVERSE "
-        "slippage, >= 75% of years positive)"
+        f"B. ESTIMATED OPTION P&L, Rs per 1 lot -- AN ESTIMATE, NOT VERIFIED PROFITABILITY "
+        f"({len(est)} estimable; {len(est) - len(ok)} skipped: risk above Rs {MAX_RISK_RUPEES:.0f})"
     )
-    return ok
+    for label in SLIP:
+        print(f"   {label:<8} every trade, 1 lot      {stats(est, label)}")
+        print(f"   {label:<8} within Rs {MAX_RISK_RUPEES:.0f} cap       {stats(ok, label)}")
+        print(f"   {label:<8} cap, LAST 12 MONTHS     {stats([r for r in ok if r['day'] > cut], label)}")
+    risks = sorted(r["risk_rs"] for r in est)
+    if risks:
+        print(
+            f"   Estimated loss at the stop per lot: median Rs {risks[len(risks) // 2]:,.0f}, "
+            f"{sum(1 for x in risks if x <= MAX_RISK_RUPEES)} of {len(risks)} within Rs {MAX_RISK_RUPEES:.0f}"
+        )
 
 
 def main() -> int:
-    if (
-        datetime.now(IST).weekday() < 5
-        and time(9, 0) <= datetime.now(IST).time() < time(15, 40)
-        and not os.getenv("RUN_ANYWAY")
-    ):
+    now = datetime.now(IST)
+    if now.weekday() < 5 and time(9, 0) <= now.time() < time(15, 40) and not os.getenv("RUN_ANYWAY"):
         print("Market hours: this test runs only after the close.")
         return 1
     years = float(os.getenv("YEARS", "4"))
@@ -307,22 +380,25 @@ def main() -> int:
     from live_core.redact import redact
     from live_core.runtime import build_runtime
 
-    rt = build_runtime()
     try:
-        settings = rt._settings_loader()
+        settings = build_runtime()._settings_loader()
     except Exception as exc:
         print("Cannot get the token from the token authority:", redact(f"{type(exc).__name__}: {exc}"))
         return 1
     api = DhanAPI(settings)
-    print(f"Downloading {years:g} years of 5-minute candles (RAM only): NIFTY, BANKNIFTY, INDIA VIX ...")
-    vix = fetch(api, VIX_ID, years, say=lambda m: print(redact(m)))
-    passed = {}
-    for name, (sid, lot) in INDICES.items():
-        data = fetch(api, sid, years, say=lambda m: print(redact(m)))
-        if data:
-            print(f"{name}: {len(data)} sessions {min(data)} .. {max(data)}")
-        passed[name] = report(name, run(data, vix, name, lot), lot)
-    print("\nRESULT:", ", ".join(f"{k} {'PASS' if v else 'FAIL'}" for k, v in passed.items()))
+
+    def say(m):
+        print(redact(m), flush=True)
+
+    say(f"Requesting {years:g} years of 5-minute candles (RAM only): INDIA VIX, NIFTY, BANKNIFTY")
+    vix, vlog = fetch(api, VIX_ID, years, say)
+    coverage("INDIA VIX", vix, vlog, say)
+    for name, sid in INDICES.items():
+        data, log = fetch(api, sid, years, say)
+        coverage(name, data, log, say)
+        rows, skipped = run(data, vix, name)
+        report(name, rows, skipped)
+    print("\nNo thresholds are applied here: these are results for review, not a trading recommendation.")
     return 0
 
 

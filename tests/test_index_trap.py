@@ -1,7 +1,7 @@
 """The NIFTY opening-range trap test script: rules, no look-ahead, exits, expiry calendar, costs."""
 
 import importlib.util
-from datetime import date, time
+from datetime import date, time, timedelta
 from pathlib import Path
 
 import pytest
@@ -60,18 +60,43 @@ def test_stop_before_target_and_time_exit():
     assert reason == "TIME" and i == s2["entry_i"] + T.HOLD_BARS - 1
 
 
-def test_expiry_calendar():
-    assert T.weekly_expiry(date(2025, 8, 28))  # Thursday, before Sept 2025
-    assert not T.weekly_expiry(date(2025, 8, 26))
-    assert T.weekly_expiry(date(2025, 9, 2))  # Tuesday from Sept 2025
-    assert T.next_expiry(date(2026, 10, 8)) == date(2026, 10, 13)
+def test_expiry_calendar_with_switch_and_holidays():
+    sessions = {
+        date(2025, 8, 25) + timedelta(days=i)
+        for i in range(30)
+        if (date(2025, 8, 25) + timedelta(days=i)).weekday() < 5
+    }
+    assert T.expiry_for(date(2025, 8, 25), sessions) == date(2025, 8, 28)  # Thursday before the switch
+    assert T.expiry_for(date(2025, 8, 29), sessions) == date(2025, 9, 2)  # first Tuesday after the switch
+    assert T.expiry_for(date(2025, 9, 3), sessions) == date(2025, 9, 9)
+    sessions.discard(date(2025, 9, 9))  # a holiday on the Tuesday
+    assert T.expiry_for(date(2025, 9, 3), sessions) == date(2025, 9, 8)
 
 
-def test_option_costs_and_time_decay():
+def test_lot_sizes_by_contract_expiry():
+    assert T.lot_size(date(2024, 4, 25)) == 50
+    assert T.lot_size(date(2024, 6, 6)) == 25
+    assert T.lot_size(date(2025, 3, 6)) == 75
+    assert T.lot_size(date(2026, 1, 13)) == 65
+    assert T.uncertain(date(2024, 12, 5)) and not T.uncertain(date(2025, 3, 6))
+
+
+def test_charges_follow_the_october_2024_revision():
+    old = T.charges(date(2024, 9, 30), 7500, 7500, 0.0, 75)
+    new = T.charges(date(2024, 10, 1), 7500, 7500, 0.0, 75)
+    assert new > old  # STT on sold premium 0.0625% -> 0.1% outweighs the lower exchange charge
+    assert T.charges(date(2025, 1, 1), 7500, 7500, 0.5, 75) - T.charges(date(2025, 1, 1), 7500, 7500, 0.0, 75) == 75.0
+
+
+def test_option_estimate_costs_and_time_decay():
     bars = day(TRAP_UP)
     sig = T.signal(bars)
-    pnl_flat, _, p0 = T.option_trade(date(2026, 10, 8), bars, sig, sig["entry"], sig["entry_i"], 13.0, 75, 0.10)
-    assert pnl_flat < -40  # no move: lose brokerage, taxes, slippage and decay
-    win, _, _ = T.option_trade(date(2026, 10, 8), bars, sig, sig["entry"] - 60, sig["entry_i"] + 6, 13.0, 75, 0.10)
-    assert win > 1000  # 60 points x 0.5 delta x 75 minus costs
-    assert 50 < p0 < 400  # sane ATM weekly premium
+    exp = date(2026, 10, 13)
+    pnl_flat, _, p0 = T.option_trade(date(2026, 10, 8), bars, sig, sig["entry"], sig["entry_i"], 13.0, exp, 65, 0.10)
+    assert pnl_flat < -40  # no move: brokerage, taxes, slippage and decay
+    win, risk, _ = T.option_trade(
+        date(2026, 10, 8), bars, sig, sig["entry"] - 60, sig["entry_i"] + 6, 13.0, exp, 65, 0.10
+    )
+    assert win > 900  # 60 points x 0.5 delta x 65 minus costs
+    assert risk > 0.5 * sig["risk_pts"] * 65
+    assert 50 < p0 < 400
