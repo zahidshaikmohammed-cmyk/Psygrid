@@ -1,16 +1,16 @@
-"""Read-only ranking of NSE stocks by traded volume and traded value (Dhan daily candles, RAM only).
+"""Read-only ranking of NSE stocks by traded volume and traded value (Dhan market quote, RAM only).
 
-Universe: PSYGRID's 989 NSE equities (stocks.json). For each, the last 20 completed sessions of
-daily candles are fetched and ranked by average daily traded value (volume x close, an
-approximation of turnover) and by average daily volume (shares). Stocks with NSE stock options
-(F&O) are marked from Dhan's instrument master. Nothing is stored; no orders.
+Universe: PSYGRID's 989 NSE equities (stocks.json). One Dhan /marketfeed/quote request returns the
+latest session's volume and average traded price for all of them; stocks are ranked by traded
+value (volume x average price) and by volume (shares). Stocks with NSE stock options (F&O) are
+marked from Dhan's instrument master. Nothing is stored; no orders.
 """
 
 import csv
 import io
 import os
 import sys
-from datetime import datetime, time, timedelta
+from datetime import datetime, time
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
@@ -18,7 +18,6 @@ import requests
 
 IST = ZoneInfo("Asia/Kolkata")
 MASTER = "https://images.dhan.co/api-data/api-scrip-master.csv"
-SESSIONS = 20
 
 
 def main() -> int:
@@ -54,65 +53,40 @@ def main() -> int:
     del text
     print(f"Universe {len(symbols)} stocks; {len(fno)} NSE stocks have stock options (F&O).", flush=True)
 
-    rows, failed, spans = [], [], set()
-    start = now - timedelta(days=45)
-    for n, sym in enumerate(symbols, 1):
-        sid = ids.get(sym)
-        if not sid:
-            failed.append((sym, "no security id"))
-            continue
-        item = SimpleNamespace(security_id=sid, exchange_segment="NSE_EQ", instrument="EQUITY")
-        try:
-            candles = api.daily(item, start, now)
-        except Exception as exc:
-            failed.append((sym, redact(f"{type(exc).__name__}: {str(exc)[:80]}")))
-            continue
-        candles = [c for c in candles if datetime.fromtimestamp(c["timestamp"], IST).date() <= now.date()]
-        candles.sort(key=lambda c: c["timestamp"])
-        last = candles[-SESSIONS:]
-        if not last:
-            failed.append((sym, "no candles"))
-            continue
-        vol = sum(c["volume"] for c in last) / len(last)
-        value = sum(c["volume"] * c["close"] for c in last) / len(last)
-        rows.append((sym, vol, value, last[-1]["close"], last[-1]["volume"], len(last), sym in fno))
-        spans.add(
-            (
-                datetime.fromtimestamp(last[0]["timestamp"], IST).date(),
-                datetime.fromtimestamp(last[-1]["timestamp"], IST).date(),
-            )
-        )
-        if n == 10 and not rows:
-            print("First 10 requests all failed; stopping:")
-            for f_sym, err in failed:
-                print(f"  FAILED {f_sym}: {err}")
-            return 1
-        if n % 100 == 0:
-            print(f"  fetched {n}/{len(symbols)}", flush=True)
-
-    if not rows:
-        print("No data.")
-        for f_sym, err in failed[:10]:
-            print(f"  FAILED {f_sym}: {err}")
+    items = [SimpleNamespace(security_id=ids[s], exchange_segment="NSE_EQ") for s in symbols if s in ids]
+    missing = [s for s in symbols if s not in ids]
+    by_id = {ids[s]: s for s in symbols if s in ids}
+    try:
+        quotes = api.quote_snapshot(items)
+    except Exception as exc:
+        print("Quote request failed:", redact(f"{type(exc).__name__}: {str(exc)[:200]}"))
         return 1
-    common = max(spans, key=lambda s: sum(1 for x in spans if x == s))
+    rows = []
+    for sid, q in quotes.items():
+        sym = by_id.get(str(sid))
+        vol = q.get("volume") or 0
+        avg = q.get("average_price") or q.get("last_price") or 0
+        if sym and vol:
+            rows.append((sym, float(vol), float(vol) * float(avg), float(q.get("last_price") or 0), sym in fno))
+    if not rows:
+        print("No data.", str(list(quotes.items())[:2])[:300])
+        return 1
+    sample = next(iter(quotes.values()))
     print(
-        f"\nRanked {len(rows)} stocks on their last {SESSIONS} sessions (most stocks: {common[0]} .. {common[1]}); {len(failed)} failed"
+        f"Latest session quote for {len(rows)} stocks ({len(missing)} without a security id); fields: {sorted(sample)}"
     )
-    for sym, err in failed[:10]:
-        print(f"  FAILED {sym}: {err}")
 
     def table(title, key, top):
         print(f"\n{title}")
         print(
-            f"{'#':>4} {'SYMBOL':<14} {'F&O':<4} {'avg value Rs cr/day':>20} {'avg volume (shares)':>20} {'last close':>11}"
+            f"{'#':>4} {'SYMBOL':<14} {'F&O':<4} {'traded value Rs cr':>20} {'volume (shares)':>20} {'last price':>11}"
         )
         for i, r in enumerate(sorted(rows, key=key, reverse=True)[:top], 1):
-            sym, vol, value, close, _lv, _n, f = r
+            sym, vol, value, close, f = r
             print(f"{i:>4} {sym:<14} {'yes' if f else '':<4} {value / 1e7:>20,.1f} {vol:>20,.0f} {close:>11,.2f}")
 
-    table("BY AVERAGE DAILY TRADED VALUE (volume x close), top 100", lambda r: r[2], 100)
-    table("BY AVERAGE DAILY VOLUME (shares), top 50", lambda r: r[1], 50)
+    table("BY TRADED VALUE (volume x average traded price), top 100", lambda r: r[2], 100)
+    table("BY VOLUME (shares), top 50", lambda r: r[1], 50)
     print("\nNo data stored, no orders placed.")
     return 0
 
