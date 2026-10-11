@@ -82,11 +82,18 @@ def main() -> int:
                 datetime.fromtimestamp(last[-1]["timestamp"], IST).date(),
             )
         )
+        if n == 10 and not rows:
+            print("First 10 requests all failed; stopping:")
+            for f_sym, err in failed:
+                print(f"  FAILED {f_sym}: {err}")
+            return 1
         if n % 100 == 0:
             print(f"  fetched {n}/{len(symbols)}", flush=True)
 
     if not rows:
         print("No data.")
+        for f_sym, err in failed[:10]:
+            print(f"  FAILED {f_sym}: {err}")
         return 1
     common = max(spans, key=lambda s: sum(1 for x in spans if x == s))
     print(
