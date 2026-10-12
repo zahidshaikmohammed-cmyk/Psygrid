@@ -105,7 +105,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Refuse to restart nodes (or rehearse) during the market session unless asked
-        if: ${{ (inputs.action == 'deploy' && !inputs.allow_market_hours) || inputs.action == 'rehearse' || inputs.action == 'index-test' || inputs.action == 'option-probe' || inputs.action == 'volume-rank' }}
+        if: ${{ (inputs.action == 'deploy' && !inputs.allow_market_hours) || inputs.action == 'rehearse' || inputs.action == 'index-test' || inputs.action == 'option-probe' }}
         run: |
           set -euo pipefail
           now="$(TZ=Asia/Kolkata date +%u%H%M)"
