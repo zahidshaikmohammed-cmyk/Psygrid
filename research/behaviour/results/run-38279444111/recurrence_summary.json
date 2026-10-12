@@ -1,0 +1,51 @@
+{
+ "recurring_strict": 34,
+ "recurring_strict_by_stock": {
+  "BSE": 13,
+  "TIINDIA": 8,
+  "ANANDRATHI": 2,
+  "AUROPHARMA": 2,
+  "SBIN": 1,
+  "TITAN": 1,
+  "DELHIVERY": 1,
+  "SUZLON": 1,
+  "PFC": 1,
+  "TMPV": 1,
+  "TRENT": 1,
+  "ASHOKLEY": 1,
+  "DLF": 1
+ },
+ "recurring_strict_by_family": {
+  "EVENT": 20,
+  "STATE": 6,
+  "SLOT": 4,
+  "MOTIF": 2,
+  "DOWSLOT": 1,
+  "CANDLE": 1
+ },
+ "recurring_loose_q10": 75,
+ "recurring_loose_by_stock": {
+  "BSE": 23,
+  "TIINDIA": 11,
+  "ANANDRATHI": 9,
+  "ANGELONE": 7,
+  "AUROPHARMA": 4,
+  "DLF": 3,
+  "OFSS": 3,
+  "APOLLOHOSP": 2,
+  "POWERGRID": 2,
+  "SBIN": 1,
+  "SUZLON": 1,
+  "TITAN": 1,
+  "POWERINDIA": 1,
+  "DIXON": 1,
+  "PFC": 1,
+  "TMPV": 1,
+  "DELHIVERY": 1,
+  "TRENT": 1,
+  "ASHOKLEY": 1,
+  "JIOFIN": 1
+ },
+ "stocks_with_any_strict_recurring": 13,
+ "promising": 12
+}
