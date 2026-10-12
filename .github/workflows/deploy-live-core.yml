@@ -30,7 +30,7 @@ on:
       action:
         description: status (read-only), rehearse (off-hours, read-only) or deploy
         type: choice
-        options: [status, rehearse, index-test, option-probe, volume-rank, pattern-scan, pattern-mine, behaviour-discovery, deploy]
+        options: [status, rehearse, index-test, option-probe, volume-rank, pattern-scan, pattern-mine, behaviour-discovery, behaviour-posthoc, deploy]
         default: status
       target:
         description: Which node(s)
@@ -45,6 +45,10 @@ on:
         description: Deploy during 09:00-15:20 IST on a weekday (restarting a node drops its RAM session)
         type: boolean
         default: false
+      research_run_id:
+        description: behaviour-posthoc only - the run id of a finished behaviour-discovery run
+        type: string
+        default: ""
 
 concurrency:
   group: deploy-live-core
@@ -98,7 +102,7 @@ jobs:
   operate:
     needs: test
     # status skips the test job; deploy requires it to pass.
-    if: ${{ always() && inputs.action != 'behaviour-discovery' && (needs.test.result == 'success' || (inputs.action != 'deploy' && needs.test.result == 'skipped')) }}
+    if: ${{ always() && inputs.action != 'behaviour-discovery' && inputs.action != 'behaviour-posthoc' && (needs.test.result == 'success' || (inputs.action != 'deploy' && needs.test.result == 'skipped')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -386,6 +390,52 @@ jobs:
           git config user.email "psygrid-research@users.noreply.github.com"
           git add "$OUT"
           git commit -m "Behaviour discovery results (run ${GITHUB_RUN_ID}): aggregate statistics only"
+          for i in 1 2 3; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && break
+            sleep $((i * 5))
+          done
+
+  # Post-hoc analysis of a finished behaviour-discovery run from its artifact (no market data fetched).
+  behaviour-posthoc:
+    if: ${{ inputs.action == 'behaviour-posthoc' && inputs.research_run_id != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+
+      - name: Install analysis dependencies
+        run: python -m pip install numpy==2.3.3 pandas==2.3.2
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: behaviour-results-${{ inputs.research_run_id }}
+          path: posthoc-in
+          run-id: ${{ inputs.research_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Post-hoc analysis
+        run: python -m research.behaviour.posthoc posthoc-in
+
+      - name: Commit derived tables
+        env:
+          RID: ${{ inputs.research_run_id }}
+        run: |
+          set -euo pipefail
+          out="research/behaviour/results/run-${RID}"
+          mkdir -p "$out"
+          cp posthoc-in/cost_sensitivity.json posthoc-in/walk_forward_breakdown.json posthoc-in/recurrence_summary.json \
+             posthoc-in/recurring_with_holdout.csv posthoc-in/promising_hypotheses.csv "$out/"
+          git config user.name "psygrid-research"
+          git config user.email "psygrid-research@users.noreply.github.com"
+          git add "$out"
+          git commit -m "Behaviour discovery post-hoc tables (run ${RID}): aggregate statistics only"
           for i in 1 2 3; do
             git pull --rebase origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && break
             sleep $((i * 5))
