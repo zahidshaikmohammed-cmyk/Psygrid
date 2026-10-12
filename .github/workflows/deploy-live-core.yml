@@ -30,7 +30,7 @@ on:
       action:
         description: status (read-only), rehearse (off-hours, read-only) or deploy
         type: choice
-        options: [status, rehearse, index-test, option-probe, volume-rank, pattern-scan, pattern-mine, deploy]
+        options: [status, rehearse, index-test, option-probe, volume-rank, pattern-scan, pattern-mine, behaviour-discovery, deploy]
         default: status
       target:
         description: Which node(s)
@@ -98,7 +98,7 @@ jobs:
   operate:
     needs: test
     # status skips the test job; deploy requires it to pass.
-    if: ${{ always() && (needs.test.result == 'success' || (inputs.action != 'deploy' && needs.test.result == 'skipped')) }}
+    if: ${{ always() && inputs.action != 'behaviour-discovery' && (needs.test.result == 'success' || (inputs.action != 'deploy' && needs.test.result == 'skipped')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -315,3 +315,78 @@ jobs:
           python3 deploy/live-core/check_health.py cluster "http://${NODE0_HOST}:${PORT}" --wait-seconds 20 $require || status=1
           python3 deploy/live-core/check_health.py live "http://${NODE0_HOST}:${PORT}" --wait-seconds 20 || status=1
           exit $status
+
+  # Behaviour discovery (research, read-only): node 0 fetches candles with the token authority's token
+  # (the token never leaves the node) and streams them over SSH straight into the analysis on this
+  # runner; nothing raw is stored anywhere. Only aggregate statistics are committed to the branch.
+  behaviour:
+    if: ${{ inputs.action == 'behaviour-discovery' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 170
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+
+      - name: Install analysis dependencies
+        run: python -m pip install numpy==2.3.3 pytest
+
+      - name: Engine tests (causality, planted behaviour, null control)
+        run: python -m pytest -q tests/test_behaviour.py
+
+      - name: Fetch on node 0 and analyse here
+        env:
+          NODE0_SSH_KEY: ${{ secrets.LIVE_CORE_NODE0_SSH_KEY }}
+          SSH_USER_OVERRIDE: ${{ vars.LIVE_CORE_SSH_USER }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          trap 'rm -f ~/.ssh/live_core_node0' EXIT
+          ( umask 077 && printf '%s\n' "$NODE0_SSH_KEY" > ~/.ssh/live_core_node0 )
+          unset NODE0_SSH_KEY
+          opts="-i $HOME/.ssh/live_core_node0 -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=30 -o ServerAliveCountMax=10"
+          ssh-keyscan -H "$NODE0_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          user=""
+          for u in $SSH_USER_OVERRIDE ubuntu opc; do
+            # shellcheck disable=SC2086
+            if ssh $opts "${u}@${NODE0_HOST}" true 2>/dev/null; then user="$u"; break; fi
+          done
+          [ -n "$user" ] || { echo "cannot log in to node 0"; exit 1; }
+          root="/home/${user}/psygrid-live-core"
+          out="research/behaviour/results/run-${GITHUB_RUN_ID}"
+          # shellcheck disable=SC2086
+          scp $opts deploy/live-core/behaviour_fetch.py "${user}@${NODE0_HOST}:${root}/behaviour_fetch.py"
+          # shellcheck disable=SC2086
+          ssh $opts "${user}@${NODE0_HOST}" "sudo systemd-run --quiet --wait --pipe --collect \
+              --uid='${user}' --gid='${user}' -p WorkingDirectory='${root}/current' \
+              -p EnvironmentFile=/etc/psygrid-live-core.env -p EnvironmentFile=-/etc/psygrid-live-core-node.env \
+              -E LIVE_CORE_NODE_ID=0 -E LIVE_CORE_NODE_COUNT=${NODE_COUNT} -E PYTHONUNBUFFERED=1 \
+              -E PYTHONDONTWRITEBYTECODE=1 -E YEARS=4 -p RuntimeMaxSec=7200 -p MemoryMax=400M \
+              '${root}/venv/bin/python' '${root}/behaviour_fetch.py'; rc=\$?; rm -f '${root}/behaviour_fetch.py'; exit \$rc" \
+            | python -m research.behaviour.run --stream - --out "$out"
+          echo "OUT=$out" >> "$GITHUB_ENV"
+
+      - name: Upload all results (including per-test tables)
+        if: ${{ always() && env.OUT != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: behaviour-results-${{ github.run_id }}
+          path: ${{ env.OUT }}
+          retention-days: 30
+
+      - name: Commit aggregate results to the branch
+        run: |
+          set -euo pipefail
+          rm -f "$OUT/all_tests.csv.gz" "$OUT/walk_forward_trades.csv.gz"
+          git config user.name "psygrid-research"
+          git config user.email "psygrid-research@users.noreply.github.com"
+          git add "$OUT"
+          git commit -m "Behaviour discovery results (run ${GITHUB_RUN_ID}): aggregate statistics only"
+          for i in 1 2 3; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && break
+            sleep $((i * 5))
+          done
