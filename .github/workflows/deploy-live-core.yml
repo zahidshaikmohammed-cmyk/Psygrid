@@ -30,7 +30,7 @@ on:
       action:
         description: status (read-only), rehearse (off-hours, read-only) or deploy
         type: choice
-        options: [status, rehearse, index-test, option-probe, volume-rank, deploy]
+        options: [status, rehearse, index-test, option-probe, volume-rank, pattern-scan, deploy]
         default: status
       target:
         description: Which node(s)
@@ -100,7 +100,7 @@ jobs:
     # status skips the test job; deploy requires it to pass.
     if: ${{ always() && (needs.test.result == 'success' || (inputs.action != 'deploy' && needs.test.result == 'skipped')) }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
@@ -154,7 +154,7 @@ jobs:
           case "$TARGET" in both|node1) install_key 1 "$NODE1_SSH_KEY" ;; esac
           unset NODE0_SSH_KEY NODE1_SSH_KEY
 
-          ssh_opts() { echo "-i $HOME/.ssh/live_core_node$1 -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20"; }
+          ssh_opts() { echo "-i $HOME/.ssh/live_core_node$1 -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=30 -o ServerAliveCountMax=6"; }
           # The login user of an Oracle image: the configured one, else ubuntu, else opc.
           login_user() {
             local node="$1" host="$2" user
@@ -218,7 +218,7 @@ jobs:
           }
 
           index_test_node() {
-            local node="$1" host="$2" script="${3:-index_trap_test.py}" user
+            local node="$1" host="$2" script="${3:-index_trap_test.py}" maxsec="${4:-1800}" user
             echo "================ research script ${script} on node ${node} (RAM only, no orders) ================"
             user="$(login_user "$node" "$host")" || return 1
             local root="/home/${user}/psygrid-live-core"
@@ -229,7 +229,7 @@ jobs:
                 --uid='${user}' --gid='${user}' -p WorkingDirectory='${root}/current' \
                 -p EnvironmentFile=/etc/psygrid-live-core.env -p EnvironmentFile=-/etc/psygrid-live-core-node.env \
                 -E LIVE_CORE_NODE_ID='${node}' -E LIVE_CORE_NODE_COUNT='${NODE_COUNT}' -E PYTHONUNBUFFERED=1 \
-                -E PYTHONDONTWRITEBYTECODE=1 -E YEARS=4 -p RuntimeMaxSec=1800 -p MemoryMax=400M \
+                -E PYTHONDONTWRITEBYTECODE=1 -E YEARS=4 -p RuntimeMaxSec=${maxsec} -p MemoryMax=400M \
                 '${root}/venv/bin/python' '${root}/${script}'; rc=\$?; rm -f '${root}/${script}'; exit \$rc" || return 1
           }
 
@@ -288,6 +288,8 @@ jobs:
               [ "$node" = 0 ] && { index_test_node "$node" "$host" option_probe.py || failed="$failed $node"; }
             elif [ "$ACTION" = volume-rank ]; then
               [ "$node" = 0 ] && { index_test_node "$node" "$host" volume_rank.py || failed="$failed $node"; }
+            elif [ "$ACTION" = pattern-scan ]; then
+              [ "$node" = 0 ] && { index_test_node "$node" "$host" pattern_scan.py 4800 || failed="$failed $node"; }
             else
               status_node "$node" "$host" || failed="$failed $node"
             fi
