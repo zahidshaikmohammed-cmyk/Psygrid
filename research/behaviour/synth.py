@@ -68,3 +68,25 @@ def universe(n_noise: int = 2, plant: bool = True, n_days: int | None = None):
     for i in range(n_noise):
         insts.append(build(f"NOISE{i}", "EQUITY", "BANKING", make_rows(20 + i, days, mk), 5))
     return insts
+
+
+def make_rows_1m(
+    seed: int, days: list[dt.date], market: np.ndarray | None = None, sigma=0.0007, volume=True, start=1000.0
+):
+    """1-minute rows (epoch, o, h, l, c, v); market: [D, 375] shared 1-minute returns."""
+    rng = np.random.default_rng(seed)
+    p = start
+    rows = []
+    for di, d in enumerate(days):
+        p *= 1 + rng.normal(0, 0.005)
+        base_ts = (d - dt.date(1970, 1, 1)).days * 86400 - IST_OFFSET + OPEN_MIN * 60
+        r = rng.normal(0, sigma, 375) + (market[di] if market is not None else 0.0)
+        c = p * np.cumprod(1 + r)
+        o = np.r_[p, c[:-1]]
+        h = np.maximum(o, c) * (1 + np.abs(rng.normal(0, sigma / 3, 375)))
+        lo = np.minimum(o, c) * (1 - np.abs(rng.normal(0, sigma / 3, 375)))
+        v = rng.lognormal(8, 0.6, 375) if volume else np.zeros(375)
+        ts = base_ts + 60 * np.arange(375)
+        rows.append(np.column_stack([ts, o, h, lo, c, v]))
+        p = c[-1]
+    return np.concatenate(rows)

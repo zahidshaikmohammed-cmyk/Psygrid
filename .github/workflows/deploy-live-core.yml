@@ -30,7 +30,7 @@ on:
       action:
         description: status (read-only), rehearse (off-hours, read-only) or deploy
         type: choice
-        options: [status, rehearse, index-test, option-probe, volume-rank, pattern-scan, pattern-mine, behaviour-discovery, behaviour-posthoc, deploy]
+        options: [status, rehearse, index-test, option-probe, volume-rank, pattern-scan, pattern-mine, behaviour-discovery, behaviour-posthoc, history-probe, deploy]
         default: status
       target:
         description: Which node(s)
@@ -296,6 +296,8 @@ jobs:
               [ "$node" = 0 ] && { index_test_node "$node" "$host" pattern_scan.py 4800 || failed="$failed $node"; }
             elif [ "$ACTION" = pattern-mine ]; then
               [ "$node" = 0 ] && { index_test_node "$node" "$host" pattern_mine.py 4800 || failed="$failed $node"; }
+            elif [ "$ACTION" = history-probe ]; then
+              [ "$node" = 0 ] && { index_test_node "$node" "$host" history_probe.py 300 || failed="$failed $node"; }
             else
               status_node "$node" "$host" || failed="$failed $node"
             fi
