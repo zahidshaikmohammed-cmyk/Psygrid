@@ -27,7 +27,6 @@ node's memory, CPUs and load, whether it is inside market hours, and the planned
 
 import csv
 import gzip
-import io
 import os
 import sys
 import time as clock
@@ -284,9 +283,15 @@ def main() -> int:
     headers = {"Accept": "application/json", "Content-Type": "application/json", "access-token": settings.access_token}
     session = requests.Session()
     ids = {}
-    for row in csv.DictReader(io.StringIO(requests.get(MASTER, timeout=60).text)):
-        if row.get("SEM_EXM_EXCH_ID", "").strip() == "NSE" and row.get("SEM_INSTRUMENT_NAME", "").strip() == "EQUITY":
-            ids[row.get("SEM_TRADING_SYMBOL", "").strip().upper()] = row.get("SEM_SMST_SECURITY_ID", "").strip()
+    # streamed line by line: the master is tens of MB and the fetch runs under a 150 MB cap
+    with requests.get(MASTER, timeout=60, stream=True) as resp:
+        lines = (line.decode("utf-8", "replace") for line in resp.iter_lines())
+        for row in csv.DictReader(lines):
+            if (
+                row.get("SEM_EXM_EXCH_ID", "").strip() == "NSE"
+                and row.get("SEM_INSTRUMENT_NAME", "").strip() == "EQUITY"
+            ):
+                ids[row.get("SEM_TRADING_SYMBOL", "").strip().upper()] = row.get("SEM_SMST_SECURITY_ID", "").strip()
     universe = [(n, sid, "IDX_I", "INDEX", "INDEX") for n, sid in INDICES]
     universe += [(s, ids.get(s), "NSE_EQ", "EQUITY", "-") for s in TOP99]
 

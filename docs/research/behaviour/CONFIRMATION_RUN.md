@@ -9,7 +9,7 @@ The run executes the frozen protocol in `PREREGISTRATION.md` without changing it
    - `python -m research.behaviour.lockcheck` stops the job if any pre-registered file differs from its SHA-256.
    - Runs the test suites and checks that the runner has at least 5 GB available.
 2. **Node 0 runs `behaviour_fetch.py`** with `START=2021-10-01 END=2026-10-12`.
-   - Runs under `systemd-run` at low priority: `CPUQuota=50%`, `Nice=10`, idle I/O, `MemoryMax=400M`, a 2-hour hard limit.
+   - Runs under `systemd-run` at low priority: `CPUQuota=50%`, `Nice=10`, idle I/O, `MemoryMax=150M`, a 2-hour hard limit.
    - Uses the token authority's token on the node; the token never leaves the node.
    - Streams gzip-compressed candles over SSH to the runner. Nothing is written to disk on either side.
 3. **The runner runs `research.behaviour.confirm_run`** in RAM:
@@ -65,7 +65,7 @@ Only `KEPT` and `KEPT_FILLED` sessions reach the analysis. Every other status is
 - The parse stops if available memory falls below 1 GB.
 
 **Memory, node 0**
-- One 89-day response at a time, under a 400 MB systemd cap.
+- One 89-day response at a time, under a 150 MB systemd cap (node 0 had 468 MB free during market hours; a fetch exceeding the cap is killed alone).
 
 ## Abort conditions
 

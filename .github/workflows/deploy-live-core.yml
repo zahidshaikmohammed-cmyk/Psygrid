@@ -469,7 +469,7 @@ jobs:
           echo "OUT=$out" >> "$GITHUB_ENV"
           # shellcheck disable=SC2086
           scp $opts deploy/live-core/behaviour_fetch.py "${user}@${NODE0_HOST}:${root}/behaviour_fetch.py" || exit 1
-          # Low priority on the node: CPU quota, nice, idle I/O; 400 MB memory cap; 2 h hard limit.
+          # Low priority on the node: CPU quota, nice, idle I/O; 150 MB memory cap (the fetch alone is killed if it exceeds it); 2 h hard limit.
           # shellcheck disable=SC2086
           ssh $opts "${user}@${NODE0_HOST}" "sudo systemd-run --quiet --wait --pipe --collect \
               --uid='${user}' --gid='${user}' -p WorkingDirectory='${root}/current' \
@@ -477,7 +477,7 @@ jobs:
               -E LIVE_CORE_NODE_ID=0 -E LIVE_CORE_NODE_COUNT=${NODE_COUNT} -E PYTHONUNBUFFERED=1 \
               -E PYTHONDONTWRITEBYTECODE=1 -E START=2021-10-01 -E END=2026-10-12 -E MAX_REQUESTS=2600 \
               -E HEALTH_URL=http://127.0.0.1:${PORT}/health/node \
-              -p RuntimeMaxSec=7200 -p MemoryMax=400M -p CPUQuota=50% -p Nice=10 -p IOSchedulingClass=idle \
+              -p RuntimeMaxSec=7200 -p MemoryMax=150M -p CPUQuota=50% -p Nice=10 -p IOSchedulingClass=idle \
               '${root}/venv/bin/python' '${root}/behaviour_fetch.py'; rc=\$?; rm -f '${root}/behaviour_fetch.py'; exit \$rc" \
             | python -m research.behaviour.confirm_run --stream - --out "$out"
           rc=("${PIPESTATUS[@]}")
