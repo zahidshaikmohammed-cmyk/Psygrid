@@ -1,0 +1,1209 @@
+{
+ "label": "2021-10-01 .. 2022-10-12 is a HISTORICAL CONFIRMATION PERIOD THAT PREDATES THE DISCOVERY DATA (2022-10-13 onwards). It is untouched by the earlier search, but it is a backward out-of-sample check, not a forward chronological test.",
+ "lock": {
+  "ok": true,
+  "files": {
+   "confirm.py": {
+    "locked": "6093c1e60aa5d8ee3be645cc507a93d977e3911a09fdbd85dd76454e2542893f",
+    "actual": "6093c1e60aa5d8ee3be645cc507a93d977e3911a09fdbd85dd76454e2542893f",
+    "match": true
+   },
+   "execution.py": {
+    "locked": "6b5ed95414571b0fd5f0d2e9814a3ed72c482bb5d7c1ee1b306bf79576bafcdf",
+    "actual": "6b5ed95414571b0fd5f0d2e9814a3ed72c482bb5d7c1ee1b306bf79576bafcdf",
+    "match": true
+   },
+   "integrity.py": {
+    "locked": "a4983e28f9956196ed8d5d823e0f4fd83fc0c2b6dc17f43058f16cc6706b7726",
+    "actual": "a4983e28f9956196ed8d5d823e0f4fd83fc0c2b6dc17f43058f16cc6706b7726",
+    "match": true
+   },
+   "power.py": {
+    "locked": "0818a774194bf0914dc1c73028e66d0fff64c5526649bb38ddef076985fb7f6a",
+    "actual": "0818a774194bf0914dc1c73028e66d0fff64c5526649bb38ddef076985fb7f6a",
+    "match": true
+   },
+   "prereg.py": {
+    "locked": "f1649f0f3e8553f72b051f0bcac1dabcc334153b5bb089d71f77b9b0a3c46f73",
+    "actual": "f1649f0f3e8553f72b051f0bcac1dabcc334153b5bb089d71f77b9b0a3c46f73",
+    "match": true
+   }
+  }
+ },
+ "meta": {
+  "interval": 1,
+  "years": 4,
+  "start": "2021-10-01",
+  "end": "2026-10-12",
+  "complete": true
+ },
+ "status": "COMPLETE",
+ "instruments_streamed": 102,
+ "sessions_audited": 123714,
+ "anomalous_sessions": 21872,
+ "windows": {
+  "in_sample": [
+   "2022-10-13",
+   "2025-09-30"
+  ],
+  "confirmation": [
+   "2021-10-01",
+   "2022-10-12"
+  ],
+  "contaminated": [
+   "2025-10-01",
+   "2026-10-12"
+  ]
+ },
+ "verdicts": {
+  "H1": {
+   "trades": 23578,
+   "weeks": 50,
+   "instruments": 93,
+   "mean_gross": -0.004122,
+   "mean_net": {
+    "zero": -0.004122,
+    "low": -0.041116,
+    "base": -0.122745,
+    "high": -0.258685
+   },
+   "t_base": -31.116733,
+   "p_base": 1.0,
+   "ci90_base": [
+    -0.12905,
+    -0.114646
+   ],
+   "win_pct_base": 37.05573,
+   "max_drawdown_base": 2897.750377,
+   "max_instrument_share": null,
+   "max_month_share": null,
+   "halves_positive": false,
+   "exits": {
+    "stop": 10173,
+    "target": 6324,
+    "time": 7081
+   },
+   "in_sample_gross": 0.002804,
+   "p_holm": 1.0,
+   "checks": {
+    "sample": true,
+    "significant": false,
+    "ci_above_zero": false,
+    "high_cost_positive": false,
+    "not_concentrated": false,
+    "both_halves_positive": false,
+    "in_sample_direction": true
+   },
+   "verdict": "REJECTED"
+  },
+  "H2": {
+   "trades": 950,
+   "weeks": 50,
+   "instruments": 93,
+   "mean_gross": 0.053797,
+   "mean_net": {
+    "zero": 0.053797,
+    "low": 0.014688,
+    "base": -0.068105,
+    "high": -0.206848
+   },
+   "t_base": -3.39707,
+   "p_base": 0.999659,
+   "ci90_base": [
+    -0.096959,
+    -0.03617
+   ],
+   "win_pct_base": 39.894737,
+   "max_drawdown_base": 65.969134,
+   "max_instrument_share": null,
+   "max_month_share": null,
+   "halves_positive": false,
+   "exits": {
+    "stop": 509,
+    "target": 300,
+    "time": 141
+   },
+   "in_sample_gross": 0.034927,
+   "p_holm": 1.0,
+   "checks": {
+    "sample": true,
+    "significant": false,
+    "ci_above_zero": false,
+    "high_cost_positive": false,
+    "not_concentrated": false,
+    "both_halves_positive": false,
+    "in_sample_direction": true
+   },
+   "verdict": "REJECTED"
+  },
+  "H3": {
+   "trades": 8097,
+   "weeks": 50,
+   "instruments": 69,
+   "mean_gross": -0.008381,
+   "mean_net": {
+    "zero": -0.008381,
+    "low": -0.045307,
+    "base": -0.126943,
+    "high": -0.26286
+   },
+   "t_base": -28.2673,
+   "p_base": 1.0,
+   "ci90_base": [
+    -0.134222,
+    -0.119281
+   ],
+   "win_pct_base": 36.371496,
+   "max_drawdown_base": 1029.770991,
+   "max_instrument_share": null,
+   "max_month_share": null,
+   "halves_positive": false,
+   "exits": {
+    "stop": 3542,
+    "target": 2142,
+    "time": 2413
+   },
+   "in_sample_gross": -0.007442,
+   "p_holm": 1.0,
+   "checks": {
+    "sample": true,
+    "significant": false,
+    "ci_above_zero": false,
+    "high_cost_positive": false,
+    "not_concentrated": false,
+    "both_halves_positive": false,
+    "in_sample_direction": false
+   },
+   "verdict": "REJECTED"
+  },
+  "H4": {
+   "trades": 1987,
+   "weeks": 31,
+   "instruments": 93,
+   "mean_gross": -0.023326,
+   "mean_net": {
+    "zero": -0.023326,
+    "low": -0.06332,
+    "base": -0.147194,
+    "high": -0.288001
+   },
+   "t_base": -11.538461,
+   "p_base": 1.0,
+   "ci90_base": [
+    -0.172992,
+    -0.127379
+   ],
+   "win_pct_base": 33.215903,
+   "max_drawdown_base": 292.493544,
+   "max_instrument_share": null,
+   "max_month_share": null,
+   "halves_positive": false,
+   "exits": {
+    "stop": 1010,
+    "target": 608,
+    "time": 369
+   },
+   "in_sample_gross": -0.002396,
+   "p_holm": 1.0,
+   "checks": {
+    "sample": true,
+    "significant": false,
+    "ci_above_zero": false,
+    "high_cost_positive": false,
+    "not_concentrated": false,
+    "both_halves_positive": false,
+    "in_sample_direction": false
+   },
+   "verdict": "REJECTED"
+  },
+  "H5": {
+   "trades": 355,
+   "weeks": 6,
+   "instruments": 35,
+   "mean_gross": -0.051505,
+   "mean_net": {
+    "zero": -0.051505,
+    "low": -0.088937,
+    "base": -0.176368,
+    "high": -0.321231
+   },
+   "t_base": -1.671627,
+   "p_base": 0.952701,
+   "ci90_base": [
+    -0.372757,
+    0.269695
+   ],
+   "win_pct_base": 46.760563,
+   "max_drawdown_base": 83.941077,
+   "max_instrument_share": null,
+   "max_month_share": null,
+   "halves_positive": false,
+   "exits": {
+    "stop": 0,
+    "target": 0,
+    "time": 355
+   },
+   "in_sample_gross": -0.017763,
+   "p_holm": 1.0,
+   "checks": {
+    "sample": false,
+    "significant": false,
+    "ci_above_zero": false,
+    "high_cost_positive": false,
+    "not_concentrated": false,
+    "both_halves_positive": false,
+    "in_sample_direction": false
+   },
+   "verdict": "REJECTED"
+  },
+  "H6": {
+   "trades": 4530,
+   "weeks": 50,
+   "instruments": 93,
+   "mean_gross": 0.015621,
+   "mean_net": {
+    "zero": 0.015621,
+    "low": -0.024606,
+    "base": -0.112533,
+    "high": -0.259536
+   },
+   "t_base": -15.555603,
+   "p_base": 1.0,
+   "ci90_base": [
+    -0.12715,
+    -0.100239
+   ],
+   "win_pct_base": 34.834437,
+   "max_drawdown_base": 511.223254,
+   "max_instrument_share": null,
+   "max_month_share": null,
+   "halves_positive": false,
+   "exits": {
+    "stop": 1163,
+    "target": 521,
+    "time": 2846
+   },
+   "in_sample_gross": 0.019079,
+   "p_holm": 1.0,
+   "checks": {
+    "sample": true,
+    "significant": false,
+    "ci_above_zero": false,
+    "high_cost_positive": false,
+    "not_concentrated": false,
+    "both_halves_positive": false,
+    "in_sample_direction": true
+   },
+   "verdict": "REJECTED"
+  }
+ },
+ "in_sample_gross_mean_pct": {
+  "H1": 0.002804,
+  "H2": 0.034927,
+  "H3": -0.007442,
+  "H4": -0.002396,
+  "H5": -0.017763,
+  "H6": 0.019079
+ },
+ "in_sample_dependence": {
+  "H1": {
+   "trades": 85754,
+   "weeks": 156,
+   "trades_per_week": 549.705128,
+   "sigma_pct": 0.370917,
+   "rho_same_week": 0.002181,
+   "mde_pct_45_weeks": 0.01131
+  },
+  "H2": {
+   "trades": 3439,
+   "weeks": 156,
+   "trades_per_week": 22.044872,
+   "sigma_pct": 0.543702,
+   "rho_same_week": 0.007982,
+   "mde_pct_45_weeks": 0.060363
+  },
+  "H3": {
+   "trades": 27618,
+   "weeks": 156,
+   "trades_per_week": 177.038462,
+   "sigma_pct": 0.363874,
+   "rho_same_week": 0.003219,
+   "mde_pct_45_weeks": 0.01651
+  },
+  "H4": {
+   "trades": 12736,
+   "weeks": 156,
+   "trades_per_week": 81.641026,
+   "sigma_pct": 0.371906,
+   "rho_same_week": 0.006549,
+   "mde_pct_45_weeks": 0.024542
+  },
+  "H5": {
+   "trades": 10799,
+   "weeks": 156,
+   "trades_per_week": 69.224359,
+   "sigma_pct": 1.720895,
+   "rho_same_week": 0.010331,
+   "mde_pct_45_weeks": 0.13026
+  },
+  "H6": {
+   "trades": 14201,
+   "weeks": 156,
+   "trades_per_week": 91.032051,
+   "sigma_pct": 0.429498,
+   "rho_same_week": 0.000622,
+   "mde_pct_45_weeks": 0.022312
+  }
+ },
+ "descriptive": {
+  "in_sample": {
+   "H1": {
+    "trades": 85754,
+    "weeks": 156,
+    "instruments": 97,
+    "mean_gross": 0.002804,
+    "mean_net": {
+     "zero": 0.002804,
+     "low": -0.03186,
+     "base": -0.111066,
+     "high": -0.242206
+    },
+    "t_base": -57.139598,
+    "p_base": 1.0,
+    "ci90_base": [
+     -0.113951,
+     -0.108115
+    ],
+    "win_pct_base": 36.663013,
+    "max_drawdown_base": 9524.813106,
+    "max_instrument_share": null,
+    "max_month_share": null,
+    "halves_positive": false,
+    "exits": {
+     "stop": 37233,
+     "target": 23405,
+     "time": 25116
+    },
+    "in_sample_gross": null,
+    "p_holm": 1.0,
+    "checks": {
+     "sample": true,
+     "significant": false,
+     "ci_above_zero": false,
+     "high_cost_positive": false,
+     "not_concentrated": false,
+     "both_halves_positive": false,
+     "in_sample_direction": false
+    },
+    "verdict": "REJECTED"
+   },
+   "H2": {
+    "trades": 3439,
+    "weeks": 156,
+    "instruments": 97,
+    "mean_gross": 0.034927,
+    "mean_net": {
+     "zero": 0.034927,
+     "low": -0.00034,
+     "base": -0.080071,
+     "high": -0.2123
+    },
+    "t_base": -8.05656,
+    "p_base": 1.0,
+    "ci90_base": [
+     -0.098642,
+     -0.062175
+    ],
+    "win_pct_base": 36.667636,
+    "max_drawdown_base": 277.520945,
+    "max_instrument_share": null,
+    "max_month_share": null,
+    "halves_positive": false,
+    "exits": {
+     "stop": 1893,
+     "target": 952,
+     "time": 594
+    },
+    "in_sample_gross": null,
+    "p_holm": 1.0,
+    "checks": {
+     "sample": true,
+     "significant": false,
+     "ci_above_zero": false,
+     "high_cost_positive": false,
+     "not_concentrated": false,
+     "both_halves_positive": false,
+     "in_sample_direction": false
+    },
+    "verdict": "REJECTED"
+   },
+   "H3": {
+    "trades": 27618,
+    "weeks": 156,
+    "instruments": 70,
+    "mean_gross": -0.007442,
+    "mean_net": {
+     "zero": -0.007442,
+     "low": -0.041578,
+     "base": -0.120446,
+     "high": -0.250816
+    },
+    "t_base": -42.195874,
+    "p_base": 1.0,
+    "ci90_base": [
+     -0.124418,
+     -0.116317
+    ],
+    "win_pct_base": 35.212543,
+    "max_drawdown_base": 3326.528941,
+    "max_instrument_share": null,
+    "max_month_share": null,
+    "halves_positive": false,
+    "exits": {
+     "stop": 12292,
+     "target": 7274,
+     "time": 8052
+    },
+    "in_sample_gross": null,
+    "p_holm": 1.0,
+    "checks": {
+     "sample": true,
+     "significant": false,
+     "ci_above_zero": false,
+     "high_cost_positive": false,
+     "not_concentrated": false,
+     "both_halves_positive": false,
+     "in_sample_direction": false
+    },
+    "verdict": "REJECTED"
+   },
+   "H4": {
+    "trades": 12736,
+    "weeks": 156,
+    "instruments": 97,
+    "mean_gross": -0.002396,
+    "mean_net": {
+     "zero": -0.002396,
+     "low": -0.037942,
+     "base": -0.116814,
+     "high": -0.247894
+    },
+    "t_base": -27.171346,
+    "p_base": 1.0,
+    "ci90_base": [
+     -0.123525,
+     -0.109746
+    ],
+    "win_pct_base": 35.906093,
+    "max_drawdown_base": 1489.460886,
+    "max_instrument_share": null,
+    "max_month_share": null,
+    "halves_positive": false,
+    "exits": {
+     "stop": 6432,
+     "target": 4250,
+     "time": 2054
+    },
+    "in_sample_gross": null,
+    "p_holm": 1.0,
+    "checks": {
+     "sample": true,
+     "significant": false,
+     "ci_above_zero": false,
+     "high_cost_positive": false,
+     "not_concentrated": false,
+     "both_halves_positive": false,
+     "in_sample_direction": false
+    },
+    "verdict": "REJECTED"
+   },
+   "H5": {
+    "trades": 10799,
+    "weeks": 156,
+    "instruments": 97,
+    "mean_gross": -0.017763,
+    "mean_net": {
+     "zero": -0.017763,
+     "low": -0.054182,
+     "base": -0.1406,
+     "high": -0.283437
+    },
+    "t_base": -6.371072,
+    "p_base": 1.0,
+    "ci90_base": [
+     -0.170352,
+     -0.1101
+    ],
+    "win_pct_base": 44.587462,
+    "max_drawdown_base": 1525.122148,
+    "max_instrument_share": null,
+    "max_month_share": null,
+    "halves_positive": false,
+    "exits": {
+     "stop": 0,
+     "target": 0,
+     "time": 10799
+    },
+    "in_sample_gross": null,
+    "p_holm": 1.0,
+    "checks": {
+     "sample": true,
+     "significant": false,
+     "ci_above_zero": false,
+     "high_cost_positive": false,
+     "not_concentrated": false,
+     "both_halves_positive": false,
+     "in_sample_direction": false
+    },
+    "verdict": "REJECTED"
+   },
+   "H6": {
+    "trades": 14201,
+    "weeks": 156,
+    "instruments": 97,
+    "mean_gross": 0.019079,
+    "mean_net": {
+     "zero": 0.019079,
+     "low": -0.016638,
+     "base": -0.100153,
+     "high": -0.238282
+    },
+    "t_base": -26.230988,
+    "p_base": 1.0,
+    "ci90_base": [
+     -0.106818,
+     -0.093153
+    ],
+    "win_pct_base": 34.476445,
+    "max_drawdown_base": 1423.108313,
+    "max_instrument_share": null,
+    "max_month_share": null,
+    "halves_positive": false,
+    "exits": {
+     "stop": 3757,
+     "target": 1564,
+     "time": 8880
+    },
+    "in_sample_gross": null,
+    "p_holm": 1.0,
+    "checks": {
+     "sample": true,
+     "significant": false,
+     "ci_above_zero": false,
+     "high_cost_positive": false,
+     "not_concentrated": false,
+     "both_halves_positive": false,
+     "in_sample_direction": false
+    },
+    "verdict": "REJECTED"
+   }
+  },
+  "contaminated": {
+   "H1": {
+    "trades": 32896,
+    "weeks": 55,
+    "instruments": 99,
+    "mean_gross": -0.000913,
+    "mean_net": {
+     "zero": -0.000913,
+     "low": -0.034669,
+     "base": -0.112846,
+     "high": -0.241989
+    },
+    "t_base": -44.403201,
+    "p_base": 1.0,
+    "ci90_base": [
+     -0.116802,
+     -0.1086
+    ],
+    "win_pct_base": 36.682271,
+    "max_drawdown_base": 3714.442547,
+    "max_instrument_share": null,
+    "max_month_share": null,
+    "halves_positive": false,
+    "exits": {
+     "stop": 14985,
+     "target": 9176,
+     "time": 8735
+    },
+    "in_sample_gross": null,
+    "p_holm": 1.0,
+    "checks": {
+     "sample": true,
+     "significant": false,
+     "ci_above_zero": false,
+     "high_cost_positive": false,
+     "not_concentrated": false,
+     "both_halves_positive": false,
+     "in_sample_direction": false
+    },
+    "verdict": "REJECTED"
+   },
+   "H2": {
+    "trades": 1311,
+    "weeks": 55,
+    "instruments": 99,
+    "mean_gross": 0.028762,
+    "mean_net": {
+     "zero": 0.028762,
+     "low": -0.00535,
+     "base": -0.083879,
+     "high": -0.213728
+    },
+    "t_base": -5.831052,
+    "p_base": 1.0,
+    "ci90_base": [
+     -0.109396,
+     -0.061215
+    ],
+    "win_pct_base": 36.384439,
+    "max_drawdown_base": 116.041542,
+    "max_instrument_share": null,
+    "max_month_share": null,
+    "halves_positive": false,
+    "exits": {
+     "stop": 723,
+     "target": 366,
+     "time": 222
+    },
+    "in_sample_gross": null,
+    "p_holm": 1.0,
+    "checks": {
+     "sample": true,
+     "significant": false,
+     "ci_above_zero": false,
+     "high_cost_positive": false,
+     "not_concentrated": false,
+     "both_halves_positive": false,
+     "in_sample_direction": false
+    },
+    "verdict": "REJECTED"
+   },
+   "H3": {
+    "trades": 9794,
+    "weeks": 55,
+    "instruments": 70,
+    "mean_gross": -0.001538,
+    "mean_net": {
+     "zero": -0.001538,
+     "low": -0.034287,
+     "base": -0.111528,
+     "high": -0.238763
+    },
+    "t_base": -26.468051,
+    "p_base": 1.0,
+    "ci90_base": [
+     -0.118682,
+     -0.103226
+    ],
+    "win_pct_base": 36.706147,
+    "max_drawdown_base": 1093.135591,
+    "max_instrument_share": null,
+    "max_month_share": null,
+    "halves_positive": false,
+    "exits": {
+     "stop": 4433,
+     "target": 2698,
+     "time": 2663
+    },
+    "in_sample_gross": null,
+    "p_holm": 1.0,
+    "checks": {
+     "sample": true,
+     "significant": false,
+     "ci_above_zero": false,
+     "high_cost_positive": false,
+     "not_concentrated": false,
+     "both_halves_positive": false,
+     "in_sample_direction": false
+    },
+    "verdict": "REJECTED"
+   },
+   "H4": {
+    "trades": 4803,
+    "weeks": 55,
+    "instruments": 99,
+    "mean_gross": 0.004308,
+    "mean_net": {
+     "zero": 0.004308,
+     "low": -0.02929,
+     "base": -0.106055,
+     "high": -0.233002
+    },
+    "t_base": -17.174646,
+    "p_base": 1.0,
+    "ci90_base": [
+     -0.11782,
+     -0.097188
+    ],
+    "win_pct_base": 35.935873,
+    "max_drawdown_base": 509.934622,
+    "max_instrument_share": null,
+    "max_month_share": null,
+    "halves_positive": false,
+    "exits": {
+     "stop": 2439,
+     "target": 1641,
+     "time": 723
+    },
+    "in_sample_gross": null,
+    "p_holm": 1.0,
+    "checks": {
+     "sample": true,
+     "significant": false,
+     "ci_above_zero": false,
+     "high_cost_positive": false,
+     "not_concentrated": false,
+     "both_halves_positive": false,
+     "in_sample_direction": false
+    },
+    "verdict": "REJECTED"
+   },
+   "H5": {
+    "trades": 4652,
+    "weeks": 55,
+    "instruments": 96,
+    "mean_gross": 0.019644,
+    "mean_net": {
+     "zero": 0.019644,
+     "low": -0.01529,
+     "base": -0.100224,
+     "high": -0.240092
+    },
+    "t_base": -2.785244,
+    "p_base": 0.997326,
+    "ci90_base": [
+     -0.165457,
+     -0.036875
+    ],
+    "win_pct_base": 45.894239,
+    "max_drawdown_base": 489.446545,
+    "max_instrument_share": null,
+    "max_month_share": null,
+    "halves_positive": false,
+    "exits": {
+     "stop": 0,
+     "target": 0,
+     "time": 4652
+    },
+    "in_sample_gross": null,
+    "p_holm": 1.0,
+    "checks": {
+     "sample": true,
+     "significant": false,
+     "ci_above_zero": false,
+     "high_cost_positive": false,
+     "not_concentrated": false,
+     "both_halves_positive": false,
+     "in_sample_direction": false
+    },
+    "verdict": "REJECTED"
+   },
+   "H6": {
+    "trades": 4385,
+    "weeks": 55,
+    "instruments": 99,
+    "mean_gross": 0.020161,
+    "mean_net": {
+     "zero": 0.020161,
+     "low": -0.014708,
+     "base": -0.097519,
+     "high": -0.234171
+    },
+    "t_base": -17.316029,
+    "p_base": 1.0,
+    "ci90_base": [
+     -0.108153,
+     -0.089162
+    ],
+    "win_pct_base": 36.077537,
+    "max_drawdown_base": 430.112867,
+    "max_instrument_share": null,
+    "max_month_share": null,
+    "halves_positive": false,
+    "exits": {
+     "stop": 1207,
+     "target": 451,
+     "time": 2727
+    },
+    "in_sample_gross": null,
+    "p_holm": 1.0,
+    "checks": {
+     "sample": true,
+     "significant": false,
+     "ci_above_zero": false,
+     "high_cost_positive": false,
+     "not_concentrated": false,
+     "both_halves_positive": false,
+     "in_sample_direction": false
+    },
+    "verdict": "REJECTED"
+   }
+  }
+ },
+ "not_applicable_instruments": {
+  "in_sample": {
+   "ATHERENERG": "only 103 complete sessions in window",
+   "ENRIN": "only 71 complete sessions in window"
+  },
+  "confirmation": {
+   "ATHERENERG": "only 0 complete sessions in window",
+   "DELHIVERY": "only 97 complete sessions in window",
+   "KAYNES": "only 0 complete sessions in window",
+   "JIOFIN": "only 0 complete sessions in window",
+   "ENRIN": "only 0 complete sessions in window",
+   "LICI": "only 102 complete sessions in window"
+  },
+  "contaminated": {}
+ },
+ "corporate_action_flags_confirmation": {
+  "ADANIPORTS": [
+   "2022-06-16",
+   "2024-11-21"
+  ],
+  "RELIANCE": [
+   "2022-06-16"
+  ],
+  "ICICIBANK": [
+   "2022-06-16"
+  ],
+  "BSE": [
+   "2021-12-28",
+   "2022-03-21",
+   "2022-06-16",
+   "2024-04-29",
+   "2024-08-08"
+  ],
+  "DMART": [
+   "2022-06-16",
+   "2024-10-14"
+  ],
+  "SBIN": [
+   "2022-06-16"
+  ],
+  "INFY": [
+   "2022-04-18",
+   "2022-06-16",
+   "2023-04-17"
+  ],
+  "APOLLOHOSP": [
+   "2022-06-16"
+  ],
+  "KOTAKBANK": [
+   "2024-04-25"
+  ],
+  "TCS": [
+   "2022-06-16"
+  ],
+  "AXISBANK": [
+   "2022-06-16"
+  ],
+  "MCX": [
+   "2022-06-16",
+   "2023-06-30",
+   "2026-02-01"
+  ],
+  "SUZLON": [
+   "2022-06-16",
+   "2022-10-03",
+   "2025-04-07",
+   "2025-05-30"
+  ],
+  "M&M": [
+   "2022-06-16"
+  ],
+  "BAJFINANCE": [
+   "2022-06-16"
+  ],
+  "SAIL": [
+   "2021-11-01",
+   "2022-06-16"
+  ],
+  "TATASTEEL": [
+   "2022-06-16"
+  ],
+  "INDUSINDBK": [
+   "2022-06-16",
+   "2024-10-25",
+   "2025-03-11"
+  ],
+  "LT": [
+   "2022-06-16"
+  ],
+  "IDEA": [
+   "2021-11-29",
+   "2022-01-11",
+   "2022-06-16",
+   "2024-04-25",
+   "2025-01-20",
+   "2025-04-01"
+  ],
+  "COALINDIA": [
+   "2022-03-22",
+   "2022-06-16"
+  ],
+  "NTPC": [
+   "2022-06-16"
+  ],
+  "ETERNAL": [
+   "2022-06-16"
+  ],
+  "ITC": [
+   "2022-06-16",
+   "2025-01-07"
+  ],
+  "POLYCAB": [
+   "2022-06-16",
+   "2024-01-11"
+  ],
+  "PAYTM": [
+   "2022-03-14",
+   "2022-06-16",
+   "2023-08-07",
+   "2023-12-07",
+   "2024-02-01",
+   "2024-02-02",
+   "2024-02-05",
+   "2024-02-06"
+  ],
+  "MARUTI": [
+   "2022-06-16"
+  ],
+  "BHEL": [
+   "2022-06-16"
+  ],
+  "DIVISLAB": [
+   "2022-06-16"
+  ],
+  "TITAN": [
+   "2022-06-16"
+  ],
+  "BEL": [
+   "2024-05-21"
+  ],
+  "POLICYBZR": [
+   "2022-06-16",
+   "2026-09-24"
+  ],
+  "HCLTECH": [
+   "2022-06-16"
+  ],
+  "ADANIENT": [
+   "2022-06-14",
+   "2022-06-16",
+   "2023-02-02",
+   "2024-11-21"
+  ],
+  "LAURUSLABS": [
+   "2022-06-16",
+   "2024-01-25"
+  ],
+  "KALYANKJIL": [
+   "2022-06-16"
+  ],
+  "OFSS": [
+   "2022-06-16",
+   "2024-01-18"
+  ],
+  "VEDL": [
+   "2022-05-06",
+   "2022-06-16"
+  ],
+  "TVSMOTOR": [
+   "2022-06-16"
+  ],
+  "EICHERMOT": [
+   "2022-06-16"
+  ],
+  "TMPV": [
+   "2021-10-13",
+   "2022-06-16",
+   "2025-10-15"
+  ],
+  "TATAELXSI": [
+   "2022-06-16"
+  ],
+  "SOLARINDS": [
+   "2021-10-11",
+   "2022-06-16",
+   "2024-12-03"
+  ],
+  "HAL": [
+   "2022-06-16"
+  ],
+  "ADANIPOWER": [
+   "2022-06-16",
+   "2023-12-04",
+   "2024-06-03",
+   "2024-11-21",
+   "2025-04-07"
+  ],
+  "ULTRACEMCO": [
+   "2022-06-16"
+  ],
+  "COFORGE": [
+   "2022-06-16",
+   "2024-05-03"
+  ],
+  "HINDALCO": [
+   "2022-06-16"
+  ],
+  "PFC": [
+   "2022-06-16"
+  ],
+  "DIXON": [
+   "2022-06-16"
+  ],
+  "INDUSTOWER": [
+   "2022-06-16"
+  ],
+  "PNBHOUSING": [
+   "2022-06-16",
+   "2023-04-05",
+   "2025-08-01"
+  ],
+  "BHARATFORG": [
+   "2022-06-16"
+  ],
+  "DRREDDY": [
+   "2022-06-16"
+  ],
+  "RECLTD": [
+   "2022-06-16",
+   "2022-08-17"
+  ],
+  "AUROPHARMA": [
+   "2022-06-16"
+  ],
+  "POWERINDIA": [
+   "2022-06-16",
+   "2025-01-30",
+   "2025-04-07",
+   "2026-02-06"
+  ],
+  "LICHSGFIN": [
+   "2022-06-16"
+  ],
+  "ANGELONE": [
+   "2022-06-16",
+   "2024-01-16",
+   "2024-04-18",
+   "2024-07-02"
+  ],
+  "TORNTPHARM": [
+   "2022-06-16"
+  ],
+  "ADANIGREEN": [
+   "2022-06-16",
+   "2023-01-30",
+   "2023-02-02",
+   "2023-02-03",
+   "2023-12-04",
+   "2023-12-06",
+   "2024-11-21"
+  ],
+  "ANANDRATHI": [
+   "2022-06-16",
+   "2024-07-22"
+  ],
+  "PERSISTENT": [
+   "2022-06-16"
+  ],
+  "TRENT": [
+   "2022-06-16",
+   "2025-07-04",
+   "2026-10-06"
+  ],
+  "CHOLAFIN": [
+   "2022-06-16"
+  ],
+  "SHRIRAMFIN": [
+   "2022-06-16",
+   "2023-06-21"
+  ],
+  "ASHOKLEY": [
+   "2022-06-16"
+  ],
+  "NESTLEIND": [
+   "2022-06-16"
+  ],
+  "MAXHEALTH": [
+   "2022-06-16"
+  ],
+  "VBL": [
+   "2022-06-16",
+   "2023-12-20"
+  ],
+  "HINDPETRO": [
+   "2022-06-16"
+  ],
+  "FEDERALBNK": [
+   "2022-06-16"
+  ],
+  "SONACOMS": [
+   "2022-06-16"
+  ],
+  "GMRAIRPORT": [
+   "2022-06-16"
+  ],
+  "MANAPPURAM": [
+   "2022-05-19",
+   "2022-06-16",
+   "2024-10-18"
+  ],
+  "GLENMARK": [
+   "2022-06-16",
+   "2024-11-12",
+   "2025-07-11"
+  ],
+  "HEROMOTOCO": [
+   "2022-06-16"
+  ],
+  "UPL": [
+   "2022-06-16"
+  ],
+  "POWERGRID": [
+   "2022-06-16"
+  ],
+  "INDHOTEL": [
+   "2022-06-16"
+  ],
+  "GAIL": [
+   "2022-06-16"
+  ],
+  "DLF": [
+   "2022-06-16"
+  ],
+  "RBLBANK": [
+   "2021-12-27",
+   "2022-06-13",
+   "2022-06-16"
+  ],
+  "ABB": [
+   "2022-06-16"
+  ]
+ },
+ "cost_scenarios_pct": {
+  "zero": {
+   "fees": 0.0,
+   "slippage_per_market_fill": 0.0,
+   "spread_multiple": 0.0
+  },
+  "low": {
+   "fees": 0.02,
+   "slippage_per_market_fill": 0.0,
+   "spread_multiple": 0.5
+  },
+  "base": {
+   "fees": 0.05,
+   "slippage_per_market_fill": 0.02,
+   "spread_multiple": 1.0
+  },
+  "high": {
+   "fees": 0.1,
+   "slippage_per_market_fill": 0.05,
+   "spread_multiple": 2.0
+  }
+ },
+ "note": "A hypothesis that is not CONFIRMED means no edge was established under the pre-registered test. It does not prove that no edge exists: the test can only detect effects above its minimum detectable effect."
+}
