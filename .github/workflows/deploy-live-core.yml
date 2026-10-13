@@ -30,7 +30,7 @@ on:
       action:
         description: status (read-only), rehearse (off-hours, read-only) or deploy
         type: choice
-        options: [status, rehearse, index-test, option-probe, volume-rank, pattern-scan, pattern-mine, behaviour-discovery, behaviour-posthoc, history-probe, deploy]
+        options: [status, rehearse, index-test, option-probe, volume-rank, pattern-scan, pattern-mine, behaviour-discovery, behaviour-posthoc, history-probe, confirm-preflight, behaviour-confirm, deploy]
         default: status
       target:
         description: Which node(s)
@@ -102,7 +102,7 @@ jobs:
   operate:
     needs: test
     # status skips the test job; deploy requires it to pass.
-    if: ${{ always() && inputs.action != 'behaviour-discovery' && inputs.action != 'behaviour-posthoc' && (needs.test.result == 'success' || (inputs.action != 'deploy' && needs.test.result == 'skipped')) }}
+    if: ${{ always() && inputs.action != 'behaviour-discovery' && inputs.action != 'behaviour-posthoc' && inputs.action != 'behaviour-confirm' && (needs.test.result == 'success' || (inputs.action != 'deploy' && needs.test.result == 'skipped')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -222,7 +222,7 @@ jobs:
           }
 
           index_test_node() {
-            local node="$1" host="$2" script="${3:-index_trap_test.py}" maxsec="${4:-1800}" user
+            local node="$1" host="$2" script="${3:-index_trap_test.py}" maxsec="${4:-1800}" extra="${5:-}" user
             echo "================ research script ${script} on node ${node} (RAM only, no orders) ================"
             user="$(login_user "$node" "$host")" || return 1
             local root="/home/${user}/psygrid-live-core"
@@ -233,7 +233,7 @@ jobs:
                 --uid='${user}' --gid='${user}' -p WorkingDirectory='${root}/current' \
                 -p EnvironmentFile=/etc/psygrid-live-core.env -p EnvironmentFile=-/etc/psygrid-live-core-node.env \
                 -E LIVE_CORE_NODE_ID='${node}' -E LIVE_CORE_NODE_COUNT='${NODE_COUNT}' -E PYTHONUNBUFFERED=1 \
-                -E PYTHONDONTWRITEBYTECODE=1 -E YEARS=4 -p RuntimeMaxSec=${maxsec} -p MemoryMax=400M \
+                -E PYTHONDONTWRITEBYTECODE=1 -E YEARS=4 ${extra} -p RuntimeMaxSec=${maxsec} -p MemoryMax=400M \
                 '${root}/venv/bin/python' '${root}/${script}'; rc=\$?; rm -f '${root}/${script}'; exit \$rc" || return 1
           }
 
@@ -298,6 +298,12 @@ jobs:
               [ "$node" = 0 ] && { index_test_node "$node" "$host" pattern_mine.py 4800 || failed="$failed $node"; }
             elif [ "$ACTION" = history-probe ]; then
               [ "$node" = 0 ] && { index_test_node "$node" "$host" history_probe.py 300 || failed="$failed $node"; }
+            elif [ "$ACTION" = confirm-preflight ]; then
+              # no Dhan request and no token read: live-service health, node memory/CPU/load, request plan
+              if [ "$node" = 0 ]; then
+                echo "runner: $(nproc) CPUs, $(free -m | awk '/^Mem:/ {print $2 " MB total, " $7 " MB available"}')"
+                index_test_node "$node" "$host" behaviour_fetch.py 120 "-E PREFLIGHT=1 -E START=2021-10-01 -E END=2026-10-12" || failed="$failed $node"
+              fi
             else
               status_node "$node" "$host" || failed="$failed $node"
             fi
@@ -392,6 +398,109 @@ jobs:
           git config user.email "psygrid-research@users.noreply.github.com"
           git add "$OUT"
           git commit -m "Behaviour discovery results (run ${GITHUB_RUN_ID}): aggregate statistics only"
+          for i in 1 2 3; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && break
+            sleep $((i * 5))
+          done
+
+  # Pre-registered confirmation (research, read-only; docs/research/behaviour/PREREGISTRATION.md).
+  # Refuses inside weekday 08:45-15:45 IST, refuses if any pre-registered file differs from
+  # prereg.lock, fetches 2021-10-01 .. 2026-10-12 1-minute candles on node 0 at low priority (the
+  # fetcher stops on HTTP 429, a request cap, low node memory, live-service health or market hours)
+  # and analyses them in this runner's RAM. Commits aggregates and integrity summaries only.
+  behaviour-confirm:
+    if: ${{ inputs.action == 'behaviour-confirm' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 170
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Refuse during the live service's market hours
+        run: |
+          set -euo pipefail
+          now="$(TZ=Asia/Kolkata date +%u%H%M)"
+          day="${now:0:1}"; hhmm="${now:1}"
+          if [ "$day" -le 5 ] && [ "$hhmm" -ge 0845 ] && [ "$hhmm" -lt 1545 ]; then
+            echo "It is $(TZ=Asia/Kolkata date) - inside 08:45-15:45 IST on a weekday. Run after 15:45 IST."
+            exit 1
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+
+      - name: Install analysis dependencies
+        run: python -m pip install numpy==2.3.3 pytest requests
+
+      - name: Verify the pre-registration lock
+        run: python -m research.behaviour.lockcheck
+
+      - name: Tests (frozen definitions, causality, execution, integrity audit, fetch safety)
+        run: python -m pytest -q tests/test_behaviour.py tests/test_behaviour_prereg.py tests/test_behaviour_integrity.py tests/test_behaviour_fetch_safety.py
+
+      - name: Runner resources
+        run: |
+          echo "runner: $(nproc) CPUs"; free -m
+          avail="$(free -m | awk '/^Mem:/ {print $7}')"
+          [ "$avail" -ge 5000 ] || { echo "runner has only ${avail} MB available; need 5000"; exit 1; }
+
+      - name: Fetch on node 0 and analyse here
+        env:
+          NODE0_SSH_KEY: ${{ secrets.LIVE_CORE_NODE0_SSH_KEY }}
+          SSH_USER_OVERRIDE: ${{ vars.LIVE_CORE_SSH_USER }}
+        run: |
+          set -uo pipefail
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          trap 'rm -f ~/.ssh/live_core_node0' EXIT
+          ( umask 077 && printf '%s\n' "$NODE0_SSH_KEY" > ~/.ssh/live_core_node0 )
+          unset NODE0_SSH_KEY
+          opts="-i $HOME/.ssh/live_core_node0 -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=30 -o ServerAliveCountMax=10"
+          ssh-keyscan -H "$NODE0_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          user=""
+          for u in $SSH_USER_OVERRIDE ubuntu opc; do
+            # shellcheck disable=SC2086
+            if ssh $opts "${u}@${NODE0_HOST}" true 2>/dev/null; then user="$u"; break; fi
+          done
+          [ -n "$user" ] || { echo "cannot log in to node 0"; exit 1; }
+          root="/home/${user}/psygrid-live-core"
+          out="research/behaviour/results/confirm-${GITHUB_RUN_ID}"
+          echo "OUT=$out" >> "$GITHUB_ENV"
+          # shellcheck disable=SC2086
+          scp $opts deploy/live-core/behaviour_fetch.py "${user}@${NODE0_HOST}:${root}/behaviour_fetch.py" || exit 1
+          # Low priority on the node: CPU quota, nice, idle I/O; 400 MB memory cap; 2 h hard limit.
+          # shellcheck disable=SC2086
+          ssh $opts "${user}@${NODE0_HOST}" "sudo systemd-run --quiet --wait --pipe --collect \
+              --uid='${user}' --gid='${user}' -p WorkingDirectory='${root}/current' \
+              -p EnvironmentFile=/etc/psygrid-live-core.env -p EnvironmentFile=-/etc/psygrid-live-core-node.env \
+              -E LIVE_CORE_NODE_ID=0 -E LIVE_CORE_NODE_COUNT=${NODE_COUNT} -E PYTHONUNBUFFERED=1 \
+              -E PYTHONDONTWRITEBYTECODE=1 -E START=2021-10-01 -E END=2026-10-12 -E MAX_REQUESTS=2600 \
+              -E HEALTH_URL=http://127.0.0.1:${PORT}/health/node \
+              -p RuntimeMaxSec=7200 -p MemoryMax=400M -p CPUQuota=50% -p Nice=10 -p IOSchedulingClass=idle \
+              '${root}/venv/bin/python' '${root}/behaviour_fetch.py'; rc=\$?; rm -f '${root}/behaviour_fetch.py'; exit \$rc" \
+            | python -m research.behaviour.confirm_run --stream - --out "$out"
+          rc=("${PIPESTATUS[@]}")
+          echo "fetch exit ${rc[0]}, analysis exit ${rc[1]}"
+          [ "${rc[1]}" = 0 ] || exit 1
+
+      - name: Upload the session audit and results
+        if: ${{ always() && env.OUT != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: confirm-results-${{ github.run_id }}
+          path: ${{ env.OUT }}
+          retention-days: 30
+
+      - name: Commit aggregates and integrity summaries (also when aborted)
+        if: ${{ always() && env.OUT != '' }}
+        run: |
+          set -euo pipefail
+          [ -f "$OUT/summary.json" ] || { echo "no summary written"; exit 0; }
+          git config user.name "psygrid-research"
+          git config user.email "psygrid-research@users.noreply.github.com"
+          git add "$OUT"
+          git commit -m "Pre-registered confirmation run ${GITHUB_RUN_ID}: aggregates and integrity summaries only"
           for i in 1 2 3; do
             git pull --rebase origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && break
             sleep $((i * 5))
