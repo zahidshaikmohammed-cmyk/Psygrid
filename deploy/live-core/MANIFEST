@@ -24,6 +24,7 @@ feed.py
 instrument_master.py
 output.py
 runtime_guard.py
+token_share.py
 health_monitor.py
 stocks.json
 deploy/live-core/requirements.txt

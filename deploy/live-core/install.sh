@@ -20,6 +20,15 @@ PORT="${PORT:-10000}"
 PEERS="${PEERS:-}"
 # The account's Dhan token authority (the full PSYGRID on the private network); see live_core/auth.py.
 TOKEN_SOURCE="${TOKEN_SOURCE:-}"
+# Exactly one node may generate the account's token (PIN + TOTP in /etc/psygrid-live-core.env) and
+# share it with the other nodes' private IPs; the others set TOKEN_SOURCE to that node.
+TOKEN_GENERATION="${TOKEN_GENERATION:-0}"
+TOKEN_SHARE_CLIENTS="${TOKEN_SHARE_CLIENTS:-}"
+case "$TOKEN_GENERATION" in 0|1) ;; *) echo "TOKEN_GENERATION must be 0 or 1" >&2; exit 2;; esac
+if [ "$TOKEN_GENERATION" = 1 ] && [ -n "$TOKEN_SOURCE" ]; then
+  echo "a token-generating node must not also take its token from TOKEN_SOURCE" >&2
+  exit 2
+fi
 SWAP_MB="${SWAP_MB:-1024}"
 RELEASE_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 UNIT="psygrid-live-core-node${NODE_ID}.service"
@@ -132,6 +141,8 @@ cat > /etc/psygrid-live-core-node.env <<TOPOLOGY
 LIVE_CORE_PORT=${PORT}
 LIVE_CORE_PEERS=${PEERS}
 LIVE_CORE_TOKEN_SOURCE=${TOKEN_SOURCE}
+LIVE_CORE_TOKEN_GENERATION=${TOKEN_GENERATION}
+PSYGRID_TOKEN_SHARE_CLIENTS=${TOKEN_SHARE_CLIENTS}
 TOPOLOGY
 
 # 6. Exactly one Live Core node per VM: retire any other node unit left on this host.

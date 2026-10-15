@@ -135,8 +135,12 @@ jobs:
           NODE1_URL: ${{ vars.LIVE_CORE_NODE1_PRIVATE_URL }}
           RELEASE: ${{ github.sha }}
           ALLOW_CONFIG_ERROR: ${{ inputs.allow_missing_credentials }}
-          # The full PSYGRID on the private network is the account's only Dhan token authority.
-          TOKEN_SOURCE: ${{ vars.LIVE_CORE_TOKEN_SOURCE || 'http://10.0.0.10:10000' }}
+          # Node 0 is the account's only Dhan token generator (PIN + TOTP) and shares the token with
+          # node 1 over the private network. Used only by deploy, to (re)write node 0's credentials;
+          # never printed.
+          DHAN_CLIENT_ID: ${{ secrets.DHAN_CLIENT_ID }}
+          DHAN_PIN: ${{ secrets.DHAN_PIN }}
+          DHAN_TOTP_SECRET: ${{ secrets.DHAN_TOTP_SECRET }}
         run: |
           set -euo pipefail
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
@@ -237,13 +241,34 @@ jobs:
                 '${root}/venv/bin/python' '${root}/${script}'; rc=\$?; rm -f '${root}/${script}'; exit \$rc" || return 1
           }
 
+          # Node 0's Dhan credentials: from the DHAN_* secrets when set (written root-only, never echoed),
+          # otherwise they must already be in its /etc/psygrid-live-core.env. A stale shared
+          # DHAN_ACCESS_TOKEN is removed so the node generates its own.
+          node0_credentials() {
+            local host="$1" user="$2"
+            if [ -n "${DHAN_CLIENT_ID}" ] && [ -n "${DHAN_PIN}" ] && [ -n "${DHAN_TOTP_SECRET}" ]; then
+              # shellcheck disable=SC2046
+              printf 'DHAN_CLIENT_ID=%s\nDHAN_PIN=%s\nDHAN_TOTP_SECRET=%s\n' "$DHAN_CLIENT_ID" "$DHAN_PIN" "$DHAN_TOTP_SECRET" \
+                | ssh $(ssh_opts 0) "${user}@${host}" "sudo sh -c 'umask 077
+                    f=/etc/psygrid-live-core.env; touch \$f
+                    grep -vE \"^[[:space:]]*(DHAN_CLIENT_ID|DHAN_PIN|DHAN_TOTP_SECRET|DHAN_ACCESS_TOKEN|DHAN_TOKEN_VAR)=\" \$f > \$f.new || true
+                    cat >> \$f.new; chown root:root \$f.new; chmod 600 \$f.new; mv \$f.new \$f'" || return 1
+              echo "node 0 credentials written from the DHAN_* secrets"
+            fi
+            # shellcheck disable=SC2046
+            ssh $(ssh_opts 0) "${user}@${host}" "for v in DHAN_CLIENT_ID DHAN_PIN DHAN_TOTP_SECRET; do
+                sudo grep -Eq \"^[[:space:]]*\$v=.+\" /etc/psygrid-live-core.env || { echo \"node 0 has no \$v\"; exit 1; }; done" \
+              || { echo "node 0 needs DHAN_CLIENT_ID, DHAN_PIN and DHAN_TOTP_SECRET (repository secrets or its env file)"; return 1; }
+          }
+
           deploy_node() {
-            local node="$1" host="$2" peers="$3" user
-            echo "=== deploy node ${node} -> ${host} (peers: ${peers}) ==="
+            local node="$1" host="$2" peers="$3" token_source="$4" token_generation="$5" share_clients="$6" user
+            echo "=== deploy node ${node} -> ${host} (peers: ${peers}; token: generate=${token_generation} source=${token_source:-none}) ==="
             # Called as `deploy_node ... || failed=...`, where set -e does not apply: check every step.
             user="$(login_user "$node" "$host")" || return 1
             local root="/home/${user}/psygrid-live-core"
             local dir="${root}/releases/${RELEASE}"
+            if [ "$token_generation" = 1 ]; then node0_credentials "$host" "$user" || return 1; fi
             # shellcheck disable=SC2046
             ssh $(ssh_opts "$node") "${user}@${host}" "mkdir -p '${dir}'" || return 1
             # shellcheck disable=SC2046
@@ -252,7 +277,8 @@ jobs:
             ssh $(ssh_opts "$node") "${user}@${host}" "set -euo pipefail
               cd '${dir}' && tar xzf live-core.tgz && rm -f live-core.tgz
               sudo NODE_ID='${node}' NODE_COUNT='${NODE_COUNT}' APP_USER='${user}' LIVE_CORE_ROOT='${root}' \\
-                   PORT='${PORT}' PEERS='${peers}' TOKEN_SOURCE='${TOKEN_SOURCE}' bash deploy/live-core/install.sh
+                   PORT='${PORT}' PEERS='${peers}' TOKEN_SOURCE='${token_source}' TOKEN_GENERATION='${token_generation}' \\
+                   TOKEN_SHARE_CLIENTS='${share_clients}' bash deploy/live-core/install.sh
               if ! python3 deploy/live-core/check_health.py node http://127.0.0.1:${PORT} \\
                    --expect-node '${node}' --node-count '${NODE_COUNT}' ${health_flags}; then
                 sudo journalctl -u psygrid-live-core-node${node} -n 60 --no-pager
@@ -273,6 +299,16 @@ jobs:
             if [ -z "$NODE0_URL" ] && [ -f ~/.ssh/live_core_node0 ]; then NODE0_URL="$(private_url 0 "$NODE0_HOST" || true)"; fi
             if [ -z "$NODE1_URL" ] && [ -f ~/.ssh/live_core_node1 ]; then NODE1_URL="$(private_url 1 "$NODE1_HOST" || true)"; fi
           fi
+          NODE0_IP="" NODE1_IP=""
+          if [ "$ACTION" = deploy ]; then
+            # The token is shared only over the private network: both private IPs are required.
+            NODE0_IP="$(private_url 0 "$NODE0_HOST" | sed -E 's#^http://([0-9.]+):.*#\1#' || true)"
+            NODE1_IP="$(private_url 1 "$NODE1_HOST" | sed -E 's#^http://([0-9.]+):.*#\1#' || true)"
+            if ! [[ "$NODE0_IP" =~ ^10\.|^172\.|^192\.168\. ]] || ! [[ "$NODE1_IP" =~ ^10\.|^172\.|^192\.168\. ]]; then
+              echo "cannot determine both nodes' private IPs (node 0: '${NODE0_IP}', node 1: '${NODE1_IP}')"; exit 1
+            fi
+            echo "token: node 0 (${NODE0_IP}) generates it and shares it with node 1 (${NODE1_IP})"
+          fi
           NODE0_URL="${NODE0_URL:-http://${NODE0_HOST}:${PORT}}"
           NODE1_URL="${NODE1_URL:-http://${NODE1_HOST}:${PORT}}"
           echo "peer URLs: node 0 ${NODE0_URL}, node 1 ${NODE1_URL}"
@@ -283,7 +319,11 @@ jobs:
             case "$TARGET" in both|node${node}) ;; *) continue ;; esac
             if [ "$node" = 0 ]; then host="$NODE0_HOST"; peers="1=${NODE1_URL}"; else host="$NODE1_HOST"; peers="0=${NODE0_URL}"; fi
             if [ "$ACTION" = deploy ]; then
-              deploy_node "$node" "$host" "$peers" || failed="$failed $node"
+              if [ "$node" = 0 ]; then
+                deploy_node 0 "$host" "$peers" "" 1 "${NODE1_IP}" || failed="$failed 0"
+              else
+                deploy_node 1 "$host" "$peers" "http://${NODE0_IP}:${PORT}" 0 "" || failed="$failed 1"
+              fi
             elif [ "$ACTION" = rehearse ]; then
               rehearse_node "$node" "$host" || failed="$failed $node"
             elif [ "$ACTION" = index-test ]; then

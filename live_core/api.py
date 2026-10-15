@@ -43,6 +43,7 @@ from live_core.render import (
     tail_parts,
 )
 from runtime_guard import ServiceWatchdog, http_probe
+from token_share import allowed_clients, token_share
 
 NO_CACHE_HEADERS = {
     "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
@@ -443,6 +444,21 @@ def create_app(runtime, *, start_runtime: bool = True) -> FastAPI:
     @app.get("/", response_class=Response)
     def root(request: Request) -> Response:
         return _respond(request, json_body(root_payload(runtime)))
+
+    # Only the node that generates the account's Dhan token (LIVE_CORE_TOKEN_GENERATION=1) shares it,
+    # and only with the other nodes' private IPs in PSYGRID_TOKEN_SHARE_CLIENTS (token_share.py).
+    share_clients = allowed_clients() if runtime.cfg.token_generation else frozenset()
+
+    @app.get("/internal/dhan-token", response_class=Response)
+    def internal_dhan_token(request: Request) -> Response:
+        client = request.client.host if request.client else None
+        status_code, payload = token_share(runtime.settings, client, request.headers, share_clients)
+        return Response(
+            orjson.dumps(payload),
+            status_code=status_code,
+            media_type="application/json",
+            headers={"Cache-Control": "no-store"},
+        )
 
     @app.get("/health/node", response_class=Response)
     def node_health(request: Request) -> Response:
