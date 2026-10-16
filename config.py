@@ -17,6 +17,22 @@ from instrument_master import fetch_nse_equity_security_ids
 # behavior must not change because a stale/leftover environment variable
 # is present from an earlier experiment.
 UNIVERSE_SIZE = 989
+
+
+def _alternate_universe_size() -> int | None:
+    """Size of an explicitly selected alternate universe file (``PSYGRID_STOCKS_FILE``, e.g. the
+    F&O-only ``stocks_fno.json`` a Live Core stock node serves); ``None`` for the default 989."""
+    raw = os.getenv("PSYGRID_STOCKS_FILE", "").strip()
+    if not raw or Path(raw).name == "stocks.json":
+        return None
+    try:
+        symbols = json.loads(Path(raw).read_text(encoding="utf-8")).get("symbols")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return len(symbols) if isinstance(symbols, list) and symbols else None
+
+
+UNIVERSE_SIZE = _alternate_universe_size() or UNIVERSE_SIZE
 TIMEZONE = "Asia/Kolkata"
 MARKET_START = "09:15"
 MARKET_END = "15:15"

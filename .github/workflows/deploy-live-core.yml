@@ -30,7 +30,7 @@ on:
       action:
         description: status (read-only), rehearse (off-hours, read-only) or deploy
         type: choice
-        options: [status, rehearse, index-test, option-probe, volume-rank, pattern-scan, pattern-mine, behaviour-discovery, behaviour-posthoc, history-probe, confirm-preflight, behaviour-confirm, deploy]
+        options: [status, rehearse, index-test, option-probe, volume-rank, pattern-scan, pattern-mine, behaviour-discovery, behaviour-posthoc, history-probe, confirm-preflight, behaviour-confirm, fno-universe, deploy]
         default: status
       target:
         description: Which node(s)
@@ -55,7 +55,9 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  NODE_COUNT: "2"
+  # Node 0 alone serves the F&O stocks (stocks_fno.json); node 1 is the index node, not a stock node.
+  NODE_COUNT: "1"
+  STOCKS_FILE: stocks_fno.json
   PORT: "10000"
   NODE0_HOST: ${{ vars.LIVE_CORE_NODE0_HOST || '129.225.112.47' }}
   NODE1_HOST: ${{ vars.LIVE_CORE_NODE1_HOST || '140.245.228.101' }}
@@ -102,7 +104,7 @@ jobs:
   operate:
     needs: test
     # status skips the test job; deploy requires it to pass.
-    if: ${{ always() && inputs.action != 'behaviour-discovery' && inputs.action != 'behaviour-posthoc' && inputs.action != 'behaviour-confirm' && (needs.test.result == 'success' || (inputs.action != 'deploy' && needs.test.result == 'skipped')) }}
+    if: ${{ always() && inputs.action != 'behaviour-discovery' && inputs.action != 'behaviour-posthoc' && inputs.action != 'behaviour-confirm' && inputs.action != 'fno-universe' && (needs.test.result == 'success' || (inputs.action != 'deploy' && needs.test.result == 'skipped')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -262,8 +264,8 @@ jobs:
           }
 
           deploy_node() {
-            local node="$1" host="$2" peers="$3" token_source="$4" token_generation="$5" share_clients="$6" user
-            echo "=== deploy node ${node} -> ${host} (peers: ${peers}; token: generate=${token_generation} source=${token_source:-none}) ==="
+            local node="$1" host="$2" peers="$3" token_source="$4" token_generation="$5" share_clients="$6" mode="$7" user
+            echo "=== deploy node ${node} -> ${host} (${mode}; token: generate=${token_generation} source=${token_source:-none}) ==="
             # Called as `deploy_node ... || failed=...`, where set -e does not apply: check every step.
             user="$(login_user "$node" "$host")" || return 1
             local root="/home/${user}/psygrid-live-core"
@@ -278,8 +280,14 @@ jobs:
               cd '${dir}' && tar xzf live-core.tgz && rm -f live-core.tgz
               sudo NODE_ID='${node}' NODE_COUNT='${NODE_COUNT}' APP_USER='${user}' LIVE_CORE_ROOT='${root}' \\
                    PORT='${PORT}' PEERS='${peers}' TOKEN_SOURCE='${token_source}' TOKEN_GENERATION='${token_generation}' \\
-                   TOKEN_SHARE_CLIENTS='${share_clients}' bash deploy/live-core/install.sh
-              if ! python3 deploy/live-core/check_health.py node http://127.0.0.1:${PORT} \\
+                   TOKEN_SHARE_CLIENTS='${share_clients}' MODE='${mode}' STOCKS_FILE='${STOCKS_FILE}' bash deploy/live-core/install.sh
+              if [ '${mode}' = index ]; then
+                for i in \$(seq 1 20); do curl -fsS -m 5 http://127.0.0.1:${PORT}/health >/dev/null 2>&1 && break; sleep 2; done
+                if ! curl -fsS -m 5 http://127.0.0.1:${PORT}/health | head -c 1500; then
+                  sudo journalctl -u psygrid-index-node -n 60 --no-pager; exit 1
+                fi
+                echo
+              elif ! python3 deploy/live-core/check_health.py node http://127.0.0.1:${PORT} \\
                    --expect-node '${node}' --node-count '${NODE_COUNT}' ${health_flags}; then
                 sudo journalctl -u psygrid-live-core-node${node} -n 60 --no-pager
                 exit 1
@@ -320,9 +328,9 @@ jobs:
             if [ "$node" = 0 ]; then host="$NODE0_HOST"; peers="1=${NODE1_URL}"; else host="$NODE1_HOST"; peers="0=${NODE0_URL}"; fi
             if [ "$ACTION" = deploy ]; then
               if [ "$node" = 0 ]; then
-                deploy_node 0 "$host" "$peers" "" 1 "${NODE1_IP}" || failed="$failed 0"
+                deploy_node 0 "$host" "" "" 1 "${NODE1_IP}" stocks || failed="$failed 0"
               else
-                deploy_node 1 "$host" "$peers" "http://${NODE0_IP}:${PORT}" 0 "" || failed="$failed 1"
+                deploy_node 1 "$host" "" "http://${NODE0_IP}:${PORT}" 0 "" index || failed="$failed 1"
               fi
             elif [ "$ACTION" = rehearse ]; then
               rehearse_node "$node" "$host" || failed="$failed $node"
@@ -366,6 +374,8 @@ jobs:
           if [ "$ACTION" = deploy ] && [ "$TARGET" = both ]; then require="--require-reachable"; fi
           python3 deploy/live-core/check_health.py cluster "http://${NODE0_HOST}:${PORT}" --wait-seconds 20 $require || status=1
           python3 deploy/live-core/check_health.py live "http://${NODE0_HOST}:${PORT}" --wait-seconds 20 || status=1
+          # Node 1 is the index node (NIFTY, BANKNIFTY, SENSEX): its own health summary.
+          python3 deploy/live-core/check_index.py "http://${NODE1_HOST}:${PORT}" || status=1
           exit $status
 
   # Behaviour discovery (research, read-only): node 0 fetches candles with the token authority's token
@@ -541,6 +551,34 @@ jobs:
           git config user.email "psygrid-research@users.noreply.github.com"
           git add "$OUT"
           git commit -m "Pre-registered confirmation run ${GITHUB_RUN_ID}: aggregates and integrity summaries only"
+          for i in 1 2 3; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && break
+            sleep $((i * 5))
+          done
+
+  # Build stocks_fno.json (NSE stocks with stock options, from Dhan's public instrument master) on
+  # the runner and commit it. No token, no node, no market data.
+  fno-universe:
+    if: ${{ inputs.action == 'fno-universe' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - run: python -m pip install requests==2.32.5
+      - run: python deploy/live-core/fno_universe.py stocks_fno.json
+      - name: Commit stocks_fno.json
+        run: |
+          set -euo pipefail
+          git config user.name "psygrid-research"
+          git config user.email "psygrid-research@users.noreply.github.com"
+          git add stocks_fno.json
+          git diff --cached --quiet && { echo "unchanged"; exit 0; }
+          git commit -m "stocks_fno.json: NSE stocks with stock options (Dhan instrument master)"
           for i in 1 2 3; do
             git pull --rebase origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && break
             sleep $((i * 5))
