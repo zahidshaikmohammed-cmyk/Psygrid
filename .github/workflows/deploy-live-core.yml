@@ -83,7 +83,7 @@ jobs:
 
       - name: Live Core tests and the shared feed/runtime-guard/contract tests
         run: >
-          python -m pytest -q tests/live_core tests/test_runtime_guard.py tests/test_shard_contract.py
+          python -m pytest -q tests/live_core tests/test_runtime_guard.py tests/test_shard_contract.py tests/test_levels.py
           tests/test_universe.py tests/test_live_safety.py tests/test_feed_timestamp.py
 
       - name: Build the Live Core bundle (manifest files only)

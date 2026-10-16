@@ -61,6 +61,7 @@ from live_core.aggregate import PeerClient
 from live_core.config import LiveCoreConfig, LiveCoreConfigError
 from live_core.feed import LiveCoreFeed
 from live_core.history import HistoryWorker
+from live_core.levels_worker import LevelsWorker
 from live_core.metrics import MinuteSampler
 from live_core.partition import (
     Partition,
@@ -196,6 +197,7 @@ class LiveCoreRuntime:
         self.dhan_api = None
         self.feed: LiveCoreFeed | None = None
         self.history: HistoryWorker | None = None
+        self.levels: LevelsWorker | None = None
         self.watchdog = None
         # Called at session end, before memory is released (the API drops its cached bodies here).
         self.session_end_hooks: list = []
@@ -576,6 +578,11 @@ class LiveCoreRuntime:
                 self.state, self.dhan_api, self.settings, instruments, self.cfg.history_interval_seconds
             )
             self.history.start()
+            if self.cfg.levels_enabled:
+                self.levels = LevelsWorker(
+                    self.dhan_api, instruments, self.state.timezone, self.cfg.history_interval_seconds
+                )
+                self.levels.start()
             opened = now.replace(hour=self.market_start.hour, minute=self.market_start.minute, second=0, microsecond=0)
             if (
                 self.cfg.history_bootstrap
@@ -825,6 +832,10 @@ class LiveCoreRuntime:
                 self._set_supervisor("STOPPING", "session window closed")
             feed, self.feed = self.feed, None
             history, self.history = self.history, None
+            levels, self.levels = self.levels, None
+            if levels is not None:
+                with contextlib.suppress(Exception):
+                    levels.stop()
             if feed is not None:
                 with contextlib.suppress(Exception):
                     feed.stop()
@@ -967,6 +978,7 @@ class LiveCoreRuntime:
         if feed is not None:
             lifecycle.update(feed.lifecycle())
         history = self.history.status() if self.history is not None else None
+        levels_status = self.levels.status() if self.levels is not None else None
         in_hours = self.in_market(now)
         expected = self.partition.size
         reasons: list[str] = []
@@ -1094,6 +1106,7 @@ class LiveCoreRuntime:
             },
             "index_layer": {"available": False, "feed_status": {}, "error": "not part of the Live Core"},
             "history": history,
+            "levels": levels_status,
             "process": process,
             "memory": self.state.memory_summary(),
             "watchdog": watchdog,

@@ -99,6 +99,8 @@ class LiveCoreConfig:
     # Genuine Dhan 1m history for today only, after a mid-session (re)start or a feed gap.
     history_bootstrap: bool = True
     history_interval_seconds: float = 0.5
+    # Support/resistance levels: one daily-bar request per stock per session (live_core/levels_worker.py).
+    levels_enabled: bool = True
     # A minute's candle is published once its minute has ended plus this grace, without waiting
     # for the stock's next trade.
     finalize_grace_seconds: float = 3.0
@@ -141,6 +143,7 @@ class LiveCoreConfig:
             render_cache_seconds=_float(environ, "LIVE_CORE_RENDER_CACHE_SECONDS", 1.0),
             history_bootstrap=_flag(environ, "LIVE_CORE_HISTORY_BOOTSTRAP", True),
             history_interval_seconds=_float(environ, "LIVE_CORE_HISTORY_INTERVAL_SECONDS", 0.5),
+            levels_enabled=_flag(environ, "LIVE_CORE_LEVELS", True),
             finalize_grace_seconds=_float(environ, "LIVE_CORE_FINALIZE_GRACE_SECONDS", 3.0),
             http_threads=http_threads,
             max_rss_mb=_float(environ, "LIVE_CORE_MAX_RSS_MB", 600.0),

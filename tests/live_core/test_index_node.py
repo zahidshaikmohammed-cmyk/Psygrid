@@ -181,3 +181,14 @@ def test_index_auth_failure_refetches_the_shared_token_never_mints():
         return "ok"
 
     assert guard.call(chain) == "ok" and calls == [TOKEN, rotated]
+
+
+def test_index_levels_endpoint():
+    node = _node()
+    client = TestClient(create_app(node))
+    out = client.get("/public/levels/nifty.json").json()
+    assert out["symbol"] == "NIFTY" and out["ltp"] == 25075.0
+    assert out["reference"]["PDC"] == 25010.25 and out["reference"]["DAY_OPEN"] == 25050.0
+    assert all(lv["price"] <= 25075.0 for lv in out["supports"])
+    assert set(client.get("/public/levels.json").json()["levels"]) == {"NIFTY", "BANKNIFTY", "SENSEX"}
+    assert "levels" in client.get("/public/all.json").json()["indices"]["SENSEX"]
