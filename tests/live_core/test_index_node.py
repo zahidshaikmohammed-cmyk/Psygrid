@@ -157,4 +157,38 @@ def test_sensex_depth_comes_from_five_level_quotes():
     )
     snap = state.snapshot()
     assert snap["status"] == "LIVE" and snap["contracts"][0]["depth_source"] == "DHAN_QUOTE_5_LEVEL"
+    assert snap["depth_levels"] == 5 and snap["data_source"] == "DHAN_QUOTE_5_LEVEL"
+    nifty = IndexDepthState(settings, NIFTY).snapshot()
+    assert nifty["depth_levels"] == 20 and nifty["data_source"] == "DHAN_FULL_MARKET_DEPTH_WEBSOCKET"
     assert snap["contracts"][0]["bid"][0]["price"] == 101.5
+
+
+def test_index_auth_failure_refetches_the_shared_token_never_mints():
+    node = _node()
+    guard = node.options["NIFTY"]._auth
+    assert guard.refresher == node.token_source.refresher
+    rotated = TOKEN[:-4] + "NEWW"
+    node.token_source._get = lambda url, timeout: (
+        200,
+        {"status": "OK", "client_id": "1100000001", "access_token": rotated},
+    )
+    calls = []
+
+    def chain():
+        calls.append(node.settings.access_token)
+        if len(calls) == 1:
+            raise RuntimeError("Dhan API HTTP error: 401 Client Error: Unauthorized")
+        return "ok"
+
+    assert guard.call(chain) == "ok" and calls == [TOKEN, rotated]
+
+
+def test_index_levels_endpoint():
+    node = _node()
+    client = TestClient(create_app(node))
+    out = client.get("/public/levels/nifty.json").json()
+    assert out["symbol"] == "NIFTY" and out["ltp"] == 25075.0
+    assert out["reference"]["PDC"] == 25010.25 and out["reference"]["DAY_OPEN"] == 25050.0
+    assert all(lv["price"] <= 25075.0 for lv in out["supports"])
+    assert set(client.get("/public/levels.json").json()["levels"]) == {"NIFTY", "BANKNIFTY", "SENSEX"}
+    assert "levels" in client.get("/public/all.json").json()["indices"]["SENSEX"]

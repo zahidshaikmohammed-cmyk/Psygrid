@@ -29,6 +29,7 @@ import orjson
 from fastapi import FastAPI, HTTPException, Response
 
 import config as psygrid_config
+import levels as levels_mod
 from dhan_api import DhanAPI
 from index_depth import IndexDepthManager, index_depth_json
 from index_options import BANKNIFTY, NIFTY, SENSEX, IndexOptionsManager, OptionsInstrument, index_options_json
@@ -61,6 +62,7 @@ class IndexCandles:
         self.previous_close: float | None = None
         self.previous_close_date: str | None = None
         self.candles: list[dict] = []
+        self.major: dict | None = None  # levels.major_levels from the daily bars, once a day
         self.updated_at: str | None = None
         self.error = ""
         self.polls = 0
@@ -71,6 +73,7 @@ class IndexCandles:
             self.previous_close = None
             self.previous_close_date = None
             self.candles = []
+            self.major = None
             self.updated_at = None
             self.error = ""
 
@@ -140,6 +143,8 @@ class IndexNode:
         self.api = self.api_factory(self.settings)
         for spec in INDICES:
             options = IndexOptionsManager(self.settings, self.api, spec)
+            # Never mint a token here: an auth failure re-fetches the token node 0 holds.
+            options._auth.refresher = self.token_source.refresher
             self.options[spec.symbol] = options
             self.depth[spec.symbol] = IndexDepthManager(self.settings, self.api, options, spec)
             if self.start_managers:
@@ -197,15 +202,14 @@ class IndexNode:
             if state.session_date != today:
                 state.reset(today)
             try:
-                if state.previous_close is None:
-                    rows = self.api.daily(item, now - timedelta(days=15), now)
-                    prior = [r for r in rows if datetime.fromtimestamp(r["timestamp"], TZ).date() < now.date()]
+                if state.previous_close is None or state.major is None:
+                    rows = self.api.daily(item, now - timedelta(days=levels_mod.DAILY_LOOKBACK_CALENDAR_DAYS), now)
+                    prior = levels_mod.daily_rows_before(rows, now.date(), TZ)
                     if prior:
                         with state.lock:
-                            state.previous_close = float(prior[-1]["close"])
-                            state.previous_close_date = (
-                                datetime.fromtimestamp(prior[-1]["timestamp"], TZ).date().isoformat()
-                            )
+                            state.previous_close = prior[-1]["close"]
+                            state.previous_close_date = prior[-1]["date"].isoformat()
+                            state.major = levels_mod.major_levels(prior, now.date())
                 candles = self.api.load_today_completed_intraday(item, 1)
                 with state.lock:
                     if candles:
@@ -244,6 +248,26 @@ class IndexNode:
         if manager is None:
             return {"symbol": symbol, "status": "STARTING"}
         return index_depth_json(manager.state)
+
+    def levels_payload(self, symbol: str) -> dict:
+        """Major + intraday support/resistance (``levels``) and the option-chain OI walls."""
+        state = self.candles[symbol]
+        with state.lock:
+            candles = [
+                (int(c["timestamp"]), c["open"], c["high"], c["low"], c["close"], c.get("volume") or 0)
+                for c in state.candles
+            ]
+            major = state.major
+        analytics = self.options_payload(symbol).get("analytics")
+        intraday = levels_mod.intraday_levels(candles, major.get("week_prior_days") if major else None, TZ)
+        return levels_mod.build_levels(
+            symbol,
+            candles[-1][4] if candles else None,
+            major,
+            intraday,
+            levels_mod.option_levels(analytics),
+            as_of=self.now().isoformat(timespec="seconds"),
+        )
 
     def health(self) -> dict:
         now = self.now()
@@ -330,6 +354,8 @@ def create_app(node: IndexNode) -> FastAPI:
                     "/public/index/{nifty|banknifty|sensex}.json",
                     "/public/options/{nifty|banknifty|sensex}.json",
                     "/public/depth/{nifty|banknifty|sensex}.json",
+                    "/public/levels/{nifty|banknifty|sensex}.json",
+                    "/public/levels.json",
                     "/public/all.json",
                     "/health",
                 ],
@@ -357,12 +383,27 @@ def create_app(node: IndexNode) -> FastAPI:
     def depth(name: str) -> Response:
         return _json(node.depth_payload(_symbol(name)))
 
+    @app.get("/public/levels.json")
+    def all_levels() -> Response:
+        return _json(
+            {
+                "service": "PSYGRID",
+                "node": "INDEX",
+                "levels": {s.symbol: node.levels_payload(s.symbol) for s in INDICES},
+            }
+        )
+
+    @app.get("/public/levels/{name}")
+    def levels(name: str) -> Response:
+        return _json(node.levels_payload(_symbol(name)))
+
     @app.get("/public/all.json")
     def everything() -> Response:
         payload = node.live_payload()
         for spec in INDICES:
             payload["indices"][spec.symbol]["option_chain"] = node.options_payload(spec.symbol)
             payload["indices"][spec.symbol]["depth"] = node.depth_payload(spec.symbol)
+            payload["indices"][spec.symbol]["levels"] = node.levels_payload(spec.symbol)
         return _json(payload)
 
     return app

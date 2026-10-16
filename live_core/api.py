@@ -29,6 +29,7 @@ from fastapi.responses import StreamingResponse
 from live_core import SERVICE_NAME
 from live_core.aggregate import FRAGMENTS_PATH, PeerUnavailable, encode_fragments
 from live_core.gzipjoin import CompressedTail, gzip_join
+from live_core.levels_worker import LevelsView
 from live_core.metrics import HttpMetrics, MetricsMiddleware
 from live_core.partition import nodes_for_range, shard_ranges
 from live_core.render import (
@@ -394,6 +395,7 @@ def root_payload(runtime) -> dict:
         "live_endpoints": ["/public/live.json"]
         + [f"/public/live-{name}.json" for name, _, _ in shard_ranges(runtime.universe.size)],
         "stock_endpoint": "/public/stock/{SYMBOL}.json",
+        "levels_endpoints": ["/public/levels.json", "/public/levels/{SYMBOL}.json"],
         "latest_endpoint": "/public/live-latest.json?candles=5",
         "live_timeframes": ["1m"],
         "depth_enabled": False,
@@ -522,6 +524,21 @@ def create_app(runtime, *, start_runtime: bool = True) -> FastAPI:
             response_class=Response,
             name=f"public_live_{name}",
         )
+
+    levels_view = LevelsView(runtime)
+
+    @app.get("/public/levels.json", response_class=Response)
+    def public_levels(request: Request) -> Response:
+        return _respond(request, json_body(levels_view.everything()))
+
+    @app.get("/public/levels/{symbol}.json", response_class=Response)
+    def public_stock_levels(symbol: str, request: Request) -> Response:
+        payload = levels_view.one(symbol)
+        if payload is None:
+            return _respond(
+                request, json_body({"service": "PSYGRID", "symbol": symbol.upper(), "status": "NOT_FOUND"}, 404)
+            )
+        return _respond(request, json_body(payload))
 
     @app.get("/public/stock/{symbol}.json", response_class=Response)
     def public_stock(symbol: str, request: Request, local: int = Query(0, ge=0, le=1)) -> Response:

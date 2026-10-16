@@ -27,6 +27,7 @@ from index_options import (
 
 DEPTH_INSTRUMENT = "OPTIDX"
 DEPTH_LEVELS = 20
+QUOTE_DEPTH_LEVELS = 5
 DEPTH_MAX_INSTRUMENTS = 50
 DEPTH_NEAREST_STRIKES = 25
 DEPTH_RECONNECT_SECONDS = 3.0
@@ -138,6 +139,8 @@ class IndexDepthState:
             self.last_error = ""
 
     def snapshot(self) -> dict:
+        # Dhan's 20-level depth feed serves NSE contracts only; BSE (SENSEX) comes from 5-level quotes.
+        twenty = self.spec.fno_segment.startswith("NSE")
         with self.lock:
             market_open = _is_market_open(datetime.now(self.tz))
             rows = [_snapshot_row(row) for row in self.contracts.values()]
@@ -148,11 +151,11 @@ class IndexDepthState:
                 "status": self.status,
                 "market_status": "OPEN" if market_open else "CLOSED",
                 "market_open": market_open,
-                "data_source": "DHAN_FULL_MARKET_DEPTH_WEBSOCKET",
+                "data_source": "DHAN_FULL_MARKET_DEPTH_WEBSOCKET" if twenty else "DHAN_QUOTE_5_LEVEL",
                 "underlying_security_id": self.spec.security_id,
                 "exchange_segment": self.spec.fno_segment,
                 "instrument": DEPTH_INSTRUMENT,
-                "depth_levels": DEPTH_LEVELS,
+                "depth_levels": DEPTH_LEVELS if twenty else QUOTE_DEPTH_LEVELS,
                 "underlying_ltp": self.underlying_ltp,
                 "expiry": self.expiry,
                 "contract_count": len(rows),
