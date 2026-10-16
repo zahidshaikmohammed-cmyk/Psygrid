@@ -160,8 +160,13 @@ jobs:
             fi
             ( umask 077 && printf '%s\n' "$key" > ~/.ssh/live_core_node"${node}" )
           }
-          case "$TARGET" in both|node0) install_key 0 "$NODE0_SSH_KEY" ;; esac
-          case "$TARGET" in both|node1) install_key 1 "$NODE1_SSH_KEY" ;; esac
+          # A deploy needs both keys: the token wiring reads both nodes' private IPs.
+          if [ "$ACTION" = deploy ]; then
+            install_key 0 "$NODE0_SSH_KEY"; install_key 1 "$NODE1_SSH_KEY"
+          else
+            case "$TARGET" in both|node0) install_key 0 "$NODE0_SSH_KEY" ;; esac
+            case "$TARGET" in both|node1) install_key 1 "$NODE1_SSH_KEY" ;; esac
+          fi
           unset NODE0_SSH_KEY NODE1_SSH_KEY
 
           ssh_opts() { echo "-i $HOME/.ssh/live_core_node$1 -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=30 -o ServerAliveCountMax=6"; }
