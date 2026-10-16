@@ -157,4 +157,7 @@ def test_sensex_depth_comes_from_five_level_quotes():
     )
     snap = state.snapshot()
     assert snap["status"] == "LIVE" and snap["contracts"][0]["depth_source"] == "DHAN_QUOTE_5_LEVEL"
+    assert snap["depth_levels"] == 5 and snap["data_source"] == "DHAN_QUOTE_5_LEVEL"
+    nifty = IndexDepthState(settings, NIFTY).snapshot()
+    assert nifty["depth_levels"] == 20 and nifty["data_source"] == "DHAN_FULL_MARKET_DEPTH_WEBSOCKET"
     assert snap["contracts"][0]["bid"][0]["price"] == 101.5
