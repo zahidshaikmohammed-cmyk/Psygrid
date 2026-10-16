@@ -339,3 +339,66 @@ def test_consuming_node_never_shares_a_token(monkeypatch, universe, instruments)
         assert r.status_code == 404 and TOKEN not in r.text
     finally:
         runtime.stop()
+
+
+def test_token_authority_renews_a_token_dhan_rejects_on_rest(monkeypatch, universe, instruments):
+    """Node 0's websocket keeps streaming on a token Dhan has since rejected; its periodic REST check
+    generates one fresh token (spaced) and replaces the feed, so node 1 picks the new token up."""
+    from live_core_helpers import Clock, FakeDhanAPI, FakeFeed
+
+    _clear(monkeypatch)
+    clock = Clock(ist(9, 15))
+    api = FakeDhanAPI()
+    renewals = []
+
+    def refresher(settings, force=False):
+        if force:
+            renewals.append(1)
+            settings.access_token = TOKEN[:-4] + "REN" + str(len(renewals))
+
+    settings = type("S", (), {"client_id": "1100000001", "access_token": TOKEN, "token_source": "x"})()
+    runtime = LiveCoreRuntime(
+        LiveCoreConfig(node_id=0, node_count=1, history_interval_seconds=0.0, token_generation=True),
+        universe,
+        build_partition(universe, 0, 1),
+        instrument_loader=lambda: list(instruments),
+        api_factory=lambda s: api,
+        feed_factory=FakeFeed,
+        settings_loader=lambda: settings,
+        token_refresher=refresher,
+        now=clock.now,
+        clock=clock.epoch,
+    )
+    runtime._run_in_background = lambda target, *args: target(*args)
+    try:
+        runtime.tick()
+        assert runtime.state.session_status == "LIVE"
+        first_feed = runtime.feed
+        clock.set(ist(9, 16, 5))
+        runtime.tick()  # first check is one interval into the session
+        assert runtime.token_verifications == 0
+        clock.set(ist(9, 17, 6))
+        runtime.tick()  # token fine: verified, nothing renewed
+        assert runtime.token_verifications == 1 and renewals == []
+        api.verify_error = RuntimeError("Dhan profile HTTP error: 401 Client Error [DH-901: invalid]")
+        clock.set(ist(9, 18, 10))
+        runtime.tick()
+        assert renewals == [1] and runtime.token_self_renewals == 1
+        assert runtime.feed is not first_feed and runtime.settings.access_token.endswith("REN1")
+        clock.set(ist(9, 19, 15))
+        runtime.tick()  # still rejected: no second generation inside the spacing
+        assert renewals == [1]
+        status = runtime.supervisor_status()
+        assert status["token_self_renewals"] == 1 and TOKEN not in str(status)
+    finally:
+        runtime.stop()
+
+
+def test_dhan_error_code_is_kept_and_dh901_counts_as_auth():
+    from auth_retry import looks_like_auth_failure
+    from dhan_api import _dhan_error_code
+
+    response = type("R", (), {"json": lambda self: {"errorCode": "DH-901", "errorMessage": "Invalid token"}})()
+    text = "Dhan API HTTP error: 400 Client Error" + _dhan_error_code(response)
+    assert text.endswith("[DH-901: Invalid token]") and looks_like_auth_failure(RuntimeError(text))
+    assert not looks_like_auth_failure(RuntimeError("Dhan API HTTP error: 400 Client Error [DH-905: bad input]"))

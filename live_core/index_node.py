@@ -140,6 +140,8 @@ class IndexNode:
         self.api = self.api_factory(self.settings)
         for spec in INDICES:
             options = IndexOptionsManager(self.settings, self.api, spec)
+            # Never mint a token here: an auth failure re-fetches the token node 0 holds.
+            options._auth.refresher = self.token_source.refresher
             self.options[spec.symbol] = options
             self.depth[spec.symbol] = IndexDepthManager(self.settings, self.api, options, spec)
             if self.start_managers:

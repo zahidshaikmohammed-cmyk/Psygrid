@@ -17,6 +17,19 @@ INTRADAY_MIN_INTERVAL = 0.21
 OPTION_CHAIN_MIN_INTERVAL = 3.0
 
 
+def _dhan_error_code(response) -> str:
+    """Dhan's error code and message from a failed response (e.g. DH-901); never headers or the token."""
+    try:
+        body = response.json()
+    except Exception:
+        return ""
+    if not isinstance(body, dict):
+        return ""
+    code = str(body.get("errorCode") or "").strip()[:20]
+    message = str(body.get("errorMessage") or "").strip()[:120]
+    return f" [{code}: {message}]" if code or message else ""
+
+
 class DhanAPI:
     _rate_lock = threading.Lock()
     _last_post_at = 0.0
@@ -107,7 +120,7 @@ class DhanAPI:
                     continue
                 raise RuntimeError(f"Dhan API network failure: {exc}") from exc
             except requests.HTTPError as exc:
-                raise RuntimeError(f"Dhan API HTTP error: {exc}") from exc
+                raise RuntimeError(f"Dhan API HTTP error: {exc}{_dhan_error_code(exc.response)}") from exc
         raise RuntimeError(f"Dhan API failed: {last_error}")
 
     def option_expiry_list(self, item) -> list[str]:
@@ -136,7 +149,10 @@ class DhanAPI:
             headers={"Accept": "application/json", "access-token": self.settings.access_token},
             timeout=20,
         )
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            raise RuntimeError(f"Dhan profile HTTP error: {exc}{_dhan_error_code(response)}") from exc
         data = response.json()
         if not isinstance(data, dict):
             raise RuntimeError("Invalid Dhan profile response")

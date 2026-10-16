@@ -161,3 +161,23 @@ def test_sensex_depth_comes_from_five_level_quotes():
     nifty = IndexDepthState(settings, NIFTY).snapshot()
     assert nifty["depth_levels"] == 20 and nifty["data_source"] == "DHAN_FULL_MARKET_DEPTH_WEBSOCKET"
     assert snap["contracts"][0]["bid"][0]["price"] == 101.5
+
+
+def test_index_auth_failure_refetches_the_shared_token_never_mints():
+    node = _node()
+    guard = node.options["NIFTY"]._auth
+    assert guard.refresher == node.token_source.refresher
+    rotated = TOKEN[:-4] + "NEWW"
+    node.token_source._get = lambda url, timeout: (
+        200,
+        {"status": "OK", "client_id": "1100000001", "access_token": rotated},
+    )
+    calls = []
+
+    def chain():
+        calls.append(node.settings.access_token)
+        if len(calls) == 1:
+            raise RuntimeError("Dhan API HTTP error: 401 Client Error: Unauthorized")
+        return "ok"
+
+    assert guard.call(chain) == "ok" and calls == [TOKEN, rotated]

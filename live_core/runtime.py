@@ -98,6 +98,12 @@ RESET_SPACING_SECONDS = (0.0, 30.0, 60.0, 120.0, 300.0)
 PREPARE_AHEAD = timedelta(minutes=20)
 TRIM_INTERVAL_SECONDS = 60.0
 PEER_PROBE_SECONDS = 30.0
+# The token authority re-checks its own token against Dhan's REST API during the session: an open
+# websocket keeps streaming on a token Dhan has since rejected (e.g. after a login elsewhere), while
+# every REST call - and every node that shares the token - fails. A rejected token is renewed at
+# most once per TOKEN_SELF_RENEW_SPACING_SECONDS.
+TOKEN_VERIFY_SECONDS = 60.0
+TOKEN_SELF_RENEW_SPACING_SECONDS = 600.0
 
 SUPERVISOR_STATES = (
     "CLOSED",
@@ -213,6 +219,12 @@ class LiveCoreRuntime:
         self.supervisor_reason = ""
         self.transitions: deque[dict] = deque(maxlen=30)
         self.token_renewals = 0
+        self.token_verifications = 0
+        self.token_self_renewals = 0
+        self.token_verify_error = ""
+        self._last_token_verify: float | None = None  # first check one interval into the session
+        self._last_self_renew = -1e18
+        self._token_verify_running = False
         self.hard_resets = 0
         self.abandoned_feed_threads = 0
         self.last_hard_reset_reason = ""
@@ -261,6 +273,7 @@ class LiveCoreRuntime:
             self.sampler.tick(now)
         if self.in_session_window(now):
             self._watch_token(now)
+            self._verify_own_token(now)
             if self._started_for_date != now.date().isoformat():
                 if self._started_for_date is not None:
                     self._end_session()
@@ -325,6 +338,56 @@ class LiveCoreRuntime:
             # Never half-reconnect a feed that may be poisoned by the old token: the REST client and
             # history worker share this settings object, and the feed is replaced by a new one.
             self._replace_feed("Dhan token renewed by the token authority", epoch, token=True)
+
+    def _verify_own_token(self, now: datetime) -> None:
+        """Token authority only: re-check the token against Dhan's REST API (in the background) and
+        renew it when Dhan rejects it, so the REST clients and the nodes sharing it recover."""
+        if not self.cfg.token_generation or self._started_for_date is None or self.dhan_api is None:
+            return
+        epoch = now.timestamp()
+        if self._last_token_verify is None:
+            self._last_token_verify = epoch
+            return
+        if self._token_verify_running or epoch - self._last_token_verify < TOKEN_VERIFY_SECONDS:
+            return
+        self._last_token_verify = epoch
+        self._token_verify_running = True
+        self._run_in_background(self._verify_own_token_once, epoch)
+
+    @staticmethod
+    def _run_in_background(target, *args) -> None:
+        threading.Thread(target=target, args=args, daemon=True, name="token-verify").start()
+
+    def _verify_own_token_once(self, epoch: float) -> None:
+        try:
+            self.token_verifications += 1
+            try:
+                self.dhan_api.verify_data_access()
+                self.token_verify_error = ""
+                return
+            except Exception as exc:
+                self.token_verify_error = redact(f"{type(exc).__name__}: {exc}")[:300]
+                if not looks_like_auth_failure(exc):
+                    return
+            if epoch - self._last_self_renew < TOKEN_SELF_RENEW_SPACING_SECONDS:
+                return
+            self._last_self_renew = epoch
+            log.warning("Dhan rejected this node's token on the REST API; generating one fresh token")
+            try:
+                self._token_refresher(self.settings, force=True)
+            except Exception as exc:
+                self.token_verify_error = redact(f"token renewal: {type(exc).__name__}: {exc}")[:300]
+                self.state.record_error(f"token renewal: {type(exc).__name__}: {exc}")
+                return
+            finally:
+                register_secret(getattr(self.settings, "access_token", ""))
+            self.dhan_api.settings = self.settings
+            self.token_self_renewals += 1
+            self.token_renewals += 1
+            self.token_verify_error = ""
+            self._replace_feed("Dhan token renewed after a REST rejection", self._clock(), token=True)
+        finally:
+            self._token_verify_running = False
 
     def _prepare(self, now: datetime) -> None:
         """Pre-market (from 20 minutes before the open): load the token and resolve security ids, so the
@@ -860,6 +923,9 @@ class LiveCoreRuntime:
             "reason": self.supervisor_reason,
             "recovery": self.recovery_stages(epoch) if self._recovery_started is not None else None,
             "token_renewals": self.token_renewals,
+            "token_verifications": self.token_verifications,
+            "token_self_renewals": self.token_self_renewals,
+            "token_verify_error": self.token_verify_error,
             "hard_resets": self.hard_resets,
             "last_hard_reset_reason": self.last_hard_reset_reason,
             "abandoned_feed_threads": self.abandoned_feed_threads,

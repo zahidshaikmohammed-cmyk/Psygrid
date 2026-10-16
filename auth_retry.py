@@ -16,6 +16,7 @@ T = TypeVar("T")
 # 808 (authentication failed), 809 (token invalid) and 810 (client id invalid).
 _AUTH_FAILURE_MARKERS = (
     "401",
+    "dh-901",
     "807",
     "808",
     "809",
@@ -40,9 +41,11 @@ class AuthRetryGuard:
     hammering the token endpoint.
     """
 
-    def __init__(self, settings, dhan_api):
+    def __init__(self, settings, dhan_api, refresher=None):
         self.settings = settings
         self.dhan_api = dhan_api
+        # A node that does not generate tokens passes its token source's refresher instead.
+        self.refresher = refresher
         self._retry_at = 0.0
         self._lock = threading.Lock()
 
@@ -66,7 +69,7 @@ class AuthRetryGuard:
             with self._lock:
                 self._raise_if_cooling_down(first_exc)
                 try:
-                    refresh_access_token(self.settings, force=True)
+                    (self.refresher or refresh_access_token)(self.settings, force=True)
                 except DhanTokenRateLimited as exc:
                     self._retry_at = time.monotonic() + exc.retry_after
                     raise
