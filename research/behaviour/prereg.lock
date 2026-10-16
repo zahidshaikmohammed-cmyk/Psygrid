@@ -1,0 +1,8 @@
+{
+ "_note": "SHA-256 of the pre-registered files. Frozen before the confirmation fetch; see docs/research/behaviour/PREREGISTRATION.md.",
+ "confirm.py": "6093c1e60aa5d8ee3be645cc507a93d977e3911a09fdbd85dd76454e2542893f",
+ "execution.py": "6b5ed95414571b0fd5f0d2e9814a3ed72c482bb5d7c1ee1b306bf79576bafcdf",
+ "integrity.py": "a4983e28f9956196ed8d5d823e0f4fd83fc0c2b6dc17f43058f16cc6706b7726",
+ "power.py": "0818a774194bf0914dc1c73028e66d0fff64c5526649bb38ddef076985fb7f6a",
+ "prereg.py": "f1649f0f3e8553f72b051f0bcac1dabcc334153b5bb089d71f77b9b0a3c46f73"
+}

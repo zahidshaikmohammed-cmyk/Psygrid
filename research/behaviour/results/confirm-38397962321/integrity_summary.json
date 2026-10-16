@@ -1,0 +1,6836 @@
+{
+ "NIFTY": {
+  "kind": "INDEX",
+  "fetch_status": "PARTIAL_2_WINDOWS_FAILED",
+  "rows": 421894,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1133,
+  "sessions_kept": 1124,
+  "sessions_dropped_incomplete": 9,
+  "slots_filled_pct": 0.003,
+  "first": "2021-12-27",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1133,
+   "sessions_kept": 1124,
+   "sessions_kept_complete": 1113,
+   "sessions_kept_filled": 11,
+   "slots_filled": 13,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 2,
+    "EXCLUDED_INCOMPLETE": 4
+   },
+   "sessions_missing_0915": 5,
+   "sessions_missing_1529": 18,
+   "sessions_unusual_length": 151,
+   "sessions_with_rows_before_0915": 61,
+   "sessions_with_rows_from_1530": 134,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 30
+   },
+   "confirmation": {
+    "sessions_with_rows": 142,
+    "kept": 139,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 57
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 47
+   }
+  }
+ },
+ "BANKNIFTY": {
+  "kind": "INDEX",
+  "fetch_status": "PARTIAL_7_WINDOWS_FAILED",
+  "rows": 311929,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 838,
+  "sessions_kept": 830,
+  "sessions_dropped_incomplete": 8,
+  "slots_filled_pct": 0.002,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 838,
+   "sessions_kept": 830,
+   "sessions_kept_complete": 825,
+   "sessions_kept_filled": 5,
+   "slots_filled": 5,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 4,
+    "EXCLUDED_INCOMPLETE": 1
+   },
+   "sessions_missing_0915": 7,
+   "sessions_missing_1529": 10,
+   "sessions_unusual_length": 176,
+   "sessions_with_rows_before_0915": 107,
+   "sessions_with_rows_from_1530": 166,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 411,
+  "missing_session_dates": [
+   "2021-12-27",
+   "2021-12-28",
+   "2021-12-29",
+   "2021-12-30",
+   "2021-12-31",
+   "2022-01-03",
+   "2022-01-04",
+   "2022-01-05",
+   "2022-01-06",
+   "2022-01-07",
+   "2022-01-10",
+   "2022-01-11",
+   "2022-01-12",
+   "2022-01-13",
+   "2022-01-14",
+   "2022-01-17",
+   "2022-01-18",
+   "2022-01-19",
+   "2022-01-20",
+   "2022-01-21",
+   "2022-01-24",
+   "2022-01-25",
+   "2022-01-27",
+   "2022-01-28",
+   "2022-01-31",
+   "2022-02-01",
+   "2022-02-02",
+   "2022-02-03",
+   "2022-02-04",
+   "2022-02-07",
+   "2022-02-08",
+   "2022-02-09",
+   "2022-02-10",
+   "2022-02-11",
+   "2022-02-14",
+   "2022-02-15",
+   "2022-02-16",
+   "2022-02-17",
+   "2022-02-18",
+   "2022-02-21",
+   "2022-02-22",
+   "2022-02-23",
+   "2022-02-24",
+   "2022-02-25",
+   "2022-02-28",
+   "2022-03-02",
+   "2022-03-03",
+   "2022-03-04",
+   "2022-03-07",
+   "2022-03-08"
+  ],
+  "sessions_not_in_nifty_calendar": 125,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 441,
+    "kept": 438,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 1,
+     "EXCLUDED_NO_REGULAR_SESSION": 2
+    },
+    "rows_from_1530_sessions": 13
+   },
+   "confirmation": {
+    "sessions_with_rows": 143,
+    "kept": 139,
+    "excluded": {
+     "EXCLUDED_NO_0915": 3,
+     "EXCLUDED_NO_REGULAR_SESSION": 1
+    },
+    "rows_from_1530_sessions": 106
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 47
+   }
+  }
+ },
+ "SENSEX": {
+  "kind": "INDEX",
+  "fetch_status": "OK",
+  "rows": 465897,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1254,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 14,
+  "slots_filled_pct": 0.048,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1254,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1026,
+   "sessions_kept_filled": 214,
+   "slots_filled": 225,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 4,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 7,
+    "EXCLUDED_INCOMPLETE": 3
+   },
+   "sessions_missing_0915": 11,
+   "sessions_missing_1529": 221,
+   "sessions_unusual_length": 467,
+   "sessions_with_rows_before_0915": 173,
+   "sessions_with_rows_from_1530": 240,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 130,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 30
+   },
+   "confirmation": {
+    "sessions_with_rows": 261,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 1,
+     "EXCLUDED_NO_0915": 5
+    },
+    "rows_from_1530_sessions": 163
+   },
+   "contaminated": {
+    "sessions_with_rows": 256,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 1
+    },
+    "rows_from_1530_sessions": 47
+   }
+  }
+ },
+ "ADANIPORTS": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 465012,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 283,
+   "sessions_with_rows_before_0915": 165,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "RELIANCE": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 465008,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1239,
+  "sessions_dropped_incomplete": 11,
+  "slots_filled_pct": 0.159,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1239,
+   "sessions_kept_complete": 1188,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 6,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 9,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 285,
+   "sessions_with_rows_before_0915": 162,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 731,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_0915": 1,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "HDFCBANK": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 465022,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 282,
+   "sessions_with_rows_before_0915": 159,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "ICICIBANK": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 465034,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 279,
+   "sessions_with_rows_before_0915": 160,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "BSE": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464937,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 285,
+   "sessions_with_rows_before_0915": 167,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "DMART": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464872,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 283,
+   "sessions_with_rows_before_0915": 165,
+   "sessions_with_rows_from_1530": 221,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 160
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "SBIN": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 465021,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 282,
+   "sessions_with_rows_before_0915": 163,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "INFY": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 465022,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 280,
+   "sessions_with_rows_before_0915": 159,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "BHARTIARTL": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 465003,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 283,
+   "sessions_with_rows_before_0915": 163,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "APOLLOHOSP": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464912,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 287,
+   "sessions_with_rows_before_0915": 168,
+   "sessions_with_rows_from_1530": 220,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 159
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "KOTAKBANK": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 465025,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 280,
+   "sessions_with_rows_before_0915": 160,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "TCS": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 465033,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 280,
+   "sessions_with_rows_before_0915": 160,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "AXISBANK": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 465032,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 281,
+   "sessions_with_rows_before_0915": 162,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "TECHM": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 465009,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 281,
+   "sessions_with_rows_before_0915": 163,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "MCX": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464847,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1249,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 9,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1249,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 4,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 7,
+   "sessions_missing_1529": 56,
+   "sessions_unusual_length": 303,
+   "sessions_with_rows_before_0915": 187,
+   "sessions_with_rows_from_1530": 221,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 125,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 258,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 3
+    },
+    "rows_from_1530_sessions": 160
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "SUZLON": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464961,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.159,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1188,
+   "sessions_kept_filled": 52,
+   "slots_filled": 739,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 282,
+   "sessions_with_rows_before_0915": 162,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "M&M": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 465005,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1249,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 9,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1249,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 2,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 7,
+   "sessions_missing_1529": 56,
+   "sessions_unusual_length": 279,
+   "sessions_with_rows_before_0915": 161,
+   "sessions_with_rows_from_1530": 221,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 125,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 736,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 2
+    },
+    "rows_from_1530_sessions": 60
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "ATHERENERG": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 133431,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 358,
+  "sessions_kept": 356,
+  "sessions_dropped_incomplete": 2,
+  "slots_filled_pct": 0.36,
+  "first": "2025-05-07",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 358,
+   "sessions_kept": 356,
+   "sessions_kept_complete": 324,
+   "sessions_kept_filled": 32,
+   "slots_filled": 480,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 0,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 2,
+    "EXCLUDED_INCOMPLETE": 0
+   },
+   "sessions_missing_0915": 2,
+   "sessions_missing_1529": 33,
+   "sessions_unusual_length": 37,
+   "sessions_with_rows_before_0915": 0,
+   "sessions_with_rows_from_1530": 3,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 1,
+  "first_session_with_rows": "2025-05-06",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 104,
+    "kept": 103,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   },
+   "confirmation": {
+    "sessions_with_rows": 0,
+    "kept": 0,
+    "excluded": {},
+    "rows_from_1530_sessions": 0
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 3
+   }
+  }
+ },
+ "BAJFINANCE": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 465001,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 282,
+   "sessions_with_rows_before_0915": 162,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "SAIL": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 465004,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 283,
+   "sessions_with_rows_before_0915": 161,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "TATASTEEL": {
+  "kind": "EQUITY",
+  "fetch_status": "PARTIAL_1_WINDOWS_FAILED",
+  "rows": 443616,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1192,
+  "sessions_kept": 1183,
+  "sessions_dropped_incomplete": 9,
+  "slots_filled_pct": 0.166,
+  "first": "2021-12-27",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1192,
+   "sessions_kept": 1183,
+   "sessions_kept_complete": 1132,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 4,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 7,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 222,
+   "sessions_with_rows_before_0915": 105,
+   "sessions_with_rows_from_1530": 164,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 68,
+  "first_session_with_rows": "2021-12-27",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 201,
+    "kept": 198,
+    "excluded": {
+     "EXCLUDED_NO_0915": 3
+    },
+    "rows_from_1530_sessions": 103
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "DELHIVERY": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 405618,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1089,
+  "sessions_kept": 1082,
+  "sessions_dropped_incomplete": 7,
+  "slots_filled_pct": 0.181,
+  "first": "2022-05-25",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1089,
+   "sessions_kept": 1082,
+   "sessions_kept_complete": 1032,
+   "sessions_kept_filled": 50,
+   "slots_filled": 736,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 2,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 5,
+   "sessions_missing_1529": 55,
+   "sessions_unusual_length": 143,
+   "sessions_with_rows_before_0915": 28,
+   "sessions_with_rows_from_1530": 65,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 23,
+  "first_session_with_rows": "2022-05-24",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 98,
+    "kept": 97,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 4
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "INDUSINDBK": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464997,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 281,
+   "sessions_with_rows_before_0915": 163,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "LT": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464999,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 281,
+   "sessions_with_rows_before_0915": 162,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "IDEA": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 465027,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 284,
+   "sessions_with_rows_before_0915": 164,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "COALINDIA": {
+  "kind": "EQUITY",
+  "fetch_status": "PARTIAL_1_WINDOWS_FAILED",
+  "rows": 443225,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1191,
+  "sessions_kept": 1182,
+  "sessions_dropped_incomplete": 9,
+  "slots_filled_pct": 0.166,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1191,
+   "sessions_kept": 1182,
+   "sessions_kept_complete": 1132,
+   "sessions_kept_filled": 50,
+   "slots_filled": 736,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 4,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 7,
+   "sessions_missing_1529": 56,
+   "sessions_unusual_length": 221,
+   "sessions_with_rows_before_0915": 104,
+   "sessions_with_rows_from_1530": 165,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 58,
+  "missing_session_dates": [
+   "2021-12-27",
+   "2021-12-28",
+   "2021-12-29",
+   "2021-12-30",
+   "2021-12-31",
+   "2022-01-03",
+   "2022-01-04",
+   "2022-01-05",
+   "2022-01-06",
+   "2022-01-07",
+   "2022-01-10",
+   "2022-01-11",
+   "2022-01-12",
+   "2022-01-13",
+   "2022-01-14",
+   "2022-01-17",
+   "2022-01-18",
+   "2022-01-19",
+   "2022-01-20",
+   "2022-01-21",
+   "2022-01-24",
+   "2022-01-25",
+   "2022-01-27",
+   "2022-01-28",
+   "2022-01-31",
+   "2022-02-01",
+   "2022-02-02",
+   "2022-02-03",
+   "2022-02-04",
+   "2022-02-07",
+   "2022-02-08",
+   "2022-02-09",
+   "2022-02-10",
+   "2022-02-11",
+   "2022-02-14",
+   "2022-02-15",
+   "2022-02-16",
+   "2022-02-17",
+   "2022-02-18",
+   "2022-02-21",
+   "2022-02-22",
+   "2022-02-23",
+   "2022-02-24",
+   "2022-02-25",
+   "2022-02-28",
+   "2022-03-02",
+   "2022-03-03",
+   "2022-03-04",
+   "2022-03-07",
+   "2022-03-08"
+  ],
+  "sessions_not_in_nifty_calendar": 125,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 200,
+    "kept": 197,
+    "excluded": {
+     "EXCLUDED_NO_0915": 3
+    },
+    "rows_from_1530_sessions": 104
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "NTPC": {
+  "kind": "EQUITY",
+  "fetch_status": "PARTIAL_1_WINDOWS_FAILED",
+  "rows": 443593,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1192,
+  "sessions_kept": 1183,
+  "sessions_dropped_incomplete": 9,
+  "slots_filled_pct": 0.166,
+  "first": "2021-12-27",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1192,
+   "sessions_kept": 1183,
+   "sessions_kept_complete": 1131,
+   "sessions_kept_filled": 52,
+   "slots_filled": 738,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 4,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 7,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 222,
+   "sessions_with_rows_before_0915": 104,
+   "sessions_with_rows_from_1530": 164,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 68,
+  "first_session_with_rows": "2021-12-27",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 201,
+    "kept": 198,
+    "excluded": {
+     "EXCLUDED_NO_0915": 3
+    },
+    "rows_from_1530_sessions": 103
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "ETERNAL": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464991,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.159,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1188,
+   "sessions_kept_filled": 52,
+   "slots_filled": 740,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 280,
+   "sessions_with_rows_before_0915": 161,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "ITC": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 465008,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1239,
+  "sessions_dropped_incomplete": 11,
+  "slots_filled_pct": 0.159,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1239,
+   "sessions_kept_complete": 1188,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 6,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 9,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 281,
+   "sessions_with_rows_before_0915": 159,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 731,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_0915": 1,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "POLYCAB": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464834,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1249,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 9,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1249,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 4,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 7,
+   "sessions_missing_1529": 56,
+   "sessions_unusual_length": 287,
+   "sessions_with_rows_before_0915": 170,
+   "sessions_with_rows_from_1530": 220,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 125,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 258,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 3
+    },
+    "rows_from_1530_sessions": 159
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "INDIGO": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464870,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 298,
+   "sessions_with_rows_before_0915": 180,
+   "sessions_with_rows_from_1530": 216,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 155
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "PAYTM": {
+  "kind": "EQUITY",
+  "fetch_status": "PARTIAL_1_WINDOWS_FAILED",
+  "rows": 430778,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1157,
+  "sessions_kept": 1149,
+  "sessions_dropped_incomplete": 8,
+  "slots_filled_pct": 0.171,
+  "first": "2021-11-22",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1157,
+   "sessions_kept": 1149,
+   "sessions_kept_complete": 1098,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 3,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 6,
+   "sessions_missing_1529": 56,
+   "sessions_unusual_length": 204,
+   "sessions_with_rows_before_0915": 85,
+   "sessions_with_rows_from_1530": 144,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 33,
+  "first_session_with_rows": "2021-11-18",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 166,
+    "kept": 164,
+    "excluded": {
+     "EXCLUDED_NO_0915": 2
+    },
+    "rows_from_1530_sessions": 83
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "MARUTI": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464943,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 282,
+   "sessions_with_rows_before_0915": 164,
+   "sessions_with_rows_from_1530": 221,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 160
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "BHEL": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 465005,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 280,
+   "sessions_with_rows_before_0915": 161,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "DIVISLAB": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 465017,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 290,
+   "sessions_with_rows_before_0915": 171,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "TITAN": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 465011,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 279,
+   "sessions_with_rows_before_0915": 160,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "BEL": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 465005,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 279,
+   "sessions_with_rows_before_0915": 161,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "POLICYBZR": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 454136,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1220,
+  "sessions_kept": 1211,
+  "sessions_dropped_incomplete": 9,
+  "slots_filled_pct": 0.163,
+  "first": "2021-11-16",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1220,
+   "sessions_kept": 1211,
+   "sessions_kept_complete": 1158,
+   "sessions_kept_filled": 53,
+   "slots_filled": 739,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 4,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 7,
+   "sessions_missing_1529": 56,
+   "sessions_unusual_length": 268,
+   "sessions_with_rows_before_0915": 150,
+   "sessions_with_rows_from_1530": 192,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 96,
+  "first_session_with_rows": "2021-11-15",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 229,
+    "kept": 226,
+    "excluded": {
+     "EXCLUDED_NO_0915": 3
+    },
+    "rows_from_1530_sessions": 131
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "HCLTECH": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 465013,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 283,
+   "sessions_with_rows_before_0915": 163,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "ADANIENT": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464918,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 286,
+   "sessions_with_rows_before_0915": 168,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "LAURUSLABS": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464827,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 292,
+   "sessions_with_rows_before_0915": 174,
+   "sessions_with_rows_from_1530": 221,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 160
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "KALYANKJIL": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464734,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1249,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 9,
+  "slots_filled_pct": 0.165,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1249,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1166,
+   "sessions_kept_filled": 74,
+   "slots_filled": 766,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 4,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 7,
+   "sessions_missing_1529": 56,
+   "sessions_unusual_length": 291,
+   "sessions_with_rows_before_0915": 177,
+   "sessions_with_rows_from_1530": 216,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 125,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 258,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 3
+    },
+    "rows_from_1530_sessions": 155
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "OFSS": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464692,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1249,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 9,
+  "slots_filled_pct": 0.165,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1249,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1173,
+   "sessions_kept_filled": 67,
+   "slots_filled": 767,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 4,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 7,
+   "sessions_missing_1529": 56,
+   "sessions_unusual_length": 281,
+   "sessions_with_rows_before_0915": 164,
+   "sessions_with_rows_from_1530": 212,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 125,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 258,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 3
+    },
+    "rows_from_1530_sessions": 151
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "VEDL": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464973,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1239,
+  "sessions_dropped_incomplete": 11,
+  "slots_filled_pct": 0.159,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1239,
+   "sessions_kept_complete": 1188,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 6,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 9,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 283,
+   "sessions_with_rows_before_0915": 162,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 252,
+    "excluded": {
+     "EXCLUDED_NO_0915": 2
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "TVSMOTOR": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464838,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 286,
+   "sessions_with_rows_before_0915": 168,
+   "sessions_with_rows_from_1530": 220,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 159
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "HINDUNILVR": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464968,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1239,
+  "sessions_dropped_incomplete": 11,
+  "slots_filled_pct": 0.159,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1239,
+   "sessions_kept_complete": 1188,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 6,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 9,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 284,
+   "sessions_with_rows_before_0915": 163,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 252,
+    "excluded": {
+     "EXCLUDED_NO_0915": 2
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "EICHERMOT": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 465001,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 290,
+   "sessions_with_rows_before_0915": 172,
+   "sessions_with_rows_from_1530": 221,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 160
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "TMPV": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 465015,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1239,
+  "sessions_dropped_incomplete": 11,
+  "slots_filled_pct": 0.159,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1239,
+   "sessions_kept_complete": 1188,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 6,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 9,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 280,
+   "sessions_with_rows_before_0915": 157,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 252,
+    "excluded": {
+     "EXCLUDED_NO_0915": 2
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "TATAELXSI": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464911,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 288,
+   "sessions_with_rows_before_0915": 169,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "SOLARINDS": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464249,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1249,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 9,
+  "slots_filled_pct": 0.243,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1249,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1108,
+   "sessions_kept_filled": 132,
+   "slots_filled": 1131,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 4,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 7,
+   "sessions_missing_1529": 56,
+   "sessions_unusual_length": 297,
+   "sessions_with_rows_before_0915": 185,
+   "sessions_with_rows_from_1530": 164,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 125,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 258,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 3
+    },
+    "rows_from_1530_sessions": 103
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "HAL": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464825,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1249,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 9,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1249,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 4,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 7,
+   "sessions_missing_1529": 56,
+   "sessions_unusual_length": 280,
+   "sessions_with_rows_before_0915": 163,
+   "sessions_with_rows_from_1530": 221,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 125,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 258,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 3
+    },
+    "rows_from_1530_sessions": 160
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "ADANIPOWER": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 465011,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 280,
+   "sessions_with_rows_before_0915": 162,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "ULTRACEMCO": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464948,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 288,
+   "sessions_with_rows_before_0915": 168,
+   "sessions_with_rows_from_1530": 220,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 159
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "COFORGE": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464771,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 283,
+   "sessions_with_rows_before_0915": 165,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "HINDALCO": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 465009,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 283,
+   "sessions_with_rows_before_0915": 164,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "PFC": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464800,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.159,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1188,
+   "sessions_kept_filled": 52,
+   "slots_filled": 738,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 281,
+   "sessions_with_rows_before_0915": 163,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "DIXON": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464841,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 295,
+   "sessions_with_rows_before_0915": 177,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "INDUSTOWER": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464838,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 283,
+   "sessions_with_rows_before_0915": 165,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "PNBHOUSING": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464579,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1249,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 9,
+  "slots_filled_pct": 0.178,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1249,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1141,
+   "sessions_kept_filled": 99,
+   "slots_filled": 829,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 4,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 7,
+   "sessions_missing_1529": 56,
+   "sessions_unusual_length": 303,
+   "sessions_with_rows_before_0915": 188,
+   "sessions_with_rows_from_1530": 209,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 125,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 258,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 3
+    },
+    "rows_from_1530_sessions": 148
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "BHARATFORG": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464829,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 300,
+   "sessions_with_rows_before_0915": 182,
+   "sessions_with_rows_from_1530": 217,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 156
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "DRREDDY": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464999,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 293,
+   "sessions_with_rows_before_0915": 175,
+   "sessions_with_rows_from_1530": 220,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 159
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "KAYNES": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 359508,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 965,
+  "sessions_kept": 959,
+  "sessions_dropped_incomplete": 6,
+  "slots_filled_pct": 0.205,
+  "first": "2022-11-23",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 965,
+   "sessions_kept": 959,
+   "sessions_kept_complete": 909,
+   "sessions_kept_filled": 50,
+   "slots_filled": 736,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 2,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 2,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 4,
+   "sessions_missing_1529": 54,
+   "sessions_unusual_length": 127,
+   "sessions_with_rows_before_0915": 13,
+   "sessions_with_rows_from_1530": 60,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 5,
+  "first_session_with_rows": "2022-11-22",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 711,
+    "kept": 706,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_0915": 1,
+     "EXCLUDED_NO_REGULAR_SESSION": 2
+    },
+    "rows_from_1530_sessions": 60
+   },
+   "confirmation": {
+    "sessions_with_rows": 0,
+    "kept": 0,
+    "excluded": {},
+    "rows_from_1530_sessions": 0
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "RECLTD": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464852,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.159,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1188,
+   "sessions_kept_filled": 52,
+   "slots_filled": 739,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 281,
+   "sessions_with_rows_before_0915": 163,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "ONGC": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 465010,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 281,
+   "sessions_with_rows_before_0915": 161,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "AUROPHARMA": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464799,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 286,
+   "sessions_with_rows_before_0915": 168,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "SUNPHARMA": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 465003,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 288,
+   "sessions_with_rows_before_0915": 168,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "POWERINDIA": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464442,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1249,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 9,
+  "slots_filled_pct": 0.202,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1249,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1115,
+   "sessions_kept_filled": 125,
+   "slots_filled": 941,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 1
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 56,
+   "sessions_unusual_length": 293,
+   "sessions_with_rows_before_0915": 175,
+   "sessions_with_rows_from_1530": 201,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 125,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 1,
+     "EXCLUDED_NO_0915": 1,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 258,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 3
+    },
+    "rows_from_1530_sessions": 140
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "LICHSGFIN": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464896,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 292,
+   "sessions_with_rows_before_0915": 174,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "ANGELONE": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464677,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1248,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 8,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1248,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 3,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 6,
+   "sessions_missing_1529": 55,
+   "sessions_unusual_length": 280,
+   "sessions_with_rows_before_0915": 163,
+   "sessions_with_rows_from_1530": 219,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 124,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 257,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 2
+    },
+    "rows_from_1530_sessions": 158
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "TORNTPHARM": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464718,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1249,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 9,
+  "slots_filled_pct": 0.17,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1249,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1157,
+   "sessions_kept_filled": 83,
+   "slots_filled": 791,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 4,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 7,
+   "sessions_missing_1529": 56,
+   "sessions_unusual_length": 320,
+   "sessions_with_rows_before_0915": 211,
+   "sessions_with_rows_from_1530": 178,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 125,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 258,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 3
+    },
+    "rows_from_1530_sessions": 117
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "ADANIGREEN": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464733,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1249,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 9,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1249,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 4,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 7,
+   "sessions_missing_1529": 56,
+   "sessions_unusual_length": 283,
+   "sessions_with_rows_before_0915": 165,
+   "sessions_with_rows_from_1530": 221,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 125,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 258,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 3
+    },
+    "rows_from_1530_sessions": 160
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "ANANDRATHI": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 446490,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1198,
+  "sessions_kept": 1182,
+  "sessions_dropped_incomplete": 16,
+  "slots_filled_pct": 0.146,
+  "first": "2021-12-15",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1198,
+   "sessions_kept": 1182,
+   "sessions_kept_complete": 1097,
+   "sessions_kept_filled": 85,
+   "slots_filled": 646,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 7,
+    "EXCLUDED_INCOMPLETE": 6
+   },
+   "sessions_missing_0915": 10,
+   "sessions_missing_1529": 14,
+   "sessions_unusual_length": 314,
+   "sessions_with_rows_before_0915": 235,
+   "sessions_with_rows_from_1530": 150,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 74,
+  "first_session_with_rows": "2021-12-14",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 728,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_0915": 4,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 207,
+    "kept": 201,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 4,
+     "EXCLUDED_NO_0915": 2
+    },
+    "rows_from_1530_sessions": 86
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 3
+   }
+  }
+ },
+ "PERSISTENT": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464720,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1249,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 9,
+  "slots_filled_pct": 0.159,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1249,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1188,
+   "sessions_kept_filled": 52,
+   "slots_filled": 738,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 4,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 7,
+   "sessions_missing_1529": 56,
+   "sessions_unusual_length": 281,
+   "sessions_with_rows_before_0915": 164,
+   "sessions_with_rows_from_1530": 219,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 125,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 258,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 3
+    },
+    "rows_from_1530_sessions": 158
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "TRENT": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464816,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1249,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 9,
+  "slots_filled_pct": 0.159,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1249,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1188,
+   "sessions_kept_filled": 52,
+   "slots_filled": 738,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 4,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 7,
+   "sessions_missing_1529": 56,
+   "sessions_unusual_length": 303,
+   "sessions_with_rows_before_0915": 186,
+   "sessions_with_rows_from_1530": 218,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 125,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 258,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 3
+    },
+    "rows_from_1530_sessions": 157
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "CHOLAFIN": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464790,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.159,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1188,
+   "sessions_kept_filled": 52,
+   "slots_filled": 738,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 287,
+   "sessions_with_rows_before_0915": 169,
+   "sessions_with_rows_from_1530": 221,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 160
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "SHRIRAMFIN": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464831,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1249,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 9,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1249,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 4,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 7,
+   "sessions_missing_1529": 56,
+   "sessions_unusual_length": 304,
+   "sessions_with_rows_before_0915": 186,
+   "sessions_with_rows_from_1530": 220,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 125,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 258,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 3
+    },
+    "rows_from_1530_sessions": 159
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "ASHOKLEY": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464985,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 281,
+   "sessions_with_rows_before_0915": 160,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "NESTLEIND": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464953,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.159,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1185,
+   "sessions_kept_filled": 55,
+   "slots_filled": 741,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 4,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 4,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 58,
+   "sessions_unusual_length": 329,
+   "sessions_with_rows_before_0915": 212,
+   "sessions_with_rows_from_1530": 200,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 3,
+     "EXCLUDED_NO_REGULAR_SESSION": 1
+    },
+    "rows_from_1530_sessions": 139
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "MAXHEALTH": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464682,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1249,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 9,
+  "slots_filled_pct": 0.16,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1249,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1184,
+   "sessions_kept_filled": 56,
+   "slots_filled": 743,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 4,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 3,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 7,
+   "sessions_missing_1529": 58,
+   "sessions_unusual_length": 280,
+   "sessions_with_rows_before_0915": 165,
+   "sessions_with_rows_from_1530": 215,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 125,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 258,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 1
+    },
+    "rows_from_1530_sessions": 154
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "VBL": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464735,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1249,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 9,
+  "slots_filled_pct": 0.159,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1249,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1188,
+   "sessions_kept_filled": 52,
+   "slots_filled": 738,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 4,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 7,
+   "sessions_missing_1529": 56,
+   "sessions_unusual_length": 280,
+   "sessions_with_rows_before_0915": 162,
+   "sessions_with_rows_from_1530": 206,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 125,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 258,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 3
+    },
+    "rows_from_1530_sessions": 145
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "HDFCAMC": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464855,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 299,
+   "sessions_with_rows_before_0915": 179,
+   "sessions_with_rows_from_1530": 220,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 159
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "HINDPETRO": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464875,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 288,
+   "sessions_with_rows_before_0915": 170,
+   "sessions_with_rows_from_1530": 221,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 160
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "FEDERALBNK": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464984,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 281,
+   "sessions_with_rows_before_0915": 161,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "JIOFIN": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 290134,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 780,
+  "sessions_kept": 774,
+  "sessions_dropped_incomplete": 6,
+  "slots_filled_pct": 0.253,
+  "first": "2023-08-22",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 780,
+   "sessions_kept": 774,
+   "sessions_kept_complete": 725,
+   "sessions_kept_filled": 49,
+   "slots_filled": 735,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 2,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 2,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 4,
+   "sessions_missing_1529": 54,
+   "sessions_unusual_length": 114,
+   "sessions_with_rows_before_0915": 1,
+   "sessions_with_rows_from_1530": 60,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 5,
+  "first_session_with_rows": "2023-08-21",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 526,
+    "kept": 521,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_0915": 1,
+     "EXCLUDED_NO_REGULAR_SESSION": 2
+    },
+    "rows_from_1530_sessions": 60
+   },
+   "confirmation": {
+    "sessions_with_rows": 0,
+    "kept": 0,
+    "excluded": {},
+    "rows_from_1530_sessions": 0
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "SONACOMS": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464780,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1249,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 9,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1249,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 4,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 7,
+   "sessions_missing_1529": 56,
+   "sessions_unusual_length": 280,
+   "sessions_with_rows_before_0915": 160,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 125,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 258,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 3
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "GMRAIRPORT": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464644,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1249,
+  "sessions_kept": 1239,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.159,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1249,
+   "sessions_kept": 1239,
+   "sessions_kept_complete": 1188,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 56,
+   "sessions_unusual_length": 285,
+   "sessions_with_rows_before_0915": 165,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 125,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 258,
+    "kept": 254,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "MANAPPURAM": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464825,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.159,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1188,
+   "sessions_kept_filled": 52,
+   "slots_filled": 738,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 287,
+   "sessions_with_rows_before_0915": 169,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "GLENMARK": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464881,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1249,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 9,
+  "slots_filled_pct": 0.159,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1249,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1188,
+   "sessions_kept_filled": 52,
+   "slots_filled": 738,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 4,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 7,
+   "sessions_missing_1529": 56,
+   "sessions_unusual_length": 310,
+   "sessions_with_rows_before_0915": 193,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 125,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 258,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 3
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "HEROMOTOCO": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464939,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 285,
+   "sessions_with_rows_before_0915": 166,
+   "sessions_with_rows_from_1530": 221,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 160
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "UPL": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464945,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 287,
+   "sessions_with_rows_before_0915": 168,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "POWERGRID": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464987,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.159,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1188,
+   "sessions_kept_filled": 52,
+   "slots_filled": 738,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 284,
+   "sessions_with_rows_before_0915": 165,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "INDHOTEL": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464923,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1249,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 9,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1249,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 4,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 7,
+   "sessions_missing_1529": 56,
+   "sessions_unusual_length": 284,
+   "sessions_with_rows_before_0915": 166,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 125,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 258,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 3
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "TIINDIA": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464555,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1249,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 9,
+  "slots_filled_pct": 0.177,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1249,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1146,
+   "sessions_kept_filled": 94,
+   "slots_filled": 825,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 4,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 3,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 7,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 291,
+   "sessions_with_rows_before_0915": 178,
+   "sessions_with_rows_from_1530": 194,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 125,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 258,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 1
+    },
+    "rows_from_1530_sessions": 133
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "GAIL": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 465025,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 280,
+   "sessions_with_rows_before_0915": 162,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "DLF": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464831,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.158,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1189,
+   "sessions_kept_filled": 51,
+   "slots_filled": 737,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 284,
+   "sessions_with_rows_before_0915": 166,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "RBLBANK": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464871,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.159,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1188,
+   "sessions_kept_filled": 52,
+   "slots_filled": 738,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 57,
+   "sessions_unusual_length": 285,
+   "sessions_with_rows_before_0915": 166,
+   "sessions_with_rows_from_1530": 222,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 161
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "ENRIN": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 121791,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 326,
+  "sessions_kept": 324,
+  "sessions_dropped_incomplete": 2,
+  "slots_filled_pct": 0.099,
+  "first": "2025-06-20",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 326,
+   "sessions_kept": 324,
+   "sessions_kept_complete": 316,
+   "sessions_kept_filled": 8,
+   "slots_filled": 120,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 0,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 2,
+    "EXCLUDED_INCOMPLETE": 0
+   },
+   "sessions_missing_0915": 2,
+   "sessions_missing_1529": 9,
+   "sessions_unusual_length": 13,
+   "sessions_with_rows_before_0915": 0,
+   "sessions_with_rows_from_1530": 3,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 1,
+  "first_session_with_rows": "2025-06-19",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 72,
+    "kept": 71,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   },
+   "confirmation": {
+    "sessions_with_rows": 0,
+    "kept": 0,
+    "excluded": {},
+    "rows_from_1530_sessions": 0
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 3
+   }
+  }
+ },
+ "ABB": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 464820,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1250,
+  "sessions_kept": 1240,
+  "sessions_dropped_incomplete": 10,
+  "slots_filled_pct": 0.166,
+  "first": "2021-10-01",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1250,
+   "sessions_kept": 1240,
+   "sessions_kept_complete": 1168,
+   "sessions_kept_filled": 72,
+   "slots_filled": 770,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 5,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 8,
+   "sessions_missing_1529": 58,
+   "sessions_unusual_length": 304,
+   "sessions_with_rows_before_0915": 186,
+   "sessions_with_rows_from_1530": 214,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 126,
+  "first_session_with_rows": "2021-10-01",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 259,
+    "kept": 255,
+    "excluded": {
+     "EXCLUDED_NO_0915": 4
+    },
+    "rows_from_1530_sessions": 153
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ },
+ "LICI": {
+  "kind": "EQUITY",
+  "fetch_status": "OK",
+  "rows": 407493,
+  "rows_out_of_span": 0,
+  "interval_min": 1,
+  "sessions_raw": 1094,
+  "sessions_kept": 1087,
+  "sessions_dropped_incomplete": 7,
+  "slots_filled_pct": 0.181,
+  "first": "2022-05-18",
+  "last": "2026-10-12",
+  "has_volume": true,
+  "integrity": {
+   "sessions_with_rows": 1094,
+   "sessions_kept": 1087,
+   "sessions_kept_complete": 1037,
+   "sessions_kept_filled": 50,
+   "slots_filled": 736,
+   "sessions_excluded": {
+    "EXCLUDED_NO_REGULAR_SESSION": 3,
+    "EXCLUDED_DUPLICATE_CONFLICT": 0,
+    "EXCLUDED_NO_0915": 2,
+    "EXCLUDED_INCOMPLETE": 2
+   },
+   "sessions_missing_0915": 5,
+   "sessions_missing_1529": 55,
+   "sessions_unusual_length": 127,
+   "sessions_with_rows_before_0915": 12,
+   "sessions_with_rows_from_1530": 70,
+   "duplicate_timestamps_identical": 0,
+   "duplicate_timestamps_conflicting": 0,
+   "timestamps_not_on_the_minute": 0
+  },
+  "sessions_missing_vs_nifty_calendar": 0,
+  "missing_session_dates": [],
+  "sessions_not_in_nifty_calendar": 28,
+  "first_session_with_rows": "2022-05-17",
+  "per_window": {
+   "in_sample": {
+    "sessions_with_rows": 737,
+    "kept": 732,
+    "excluded": {
+     "EXCLUDED_INCOMPLETE": 2,
+     "EXCLUDED_NO_REGULAR_SESSION": 3
+    },
+    "rows_from_1530_sessions": 61
+   },
+   "confirmation": {
+    "sessions_with_rows": 103,
+    "kept": 102,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 9
+   },
+   "contaminated": {
+    "sessions_with_rows": 254,
+    "kept": 253,
+    "excluded": {
+     "EXCLUDED_NO_0915": 1
+    },
+    "rows_from_1530_sessions": 0
+   }
+  }
+ }
+}

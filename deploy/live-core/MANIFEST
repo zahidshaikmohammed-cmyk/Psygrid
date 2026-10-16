@@ -16,6 +16,7 @@ live_core/auth.py
 live_core/render.py
 live_core/runtime.py
 live_core/state.py
+live_core/index_node.py
 auth_retry.py
 config.py
 dhan_api.py
@@ -24,9 +25,15 @@ feed.py
 instrument_master.py
 output.py
 runtime_guard.py
+token_share.py
+index_options.py
+index_depth.py
+option_analytics.py
+stocks_fno.json
 health_monitor.py
 stocks.json
 deploy/live-core/requirements.txt
 deploy/live-core/psygrid-live-core.service.in
+deploy/live-core/psygrid-index-node.service.in
 deploy/live-core/install.sh
 deploy/live-core/check_health.py

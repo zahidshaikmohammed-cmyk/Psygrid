@@ -278,3 +278,64 @@ def test_a_token_that_is_not_ready_is_picked_up_within_seconds(monkeypatch, univ
         assert runtime.state.session_status == "PRE_OPEN" and runtime.feed is not None
     finally:
         runtime.stop()
+
+
+def _token_node(monkeypatch, universe, instruments, generation: bool):
+    from live_core_helpers import Clock, FakeDhanAPI, FakeFeed
+
+    _clear(monkeypatch)
+    monkeypatch.setenv("PSYGRID_TOKEN_SHARE_CLIENTS", "10.0.0.165")
+    clock = Clock(ist(9, 15))
+    runtime = LiveCoreRuntime(
+        LiveCoreConfig(node_id=0, node_count=2, history_interval_seconds=0.0, token_generation=generation),
+        universe,
+        build_partition(universe, 0, 2),
+        settings_loader=lambda: auth.psygrid_config.Settings(
+            client_id="1100000001", access_token=TOKEN, token_source="AUTO_GENERATED_TOTP", token_expiry=None
+        ),
+        token_refresher=lambda settings, force=False: None,
+        instrument_loader=lambda: list(instruments),
+        api_factory=lambda settings: FakeDhanAPI(),
+        feed_factory=FakeFeed,
+        now=clock.now,
+        clock=clock.epoch,
+    )
+    runtime.tick()
+    return runtime
+
+
+def test_generating_node_shares_its_token_only_with_listed_private_peers(monkeypatch, universe, instruments):
+    from fastapi.testclient import TestClient
+
+    from live_core.api import create_app
+
+    runtime = _token_node(monkeypatch, universe, instruments, generation=True)
+    try:
+        app = create_app(runtime, start_runtime=False)
+        peer = TestClient(app, client=("10.0.0.165", 50000)).get("/internal/dhan-token")
+        assert peer.status_code == 200 and peer.headers["cache-control"] == "no-store"
+        assert peer.json()["access_token"] == TOKEN and peer.json()["client_id"] == "1100000001"
+        stranger = TestClient(app, client=("10.0.0.99", 50000)).get("/internal/dhan-token")
+        public = TestClient(app, client=("203.0.113.7", 50000)).get("/internal/dhan-token")
+        proxied = TestClient(app, client=("10.0.0.165", 50000)).get(
+            "/internal/dhan-token", headers={"X-Forwarded-For": "203.0.113.7"}
+        )
+        for r in (stranger, public, proxied):
+            assert r.status_code == 403 and TOKEN not in r.text
+    finally:
+        runtime.stop()
+
+
+def test_consuming_node_never_shares_a_token(monkeypatch, universe, instruments):
+    from fastapi.testclient import TestClient
+
+    from live_core.api import create_app
+
+    runtime = _token_node(monkeypatch, universe, instruments, generation=False)
+    try:
+        r = TestClient(create_app(runtime, start_runtime=False), client=("10.0.0.165", 50000)).get(
+            "/internal/dhan-token"
+        )
+        assert r.status_code == 404 and TOKEN not in r.text
+    finally:
+        runtime.stop()

@@ -1,0 +1,3683 @@
+{
+ "in_sample": {
+  "ADANIPORTS": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0302,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2024-11-21"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": false
+  },
+  "RELIANCE": {
+   "eligible": true,
+   "sessions": 731,
+   "spread_pct": 0.0191,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "HDFCBANK": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0198,
+   "spread_capped": false,
+   "corporate_action_flags": [],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "ICICIBANK": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0224,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "BSE": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0366,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2021-12-28",
+    "2022-03-21",
+    "2022-06-16",
+    "2024-04-29",
+    "2024-08-08"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 22,
+   "has_sector_peers": true
+  },
+  "DMART": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0262,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2024-10-14"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "SBIN": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0247,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "INFY": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0211,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-04-18",
+    "2022-06-16",
+    "2023-04-17"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "BHARTIARTL": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0219,
+   "spread_capped": false,
+   "corporate_action_flags": [],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "APOLLOHOSP": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0232,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "KOTAKBANK": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0238,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2024-04-25"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "TCS": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0192,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "AXISBANK": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0242,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "TECHM": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0265,
+   "spread_capped": false,
+   "corporate_action_flags": [],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "MCX": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0305,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2023-06-30",
+    "2026-02-01"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "SUZLON": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.1152,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2022-10-03",
+    "2025-04-07",
+    "2025-05-30"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 22,
+   "has_sector_peers": false
+  },
+  "M&M": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0257,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "ATHERENERG": {
+   "eligible": false,
+   "reason": "only 103 complete sessions in window"
+  },
+  "BAJFINANCE": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0246,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "SAIL": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0442,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2021-11-01",
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "TATASTEEL": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0364,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "DELHIVERY": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.03,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "INDUSINDBK": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.027,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2024-10-25",
+    "2025-03-11"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 22,
+   "has_sector_peers": true
+  },
+  "LT": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0234,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "IDEA": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.2,
+   "spread_capped": true,
+   "corporate_action_flags": [
+    "2021-11-29",
+    "2022-01-11",
+    "2022-06-16",
+    "2024-04-25",
+    "2025-01-20",
+    "2025-04-01"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 33,
+   "has_sector_peers": false
+  },
+  "COALINDIA": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0295,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-03-22",
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "NTPC": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0283,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "ETERNAL": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0378,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "ITC": {
+   "eligible": true,
+   "sessions": 731,
+   "spread_pct": 0.0247,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2025-01-07"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "POLYCAB": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0259,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2024-01-11"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": false
+  },
+  "INDIGO": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0231,
+   "spread_capped": false,
+   "corporate_action_flags": [],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "PAYTM": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0339,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-03-14",
+    "2022-06-16",
+    "2023-08-07",
+    "2023-12-07",
+    "2024-02-01",
+    "2024-02-02",
+    "2024-02-05",
+    "2024-02-06"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 36,
+   "has_sector_peers": false
+  },
+  "MARUTI": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0214,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "BHEL": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0407,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "DIVISLAB": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0271,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "TITAN": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.024,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "BEL": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0353,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2024-05-21"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": false
+  },
+  "POLICYBZR": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.032,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2026-09-24"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "HCLTECH": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0231,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "ADANIENT": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0311,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-14",
+    "2022-06-16",
+    "2023-02-02",
+    "2024-11-21"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 22,
+   "has_sector_peers": false
+  },
+  "LAURUSLABS": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0304,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2024-01-25"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "KALYANKJIL": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.041,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "OFSS": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0234,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2024-01-18"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "VEDL": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0399,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-05-06",
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "TVSMOTOR": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0263,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "HINDUNILVR": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0207,
+   "spread_capped": false,
+   "corporate_action_flags": [],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "EICHERMOT": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0246,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "TMPV": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0246,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2021-10-13",
+    "2022-06-16",
+    "2025-10-15"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "TATAELXSI": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0261,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "SOLARINDS": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0271,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2021-10-11",
+    "2022-06-16",
+    "2024-12-03"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": false
+  },
+  "HAL": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.028,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "ADANIPOWER": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0503,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2023-12-04",
+    "2024-06-03",
+    "2024-11-21",
+    "2025-04-07"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 44,
+   "has_sector_peers": true
+  },
+  "ULTRACEMCO": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0229,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "COFORGE": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0293,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2024-05-03"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "HINDALCO": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0248,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "PFC": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0314,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "DIXON": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0287,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "INDUSTOWER": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0317,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "PNBHOUSING": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0334,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2023-04-05",
+    "2025-08-01"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 22,
+   "has_sector_peers": true
+  },
+  "BHARATFORG": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0278,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "DRREDDY": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0237,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "KAYNES": {
+   "eligible": true,
+   "sessions": 706,
+   "spread_pct": 0.0365,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2023-05-17",
+    "2024-05-17",
+    "2024-05-21",
+    "2025-01-28",
+    "2025-04-07",
+    "2026-05-14",
+    "2026-08-10"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 45,
+   "has_sector_peers": true
+  },
+  "RECLTD": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0337,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2022-08-17"
+   ],
+   "likely_splits": [
+    "2022-08-17"
+   ],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "ONGC": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0287,
+   "spread_capped": false,
+   "corporate_action_flags": [],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "AUROPHARMA": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0264,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "SUNPHARMA": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0232,
+   "spread_capped": false,
+   "corporate_action_flags": [],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "POWERINDIA": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0254,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2025-01-30",
+    "2025-04-07",
+    "2026-02-06"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 22,
+   "has_sector_peers": true
+  },
+  "LICHSGFIN": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0247,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "ANGELONE": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0387,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2024-01-16",
+    "2024-04-18",
+    "2024-07-02"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 33,
+   "has_sector_peers": false
+  },
+  "TORNTPHARM": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0223,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "ADANIGREEN": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.037,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2023-01-30",
+    "2023-02-02",
+    "2023-02-03",
+    "2023-12-04",
+    "2023-12-06",
+    "2024-11-21"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 39,
+   "has_sector_peers": true
+  },
+  "ANANDRATHI": {
+   "eligible": true,
+   "sessions": 728,
+   "spread_pct": 0.0208,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2024-07-22"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": false
+  },
+  "PERSISTENT": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0302,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "TRENT": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0293,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2025-07-04",
+    "2026-10-06"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "CHOLAFIN": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0301,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "SHRIRAMFIN": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0286,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2023-06-21"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": false
+  },
+  "ASHOKLEY": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0536,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "NESTLEIND": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0242,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "MAXHEALTH": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0278,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "VBL": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0284,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2023-12-20"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "HDFCAMC": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0263,
+   "spread_capped": false,
+   "corporate_action_flags": [],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "HINDPETRO": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.032,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "FEDERALBNK": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0324,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "JIOFIN": {
+   "eligible": true,
+   "sessions": 521,
+   "spread_pct": 0.03,
+   "spread_capped": false,
+   "corporate_action_flags": [],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "SONACOMS": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0304,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "GMRAIRPORT": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0647,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "MANAPPURAM": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0323,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-05-19",
+    "2022-06-16",
+    "2024-10-18"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "GLENMARK": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0265,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2024-11-12",
+    "2025-07-11"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 22,
+   "has_sector_peers": false
+  },
+  "HEROMOTOCO": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0246,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "UPL": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0241,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "POWERGRID": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0251,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "INDHOTEL": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0258,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "TIINDIA": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0296,
+   "spread_capped": false,
+   "corporate_action_flags": [],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "GAIL": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0341,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "DLF": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0251,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "RBLBANK": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.033,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2021-12-27",
+    "2022-06-13",
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "ENRIN": {
+   "eligible": false,
+   "reason": "only 71 complete sessions in window"
+  },
+  "ABB": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0265,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "LICI": {
+   "eligible": true,
+   "sessions": 732,
+   "spread_pct": 0.0307,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  }
+ },
+ "confirmation": {
+  "ADANIPORTS": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0317,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2024-11-21"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": false
+  },
+  "RELIANCE": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0227,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "HDFCBANK": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0234,
+   "spread_capped": false,
+   "corporate_action_flags": [],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "ICICIBANK": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0242,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "BSE": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0439,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2021-12-28",
+    "2022-03-21",
+    "2022-06-16",
+    "2024-04-29",
+    "2024-08-08"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 33,
+   "has_sector_peers": true
+  },
+  "DMART": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0336,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2024-10-14"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "SBIN": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0261,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "INFY": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0237,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-04-18",
+    "2022-06-16",
+    "2023-04-17"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 22,
+   "has_sector_peers": true
+  },
+  "BHARTIARTL": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0264,
+   "spread_capped": false,
+   "corporate_action_flags": [],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "APOLLOHOSP": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0312,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "KOTAKBANK": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0286,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2024-04-25"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "TCS": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0205,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "AXISBANK": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0264,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "TECHM": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0301,
+   "spread_capped": false,
+   "corporate_action_flags": [],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "MCX": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0295,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2023-06-30",
+    "2026-02-01"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "SUZLON": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.2,
+   "spread_capped": true,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2022-10-03",
+    "2025-04-07",
+    "2025-05-30"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 22,
+   "has_sector_peers": false
+  },
+  "M&M": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0299,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "ATHERENERG": {
+   "eligible": false,
+   "reason": "only 0 complete sessions in window"
+  },
+  "BAJFINANCE": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0288,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "SAIL": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0514,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2021-11-01",
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 22,
+   "has_sector_peers": true
+  },
+  "TATASTEEL": {
+   "eligible": true,
+   "sessions": 198,
+   "spread_pct": 0.0452,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "DELHIVERY": {
+   "eligible": false,
+   "reason": "only 97 complete sessions in window"
+  },
+  "INDUSINDBK": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.032,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2024-10-25",
+    "2025-03-11"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "LT": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0274,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "IDEA": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.2,
+   "spread_capped": true,
+   "corporate_action_flags": [
+    "2021-11-29",
+    "2022-01-11",
+    "2022-06-16",
+    "2024-04-25",
+    "2025-01-20",
+    "2025-04-01"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 33,
+   "has_sector_peers": false
+  },
+  "COALINDIA": {
+   "eligible": true,
+   "sessions": 197,
+   "spread_pct": 0.0357,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-03-22",
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 22,
+   "has_sector_peers": true
+  },
+  "NTPC": {
+   "eligible": true,
+   "sessions": 198,
+   "spread_pct": 0.0335,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "ETERNAL": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0628,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": false
+  },
+  "ITC": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0258,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2025-01-07"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "POLYCAB": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0359,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2024-01-11"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": false
+  },
+  "INDIGO": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0313,
+   "spread_capped": false,
+   "corporate_action_flags": [],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "PAYTM": {
+   "eligible": true,
+   "sessions": 164,
+   "spread_pct": 0.035,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-03-14",
+    "2022-06-16",
+    "2023-08-07",
+    "2023-12-07",
+    "2024-02-01",
+    "2024-02-02",
+    "2024-02-05",
+    "2024-02-06"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 16,
+   "has_sector_peers": false
+  },
+  "MARUTI": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0288,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "BHEL": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0899,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "DIVISLAB": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0291,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "TITAN": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0299,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": false
+  },
+  "BEL": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.068,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2024-05-21"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "POLICYBZR": {
+   "eligible": true,
+   "sessions": 226,
+   "spread_pct": 0.039,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2026-09-24"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "HCLTECH": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0257,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "ADANIENT": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0349,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-14",
+    "2022-06-16",
+    "2023-02-02",
+    "2024-11-21"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 13,
+   "has_sector_peers": false
+  },
+  "LAURUSLABS": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0315,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2024-01-25"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "KALYANKJIL": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0751,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "OFSS": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0212,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2024-01-18"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "VEDL": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0415,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-05-06",
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 22,
+   "has_sector_peers": true
+  },
+  "TVSMOTOR": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0308,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "HINDUNILVR": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0234,
+   "spread_capped": false,
+   "corporate_action_flags": [],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "EICHERMOT": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0312,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "TMPV": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0291,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2021-10-13",
+    "2022-06-16",
+    "2025-10-15"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 22,
+   "has_sector_peers": true
+  },
+  "TATAELXSI": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0334,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "SOLARINDS": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0183,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2021-10-11",
+    "2022-06-16",
+    "2024-12-03"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 22,
+   "has_sector_peers": false
+  },
+  "HAL": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0313,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": false
+  },
+  "ADANIPOWER": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.1103,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2023-12-04",
+    "2024-06-03",
+    "2024-11-21",
+    "2025-04-07"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "ULTRACEMCO": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.029,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": false
+  },
+  "COFORGE": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0372,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2024-05-03"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "HINDALCO": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0328,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "PFC": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0531,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "DIXON": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0356,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": false
+  },
+  "INDUSTOWER": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0313,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": false
+  },
+  "PNBHOUSING": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0159,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2023-04-05",
+    "2025-08-01"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "BHARATFORG": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0328,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "DRREDDY": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0282,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "KAYNES": {
+   "eligible": false,
+   "reason": "only 0 complete sessions in window"
+  },
+  "RECLTD": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0392,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2022-08-17"
+   ],
+   "likely_splits": [
+    "2022-08-17"
+   ],
+   "sessions_excluded": 22,
+   "has_sector_peers": true
+  },
+  "ONGC": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0327,
+   "spread_capped": false,
+   "corporate_action_flags": [],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "AUROPHARMA": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.029,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "SUNPHARMA": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0269,
+   "spread_capped": false,
+   "corporate_action_flags": [],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "POWERINDIA": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0213,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2025-01-30",
+    "2025-04-07",
+    "2026-02-06"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "LICHSGFIN": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0295,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "ANGELONE": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0467,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2024-01-16",
+    "2024-04-18",
+    "2024-07-02"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": false
+  },
+  "TORNTPHARM": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0252,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "ADANIGREEN": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0415,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2023-01-30",
+    "2023-02-02",
+    "2023-02-03",
+    "2023-12-04",
+    "2023-12-06",
+    "2024-11-21"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "ANANDRATHI": {
+   "eligible": true,
+   "sessions": 201,
+   "spread_pct": 0.0314,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2024-07-22"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": false
+  },
+  "PERSISTENT": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0362,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "TRENT": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0342,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2025-07-04",
+    "2026-10-06"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "CHOLAFIN": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0378,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "SHRIRAMFIN": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.033,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2023-06-21"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": false
+  },
+  "ASHOKLEY": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0733,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "NESTLEIND": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0256,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "MAXHEALTH": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0325,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "VBL": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0382,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2023-12-20"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "HDFCAMC": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0272,
+   "spread_capped": false,
+   "corporate_action_flags": [],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "HINDPETRO": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0327,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "FEDERALBNK": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0515,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "JIOFIN": {
+   "eligible": false,
+   "reason": "only 0 complete sessions in window"
+  },
+  "SONACOMS": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0389,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "GMRAIRPORT": {
+   "eligible": true,
+   "sessions": 254,
+   "spread_pct": 0.1305,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": false
+  },
+  "MANAPPURAM": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0432,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-05-19",
+    "2022-06-16",
+    "2024-10-18"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 22,
+   "has_sector_peers": true
+  },
+  "GLENMARK": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0277,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2024-11-12",
+    "2025-07-11"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": false
+  },
+  "HEROMOTOCO": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0275,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "UPL": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.028,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": false
+  },
+  "POWERGRID": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0316,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "INDHOTEL": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.038,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": false
+  },
+  "TIINDIA": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0278,
+   "spread_capped": false,
+   "corporate_action_flags": [],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "GAIL": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0524,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "DLF": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0317,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": false
+  },
+  "RBLBANK": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.0409,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2021-12-27",
+    "2022-06-13",
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 25,
+   "has_sector_peers": true
+  },
+  "ENRIN": {
+   "eligible": false,
+   "reason": "only 0 complete sessions in window"
+  },
+  "ABB": {
+   "eligible": true,
+   "sessions": 255,
+   "spread_pct": 0.032,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "LICI": {
+   "eligible": false,
+   "reason": "only 102 complete sessions in window"
+  }
+ },
+ "contaminated": {
+  "ADANIPORTS": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0249,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2024-11-21"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "RELIANCE": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.019,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "HDFCBANK": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0193,
+   "spread_capped": false,
+   "corporate_action_flags": [],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "ICICIBANK": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0202,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "BSE": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0288,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2021-12-28",
+    "2022-03-21",
+    "2022-06-16",
+    "2024-04-29",
+    "2024-08-08"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "DMART": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0227,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2024-10-14"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "SBIN": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0215,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "INFY": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0241,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-04-18",
+    "2022-06-16",
+    "2023-04-17"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "BHARTIARTL": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0183,
+   "spread_capped": false,
+   "corporate_action_flags": [],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "APOLLOHOSP": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.018,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "KOTAKBANK": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0262,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2024-04-25"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "TCS": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0221,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "AXISBANK": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0232,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "TECHM": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0251,
+   "spread_capped": false,
+   "corporate_action_flags": [],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "MCX": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0301,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2023-06-30",
+    "2026-02-01"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "SUZLON": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.096,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2022-10-03",
+    "2025-04-07",
+    "2025-05-30"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "M&M": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.022,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "ATHERENERG": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0407,
+   "spread_capped": false,
+   "corporate_action_flags": [],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "BAJFINANCE": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0256,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "SAIL": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0307,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2021-11-01",
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "TATASTEEL": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0266,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "DELHIVERY": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0281,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "INDUSINDBK": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.027,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2024-10-25",
+    "2025-03-11"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "LT": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0215,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "IDEA": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.2,
+   "spread_capped": true,
+   "corporate_action_flags": [
+    "2021-11-29",
+    "2022-01-11",
+    "2022-06-16",
+    "2024-04-25",
+    "2025-01-20",
+    "2025-04-01"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "COALINDIA": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0263,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-03-22",
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "NTPC": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.027,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "ETERNAL": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0282,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "ITC": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0277,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2025-01-07"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "POLYCAB": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0229,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2024-01-11"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "INDIGO": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0239,
+   "spread_capped": false,
+   "corporate_action_flags": [],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "PAYTM": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0294,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-03-14",
+    "2022-06-16",
+    "2023-08-07",
+    "2023-12-07",
+    "2024-02-01",
+    "2024-02-02",
+    "2024-02-05",
+    "2024-02-06"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "MARUTI": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0219,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "BHEL": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0313,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "DIVISLAB": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0216,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "TITAN": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0229,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "BEL": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.026,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2024-05-21"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "POLICYBZR": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.028,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2026-09-24"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "HCLTECH": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0246,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "ADANIENT": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0267,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-14",
+    "2022-06-16",
+    "2023-02-02",
+    "2024-11-21"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "LAURUSLABS": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0236,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2024-01-25"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "KALYANKJIL": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0307,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "OFSS": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0222,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2024-01-18"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "VEDL": {
+   "eligible": true,
+   "sessions": 252,
+   "spread_pct": 0.0285,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-05-06",
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "TVSMOTOR": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0225,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "HINDUNILVR": {
+   "eligible": true,
+   "sessions": 252,
+   "spread_pct": 0.0214,
+   "spread_capped": false,
+   "corporate_action_flags": [],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "EICHERMOT": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0206,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "TMPV": {
+   "eligible": true,
+   "sessions": 252,
+   "spread_pct": 0.0272,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2021-10-13",
+    "2022-06-16",
+    "2025-10-15"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "TATAELXSI": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0245,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "SOLARINDS": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0274,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2021-10-11",
+    "2022-06-16",
+    "2024-12-03"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "HAL": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.023,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "ADANIPOWER": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0318,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2023-12-04",
+    "2024-06-03",
+    "2024-11-21",
+    "2025-04-07"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "ULTRACEMCO": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0212,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "COFORGE": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0298,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2024-05-03"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "HINDALCO": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.023,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "PFC": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0255,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "DIXON": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0298,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "INDUSTOWER": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0285,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "PNBHOUSING": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0305,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2023-04-05",
+    "2025-08-01"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "BHARATFORG": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0255,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "DRREDDY": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0249,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "KAYNES": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0351,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2023-05-17",
+    "2024-05-17",
+    "2024-05-21",
+    "2025-01-28",
+    "2025-04-07",
+    "2026-05-14",
+    "2026-08-10"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 22,
+   "has_sector_peers": true
+  },
+  "RECLTD": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0263,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2022-08-17"
+   ],
+   "likely_splits": [
+    "2022-08-17"
+   ],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "ONGC": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0252,
+   "spread_capped": false,
+   "corporate_action_flags": [],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "AUROPHARMA": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0248,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "SUNPHARMA": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0206,
+   "spread_capped": false,
+   "corporate_action_flags": [],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "POWERINDIA": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.029,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2025-01-30",
+    "2025-04-07",
+    "2026-02-06"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 11,
+   "has_sector_peers": true
+  },
+  "LICHSGFIN": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0196,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "ANGELONE": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0347,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2024-01-16",
+    "2024-04-18",
+    "2024-07-02"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "TORNTPHARM": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0226,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "ADANIGREEN": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.031,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2023-01-30",
+    "2023-02-02",
+    "2023-02-03",
+    "2023-12-04",
+    "2023-12-06",
+    "2024-11-21"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "ANANDRATHI": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0271,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2024-07-22"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "PERSISTENT": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0284,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "TRENT": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0272,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2025-07-04",
+    "2026-10-06"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 10,
+   "has_sector_peers": true
+  },
+  "CHOLAFIN": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0265,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "SHRIRAMFIN": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0254,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2023-06-21"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "ASHOKLEY": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0307,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "NESTLEIND": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0217,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "MAXHEALTH": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0265,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "VBL": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0268,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2023-12-20"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "HDFCAMC": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0236,
+   "spread_capped": false,
+   "corporate_action_flags": [],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "HINDPETRO": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0263,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "FEDERALBNK": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0272,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "JIOFIN": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0263,
+   "spread_capped": false,
+   "corporate_action_flags": [],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "SONACOMS": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0297,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "GMRAIRPORT": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.051,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "MANAPPURAM": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0327,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-05-19",
+    "2022-06-16",
+    "2024-10-18"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "GLENMARK": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0223,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16",
+    "2024-11-12",
+    "2025-07-11"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "HEROMOTOCO": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0224,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "UPL": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0216,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "POWERGRID": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0248,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "INDHOTEL": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0231,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "TIINDIA": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0254,
+   "spread_capped": false,
+   "corporate_action_flags": [],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "GAIL": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0293,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "DLF": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0257,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "RBLBANK": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0308,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2021-12-27",
+    "2022-06-13",
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "ENRIN": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0289,
+   "spread_capped": false,
+   "corporate_action_flags": [],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  },
+  "ABB": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0241,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": true
+  },
+  "LICI": {
+   "eligible": true,
+   "sessions": 253,
+   "spread_pct": 0.0228,
+   "spread_capped": false,
+   "corporate_action_flags": [
+    "2022-06-16"
+   ],
+   "likely_splits": [],
+   "sessions_excluded": 0,
+   "has_sector_peers": false
+  }
+ }
+}

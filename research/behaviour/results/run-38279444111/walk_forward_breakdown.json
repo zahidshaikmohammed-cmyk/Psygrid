@@ -1,0 +1,1070 @@
+{
+ "all": {
+  "trades": 2410,
+  "weeks": 104,
+  "rules": 82,
+  "stocks": 12,
+  "mean": {
+   "gross": 0.18,
+   "net_low": 0.128,
+   "net_base": 0.088,
+   "net_high": 0.006
+  },
+  "t": {
+   "gross": 5.14,
+   "net_low": 3.65,
+   "net_base": 2.51,
+   "net_high": 0.17
+  }
+ },
+ "excluding_last_window": {
+  "trades": 335,
+  "weeks": 88,
+  "rules": 17,
+  "stocks": 11,
+  "mean": {
+   "gross": 0.1446,
+   "net_low": 0.078,
+   "net_base": 0.038,
+   "net_high": -0.0586
+  },
+  "t": {
+   "gross": 1.46,
+   "net_low": 0.78,
+   "net_base": 0.38,
+   "net_high": -0.59
+  }
+ },
+ "last_window": {
+  "trades": 2075,
+  "weeks": 16,
+  "rules": 65,
+  "stocks": 1,
+  "mean": {
+   "gross": 0.1858,
+   "net_low": 0.1361,
+   "net_base": 0.0961,
+   "net_high": 0.0164
+  },
+  "t": {
+   "gross": 4.81,
+   "net_low": 3.52,
+   "net_base": 2.49,
+   "net_high": 0.42
+  }
+ },
+ "by_window": {
+  "0": {
+   "trades": 45,
+   "weeks": 13,
+   "rules": 3,
+   "stocks": 3,
+   "mean": {
+    "gross": 0.3744,
+    "net_low": 0.3132,
+    "net_base": 0.2732,
+    "net_high": 0.1821
+   },
+   "t": {
+    "gross": 1.44,
+    "net_low": 1.21,
+    "net_base": 1.06,
+    "net_high": 0.7
+   }
+  },
+  "1": {
+   "trades": 18,
+   "weeks": 9,
+   "rules": 2,
+   "stocks": 2,
+   "mean": {
+    "gross": 0.3169,
+    "net_low": 0.2535,
+    "net_base": 0.2135,
+    "net_high": 0.1201
+   },
+   "t": {
+    "gross": 0.61,
+    "net_low": 0.49,
+    "net_base": 0.41,
+    "net_high": 0.23
+   }
+  },
+  "3": {
+   "trades": 9,
+   "weeks": 5,
+   "rules": 1,
+   "stocks": 1,
+   "mean": {
+    "gross": 0.0943,
+    "net_low": 0.034,
+    "net_base": -0.006,
+    "net_high": -0.0963
+   },
+   "t": {
+    "gross": 0.28,
+    "net_low": 0.1,
+    "net_base": -0.02,
+    "net_high": -0.29
+   }
+  },
+  "4": {
+   "trades": 116,
+   "weeks": 13,
+   "rules": 5,
+   "stocks": 3,
+   "mean": {
+    "gross": 0.1072,
+    "net_low": 0.0381,
+    "net_base": -0.0019,
+    "net_high": -0.1011
+   },
+   "t": {
+    "gross": 0.49,
+    "net_low": 0.17,
+    "net_base": -0.01,
+    "net_high": -0.46
+   }
+  },
+  "5": {
+   "trades": 64,
+   "weeks": 13,
+   "rules": 4,
+   "stocks": 3,
+   "mean": {
+    "gross": 0.1571,
+    "net_low": 0.09,
+    "net_base": 0.05,
+    "net_high": -0.047
+   },
+   "t": {
+    "gross": 1.02,
+    "net_low": 0.58,
+    "net_base": 0.32,
+    "net_high": -0.3
+   }
+  },
+  "6": {
+   "trades": 18,
+   "weeks": 9,
+   "rules": 1,
+   "stocks": 1,
+   "mean": {
+    "gross": -0.0804,
+    "net_low": -0.142,
+    "net_base": -0.182,
+    "net_high": -0.2736
+   },
+   "t": {
+    "gross": -0.52,
+    "net_low": -0.92,
+    "net_base": -1.18,
+    "net_high": -1.77
+   }
+  },
+  "8": {
+   "trades": 38,
+   "weeks": 13,
+   "rules": 3,
+   "stocks": 2,
+   "mean": {
+    "gross": 0.2343,
+    "net_low": 0.1683,
+    "net_base": 0.1283,
+    "net_high": 0.0322
+   },
+   "t": {
+    "gross": 1.02,
+    "net_low": 0.73,
+    "net_base": 0.56,
+    "net_high": 0.14
+   }
+  },
+  "9": {
+   "trades": 27,
+   "weeks": 13,
+   "rules": 3,
+   "stocks": 3,
+   "mean": {
+    "gross": -0.1822,
+    "net_low": -0.2537,
+    "net_base": -0.2937,
+    "net_high": -0.3951
+   },
+   "t": {
+    "gross": -0.53,
+    "net_low": -0.73,
+    "net_base": -0.84,
+    "net_high": -1.13
+   }
+  },
+  "10": {
+   "trades": 2075,
+   "weeks": 16,
+   "rules": 65,
+   "stocks": 1,
+   "mean": {
+    "gross": 0.1858,
+    "net_low": 0.1361,
+    "net_base": 0.0961,
+    "net_high": 0.0164
+   },
+   "t": {
+    "gross": 4.81,
+    "net_low": 3.52,
+    "net_base": 2.49,
+    "net_high": 0.42
+   }
+  }
+ },
+ "by_family": {
+  "CANDLE": {
+   "trades": 87,
+   "weeks": 16,
+   "rules": 2,
+   "stocks": 1,
+   "mean": {
+    "gross": 0.0983,
+    "net_low": 0.0486,
+    "net_base": 0.0086,
+    "net_high": -0.0711
+   },
+   "t": {
+    "gross": 1.25,
+    "net_low": 0.62,
+    "net_base": 0.11,
+    "net_high": -0.91
+   }
+  },
+  "DOWSLOT": {
+   "trades": 34,
+   "weeks": 23,
+   "rules": 2,
+   "stocks": 1,
+   "mean": {
+    "gross": -0.0844,
+    "net_low": -0.1494,
+    "net_base": -0.1894,
+    "net_high": -0.2844
+   },
+   "t": {
+    "gross": -0.3,
+    "net_low": -0.53,
+    "net_base": -0.67,
+    "net_high": -1.0
+   }
+  },
+  "EVENT": {
+   "trades": 2152,
+   "weeks": 84,
+   "rules": 67,
+   "stocks": 8,
+   "mean": {
+    "gross": 0.1832,
+    "net_low": 0.1314,
+    "net_base": 0.0914,
+    "net_high": 0.0097
+   },
+   "t": {
+    "gross": 5.09,
+    "net_low": 3.65,
+    "net_base": 2.54,
+    "net_high": 0.27
+   }
+  },
+  "MOTIF": {
+   "trades": 15,
+   "weeks": 5,
+   "rules": 3,
+   "stocks": 1,
+   "mean": {
+    "gross": 0.0418,
+    "net_low": -0.0079,
+    "net_base": -0.0479,
+    "net_high": -0.1276
+   },
+   "t": {
+    "gross": 1.04,
+    "net_low": -0.2,
+    "net_base": -1.2,
+    "net_high": -3.19
+   }
+  },
+  "OPEN": {
+   "trades": 19,
+   "weeks": 13,
+   "rules": 2,
+   "stocks": 1,
+   "mean": {
+    "gross": 0.5413,
+    "net_low": 0.481,
+    "net_base": 0.441,
+    "net_high": 0.3507
+   },
+   "t": {
+    "gross": 1.28,
+    "net_low": 1.14,
+    "net_base": 1.05,
+    "net_high": 0.83
+   }
+  },
+  "STATE": {
+   "trades": 103,
+   "weeks": 38,
+   "rules": 6,
+   "stocks": 4,
+   "mean": {
+    "gross": 0.2239,
+    "net_low": 0.1696,
+    "net_base": 0.1296,
+    "net_high": 0.0452
+   },
+   "t": {
+    "gross": 2.03,
+    "net_low": 1.54,
+    "net_base": 1.17,
+    "net_high": 0.41
+   }
+  }
+ },
+ "by_stock_top": {
+  "ANANDRATHI": {
+   "trades": 2075,
+   "weeks": 16,
+   "rules": 65,
+   "stocks": 1,
+   "mean": {
+    "gross": 0.1858,
+    "net_low": 0.1361,
+    "net_base": 0.0961,
+    "net_high": 0.0164
+   },
+   "t": {
+    "gross": 4.81,
+    "net_low": 3.52,
+    "net_base": 2.49,
+    "net_high": 0.42
+   }
+  },
+  "KALYANKJIL": {
+   "trades": 102,
+   "weeks": 23,
+   "rules": 3,
+   "stocks": 1,
+   "mean": {
+    "gross": -0.0067,
+    "net_low": -0.0793,
+    "net_base": -0.1193,
+    "net_high": -0.2219
+   },
+   "t": {
+    "gross": -0.03,
+    "net_low": -0.36,
+    "net_base": -0.54,
+    "net_high": -1.0
+   }
+  },
+  "POLICYBZR": {
+   "trades": 66,
+   "weeks": 31,
+   "rules": 2,
+   "stocks": 1,
+   "mean": {
+    "gross": 0.2761,
+    "net_low": 0.2145,
+    "net_base": 0.1745,
+    "net_high": 0.083
+   },
+   "t": {
+    "gross": 1.34,
+    "net_low": 1.04,
+    "net_base": 0.85,
+    "net_high": 0.4
+   }
+  },
+  "KAYNES": {
+   "trades": 34,
+   "weeks": 23,
+   "rules": 2,
+   "stocks": 1,
+   "mean": {
+    "gross": -0.0844,
+    "net_low": -0.1494,
+    "net_base": -0.1894,
+    "net_high": -0.2844
+   },
+   "t": {
+    "gross": -0.3,
+    "net_low": -0.53,
+    "net_base": -0.67,
+    "net_high": -1.0
+   }
+  },
+  "SONACOMS": {
+   "trades": 30,
+   "weeks": 21,
+   "rules": 3,
+   "stocks": 1,
+   "mean": {
+    "gross": 0.2289,
+    "net_low": 0.1685,
+    "net_base": 0.1285,
+    "net_high": 0.0382
+   },
+   "t": {
+    "gross": 0.7,
+    "net_low": 0.51,
+    "net_base": 0.39,
+    "net_high": 0.12
+   }
+  },
+  "LICI": {
+   "trades": 22,
+   "weeks": 11,
+   "rules": 1,
+   "stocks": 1,
+   "mean": {
+    "gross": 0.3809,
+    "net_low": 0.319,
+    "net_base": 0.279,
+    "net_high": 0.1872
+   },
+   "t": {
+    "gross": 0.78,
+    "net_low": 0.66,
+    "net_base": 0.57,
+    "net_high": 0.39
+   }
+  },
+  "ADANIGREEN": {
+   "trades": 21,
+   "weeks": 13,
+   "rules": 1,
+   "stocks": 1,
+   "mean": {
+    "gross": 0.1377,
+    "net_low": 0.0704,
+    "net_base": 0.0304,
+    "net_high": -0.0669
+   },
+   "t": {
+    "gross": 0.55,
+    "net_low": 0.28,
+    "net_base": 0.12,
+    "net_high": -0.27
+   }
+  },
+  "ANGELONE": {
+   "trades": 19,
+   "weeks": 11,
+   "rules": 1,
+   "stocks": 1,
+   "mean": {
+    "gross": 0.3643,
+    "net_low": 0.2964,
+    "net_base": 0.2564,
+    "net_high": 0.1586
+   },
+   "t": {
+    "gross": 0.84,
+    "net_low": 0.69,
+    "net_base": 0.59,
+    "net_high": 0.37
+   }
+  },
+  "GAIL": {
+   "trades": 16,
+   "weeks": 8,
+   "rules": 1,
+   "stocks": 1,
+   "mean": {
+    "gross": 0.4604,
+    "net_low": 0.3929,
+    "net_base": 0.3529,
+    "net_high": 0.2553
+   },
+   "t": {
+    "gross": 1.83,
+    "net_low": 1.56,
+    "net_base": 1.41,
+    "net_high": 1.02
+   }
+  },
+  "ADANIPOWER": {
+   "trades": 11,
+   "weeks": 8,
+   "rules": 1,
+   "stocks": 1,
+   "mean": {
+    "gross": -0.3377,
+    "net_low": -0.4223,
+    "net_base": -0.4623,
+    "net_high": -0.5769
+   },
+   "t": {
+    "gross": -0.64,
+    "net_low": -0.79,
+    "net_base": -0.87,
+    "net_high": -1.09
+   }
+  },
+  "TORNTPHARM": {
+   "trades": 10,
+   "weeks": 6,
+   "rules": 1,
+   "stocks": 1,
+   "mean": {
+    "gross": 0.1844,
+    "net_low": 0.1328,
+    "net_base": 0.0928,
+    "net_high": 0.0112
+   },
+   "t": {
+    "gross": 0.39,
+    "net_low": 0.28,
+    "net_base": 0.2,
+    "net_high": 0.02
+   }
+  },
+  "TMPV": {
+   "trades": 4,
+   "weeks": 4,
+   "rules": 1,
+   "stocks": 1,
+   "mean": {
+    "gross": 0.8008,
+    "net_low": 0.7462,
+    "net_base": 0.7062,
+    "net_high": 0.6216
+   },
+   "t": {
+    "gross": 1.13,
+    "net_low": 1.05,
+    "net_base": 1.0,
+    "net_high": 0.88
+   }
+  }
+ },
+ "last_window_rules": [
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "breakout_dn | all",
+   "horizon": "EOD",
+   "count": 62,
+   "mean": 0.006461
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "ema20_pullback_dn | nifty=flat",
+   "horizon": "EOD",
+   "count": 61,
+   "mean": 0.077339
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "deep_pullback_dn | all",
+   "horizon": "EOD",
+   "count": 57,
+   "mean": -0.061358
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "ema20_pullback_dn | dayvol=normal",
+   "horizon": "EOD",
+   "count": 55,
+   "mean": -0.026005
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "breakout_dn | vwap=below",
+   "horizon": "EOD",
+   "count": 55,
+   "mean": 0.030038
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "breakout_dn | trend=down",
+   "horizon": "EOD",
+   "count": 54,
+   "mean": 0.038792
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "breakout_dn | dayvol=normal",
+   "horizon": "EOD",
+   "count": 52,
+   "mean": 0.04118
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "ema20_pullback_dn | rvol=high",
+   "horizon": "EOD",
+   "count": 51,
+   "mean": 0.1206
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "rvol_thrust_dn | all",
+   "horizon": "EOD",
+   "count": 50,
+   "mean": 0.118041
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "rvol_thrust_dn | rvol=high",
+   "horizon": "EOD",
+   "count": 50,
+   "mean": 0.118041
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "CANDLE",
+   "hypothesis": "5m candle bigDn | 09:15-09:45",
+   "horizon": "EOD",
+   "count": 49,
+   "mean": 0.02352
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "breakout_dn | rvol=high",
+   "horizon": "EOD",
+   "count": 48,
+   "mean": 0.042942
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "deep_pullback_dn | vwap=below",
+   "horizon": "EOD",
+   "count": 47,
+   "mean": 0.002278
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "breakout_dn | nifty=flat",
+   "horizon": "EOD",
+   "count": 45,
+   "mean": 0.081505
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "rvol_thrust_dn | vwap=below",
+   "horizon": "EOD",
+   "count": 44,
+   "mean": 0.150983
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "failed_breakout_dn | trend=down",
+   "horizon": "EOD",
+   "count": 43,
+   "mean": 0.042817
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "breakout_dn | tod=11:00-13:00",
+   "horizon": "EOD",
+   "count": 42,
+   "mean": -0.020665
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "deep_pullback_dn | nifty=flat",
+   "horizon": "EOD",
+   "count": 42,
+   "mean": -0.080444
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "deep_pullback_dn | trend=down",
+   "horizon": "EOD",
+   "count": 41,
+   "mean": 0.125716
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "or_break_dn | vwap=below",
+   "horizon": "EOD",
+   "count": 39,
+   "mean": 0.167597
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "or_break_dn | all",
+   "horizon": "EOD",
+   "count": 39,
+   "mean": 0.167597
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "CANDLE",
+   "hypothesis": "5m candle bigDn | 09:45-11:00",
+   "horizon": "EOD",
+   "count": 38,
+   "mean": -0.01067
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "deep_pullback_dn | rvol=high",
+   "horizon": "EOD",
+   "count": 38,
+   "mean": 0.213546
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "or_break_dn | trend=down",
+   "horizon": "EOD",
+   "count": 38,
+   "mean": 0.14359
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "or_break_dn | rvol=high",
+   "horizon": "EOD",
+   "count": 37,
+   "mean": 0.268897
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "or_break_dn | nifty=down",
+   "horizon": "EOD",
+   "count": 37,
+   "mean": 0.262575
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "or_break_dn | rvol=normal",
+   "horizon": "EOD",
+   "count": 37,
+   "mean": 0.143266
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "rvol_thrust_dn | dayvol=normal",
+   "horizon": "EOD",
+   "count": 37,
+   "mean": 0.046984
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "or_break_dn | nifty=flat",
+   "horizon": "EOD",
+   "count": 35,
+   "mean": 0.125429
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "breakout_dn | vsNifty=weak",
+   "horizon": "EOD",
+   "count": 35,
+   "mean": 0.226529
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "rvol_thrust_dn | trend=down",
+   "horizon": "EOD",
+   "count": 34,
+   "mean": 0.178668
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "or_break_dn | vsNifty=weak",
+   "horizon": "EOD",
+   "count": 33,
+   "mean": 0.219859
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "or_break_dn | rvol=low",
+   "horizon": "EOD",
+   "count": 33,
+   "mean": 0.095788
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "or_break_dn | dayvol=normal",
+   "horizon": "EOD",
+   "count": 32,
+   "mean": 0.094379
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "ema20_pullback_dn | vsNifty=weak",
+   "horizon": "EOD",
+   "count": 32,
+   "mean": 0.151619
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "trend_fail_up | rvol=high",
+   "horizon": "EOD",
+   "count": 31,
+   "mean": -0.051892
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "or_break_dn | nifty=up",
+   "horizon": "EOD",
+   "count": 30,
+   "mean": 0.1655
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "or_break_dn | tod=11:00-13:00",
+   "horizon": "EOD",
+   "count": 29,
+   "mean": 0.222703
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "rvol_thrust_dn | nifty=flat",
+   "horizon": "EOD",
+   "count": 29,
+   "mean": 0.026392
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "sweep_low_reclaim | vsNifty=weak",
+   "horizon": "EOD",
+   "count": 28,
+   "mean": 0.007395
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "or_break_dn | tod=09:45-11:00",
+   "horizon": "EOD",
+   "count": 27,
+   "mean": 0.1901
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "STATE",
+   "hypothesis": "trend down, 30m momentum weak, below VWAP, rvol high | 11:00-13:00",
+   "horizon": "EOD",
+   "count": 26,
+   "mean": 0.296654
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "rvol_thrust_dn | nifty=down",
+   "horizon": "EOD",
+   "count": 26,
+   "mean": 0.02009
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "rvol_thrust_dn | vsNifty=weak",
+   "horizon": "EOD",
+   "count": 24,
+   "mean": 0.375693
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "STATE",
+   "hypothesis": "trend down, 30m momentum weak, below VWAP, rvol high | 09:45-11:00",
+   "horizon": "EOD",
+   "count": 23,
+   "mean": 0.212807
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "deep_pullback_dn | vsNifty=weak",
+   "horizon": "EOD",
+   "count": 23,
+   "mean": 0.152188
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "or_trap_dn | dayvol=normal",
+   "horizon": "EOD",
+   "count": 21,
+   "mean": 0.174811
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "STATE",
+   "hypothesis": "trend down, 30m momentum weak, below VWAP, rvol high | 09:15-09:45",
+   "horizon": "EOD",
+   "count": 20,
+   "mean": -0.121714
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "failed_breakout_dn | vsNifty=weak",
+   "horizon": "EOD",
+   "count": 20,
+   "mean": 0.158674
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "or_break_dn | trend=up",
+   "horizon": "EOD",
+   "count": 18,
+   "mean": -0.031024
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "trend_fail_up | vsNifty=weak",
+   "horizon": "EOD",
+   "count": 18,
+   "mean": 0.093193
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "rvol_thrust_dn | tod=09:45-11:00",
+   "horizon": "EOD",
+   "count": 18,
+   "mean": -0.080153
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "vwap_reclaim_up | vsNifty=weak",
+   "horizon": "EOD",
+   "count": 18,
+   "mean": -0.034317
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "deep_pullback_up | vsNifty=weak",
+   "horizon": "EOD",
+   "count": 17,
+   "mean": 0.169833
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "or_break_dn | tod=09:15-09:45",
+   "horizon": "EOD",
+   "count": 17,
+   "mean": 0.383891
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "failed_breakout_up | vsNifty=weak",
+   "horizon": "EOD",
+   "count": 16,
+   "mean": -0.034883
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "pdl_break | dayvol=normal",
+   "horizon": "EOD",
+   "count": 16,
+   "mean": 0.464601
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "rvol_thrust_up | vsNifty=weak",
+   "horizon": "EOD",
+   "count": 13,
+   "mean": 0.398707
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "or_trap_dn | tod=09:45-11:00",
+   "horizon": "EOD",
+   "count": 13,
+   "mean": 0.363592
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "trend_fail_dn | vsNifty=weak",
+   "horizon": "EOD",
+   "count": 9,
+   "mean": 0.025031
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "rvol_thrust_dn | trend=mixed",
+   "horizon": "EOD",
+   "count": 5,
+   "mean": -0.326572
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "MOTIF",
+   "hypothesis": "5m candles up-dn-flat | 14:30-15:05",
+   "horizon": "60m",
+   "count": 5,
+   "mean": -0.050056
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "MOTIF",
+   "hypothesis": "5m candles up-dn-flat | 14:30-15:05",
+   "horizon": "30m",
+   "count": 5,
+   "mean": -0.043552
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "MOTIF",
+   "hypothesis": "5m candles up-dn-flat | 14:30-15:05",
+   "horizon": "EOD",
+   "count": 5,
+   "mean": -0.050056
+  },
+  {
+   "stock": "ANANDRATHI",
+   "family": "EVENT",
+   "hypothesis": "pdl_break | tod=13:00-14:30",
+   "horizon": "EOD",
+   "count": 3,
+   "mean": 0.07909
+  }
+ ]
+}

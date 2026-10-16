@@ -159,7 +159,8 @@ def validate_partitions(universe: Universe, node_count: int) -> list[Partition]:
 def shard_ranges(size: int) -> tuple[tuple[str, int, int], ...]:
     """The existing ``live-a`` .. ``live-v`` family: canonical-order slices of 45 (same rule as app.py)."""
     return tuple(
-        (name, index * SHARD_SIZE, min((index + 1) * SHARD_SIZE, size)) for index, name in enumerate(SHARD_NAMES)
+        (name, min(index * SHARD_SIZE, size), min((index + 1) * SHARD_SIZE, size))
+        for index, name in enumerate(SHARD_NAMES)
     )
 
 

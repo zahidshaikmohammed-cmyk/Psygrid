@@ -98,12 +98,22 @@ class IndexDepthState:
             self.status = "LIVE"
             self.last_error = ""
 
-    def update_quotes(self, quotes: dict[str, dict]) -> None:
+    def update_quotes(self, quotes: dict[str, dict], depth_from_quote: bool = False) -> None:
         with self.lock:
             for security_id, quote in quotes.items():
                 row = self.contracts.get(str(security_id))
                 if row is None or not isinstance(quote, dict):
                     continue
+                if depth_from_quote:
+                    book = _quote_depth(quote.get("depth"))
+                    if book is not None:
+                        row["bid"], row["ask"] = book
+                        row["depth_source"] = "DHAN_QUOTE_5_LEVEL"
+                        row["updated_at"] = datetime.now(self.tz).isoformat()
+                        self.updated_at = row["updated_at"]
+                        self.packet_count += 1
+                        self.status = "LIVE"
+                        self.last_error = ""
                 for key in _QUOTE_FIELDS:
                     if key in quote:
                         row[key] = quote[key]
@@ -155,6 +165,30 @@ class IndexDepthState:
                 "quote_refresh_seconds": DEPTH_QUOTE_REFRESH_SECONDS,
                 **({"error": self.last_error} if self.last_error else {}),
             }
+
+
+def _quote_depth(depth) -> tuple[list[dict], list[dict]] | None:
+    """Dhan quote ``depth`` ({"buy": [...], "sell": [...]}, 5 levels) as 20-level-style rows."""
+    if not isinstance(depth, dict):
+        return None
+
+    def side(levels):
+        out = []
+        for index, level in enumerate(levels if isinstance(levels, list) else []):
+            if not isinstance(level, dict):
+                continue
+            out.append(
+                {
+                    "level": index + 1,
+                    "price": float(level.get("price") or 0.0),
+                    "quantity": int(level.get("quantity") or 0),
+                    "orders": int(level.get("orders") or 0),
+                }
+            )
+        return out
+
+    bid, ask = side(depth.get("buy")), side(depth.get("sell"))
+    return (bid, ask) if bid or ask else None
 
 
 def _snapshot_row(row: dict) -> dict:
@@ -270,6 +304,11 @@ class IndexDepthManager:
     def _market_open(self) -> bool:
         return _is_market_open(datetime.now(self.state.tz))
 
+    @property
+    def twenty_level(self) -> bool:
+        """Dhan's 20-level depth feed serves NSE contracts only; BSE (SENSEX) uses 5-level quotes."""
+        return self.spec.fno_segment.startswith("NSE")
+
     def _refresh_contracts(self) -> bool:
         """Re-select contracts from the option chain; return True if the subscription set changed."""
         contracts, expiry, underlying_ltp = _select_contracts(self.option_manager.state)
@@ -325,7 +364,9 @@ class IndexDepthManager:
                         SimpleNamespace(security_id=c.security_id, exchange_segment=self.spec.fno_segment)
                         for c in contracts
                     ]
-                    self.state.update_quotes(self.dhan_api.quote_snapshot(instruments))
+                    self.state.update_quotes(
+                        self.dhan_api.quote_snapshot(instruments), depth_from_quote=not self.twenty_level
+                    )
                     self.state.set_underlying_ltp(underlying_ltp)
                     if expiry and expiry != self._expiry:
                         self._contracts = contracts
@@ -351,6 +392,9 @@ class IndexDepthManager:
                 if not self._contracts:
                     self.state.status = "STARTING"
                     self.stop_event.wait(1.0)
+                    continue
+                if not self.twenty_level:
+                    self.stop_event.wait(MARKET_CLOSED_RECHECK_SECONDS)
                     continue
                 if changed:
                     self._close_socket()

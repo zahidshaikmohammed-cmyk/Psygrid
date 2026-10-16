@@ -20,13 +20,41 @@ PORT="${PORT:-10000}"
 PEERS="${PEERS:-}"
 # The account's Dhan token authority (the full PSYGRID on the private network); see live_core/auth.py.
 TOKEN_SOURCE="${TOKEN_SOURCE:-}"
+# Exactly one node may generate the account's token (PIN + TOTP in /etc/psygrid-live-core.env) and
+# share it with the other nodes' private IPs; the others set TOKEN_SOURCE to that node.
+TOKEN_GENERATION="${TOKEN_GENERATION:-0}"
+TOKEN_SHARE_CLIENTS="${TOKEN_SHARE_CLIENTS:-}"
+case "$TOKEN_GENERATION" in 0|1) ;; *) echo "TOKEN_GENERATION must be 0 or 1" >&2; exit 2;; esac
+if [ "$TOKEN_GENERATION" = 1 ] && [ -n "$TOKEN_SOURCE" ]; then
+  echo "a token-generating node must not also take its token from TOKEN_SOURCE" >&2
+  exit 2
+fi
 SWAP_MB="${SWAP_MB:-1024}"
 RELEASE_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-UNIT="psygrid-live-core-node${NODE_ID}.service"
+# MODE=stocks: the Live Core equity feed (STOCKS_FILE selects the universe, e.g. stocks_fno.json).
+# MODE=index: the index node (NIFTY, BANKNIFTY, SENSEX candles, option chains, depth).
+MODE="${MODE:-stocks}"
+STOCKS_FILE="${STOCKS_FILE:-}"
+case "$MODE" in stocks|index) ;; *) echo "MODE must be stocks or index" >&2; exit 2;; esac
+if [ "$MODE" = index ]; then
+  UNIT="psygrid-index-node.service"
+  TEMPLATE="psygrid-index-node.service.in"
+  if [ -z "$TOKEN_SOURCE" ] || [ "$TOKEN_GENERATION" = 1 ]; then
+    echo "the index node needs TOKEN_SOURCE (the token-generating stock node) and never generates" >&2
+    exit 2
+  fi
+else
+  UNIT="psygrid-live-core-node${NODE_ID}.service"
+  TEMPLATE="psygrid-live-core.service.in"
+fi
+if [ -n "$STOCKS_FILE" ] && [ ! -f "${RELEASE_DIR}/${STOCKS_FILE}" ]; then
+  echo "STOCKS_FILE ${STOCKS_FILE} is not in the release" >&2
+  exit 2
+fi
 
 case "$NODE_ID" in ''|*[!0-9]*) echo "NODE_ID must be a number" >&2; exit 2;; esac
 case "$NODE_COUNT" in ''|*[!0-9]*) echo "NODE_COUNT must be a number" >&2; exit 2;; esac
-if [ "$NODE_ID" -ge "$NODE_COUNT" ]; then
+if [ "${MODE:-stocks}" != index ] && [ "$NODE_ID" -ge "$NODE_COUNT" ]; then
   echo "NODE_ID $NODE_ID must be below NODE_COUNT $NODE_COUNT" >&2
   exit 2
 fi
@@ -36,7 +64,7 @@ render_unit() {
       -e "s|@NODE_COUNT@|${NODE_COUNT}|g" \
       -e "s|@USER@|${APP_USER}|g" \
       -e "s|@ROOT@|${LIVE_CORE_ROOT}|g" \
-      "${RELEASE_DIR}/deploy/live-core/psygrid-live-core.service.in"
+      "${RELEASE_DIR}/deploy/live-core/${TEMPLATE}"
 }
 
 if [ "${1:-}" = "--render-only" ]; then
@@ -100,8 +128,13 @@ sudo -u "$APP_USER" "$LIVE_CORE_ROOT/venv/bin/pip" install -q --disable-pip-vers
 # The service cannot write bytecode (read-only filesystem), so compile it once here.
 sudo -u "$APP_USER" "$LIVE_CORE_ROOT/venv/bin/python" -m compileall -q "$RELEASE_DIR" >/dev/null
 # Refuse to switch to a release whose universe/partition does not validate.
-(cd "$RELEASE_DIR" && sudo -u "$APP_USER" env LIVE_CORE_NODE_ID="$NODE_ID" LIVE_CORE_NODE_COUNT="$NODE_COUNT" \
-  "$LIVE_CORE_ROOT/venv/bin/python" -c 'from live_core.runtime import build_runtime; r = build_runtime(); print("partition", r.partition.describe())')
+if [ "$MODE" = index ]; then
+  (cd "$RELEASE_DIR" && sudo -u "$APP_USER" "$LIVE_CORE_ROOT/venv/bin/python" -c 'import live_core.index_node; print("index node module OK")')
+else
+  (cd "$RELEASE_DIR" && sudo -u "$APP_USER" env LIVE_CORE_NODE_ID="$NODE_ID" LIVE_CORE_NODE_COUNT="$NODE_COUNT" \
+    PSYGRID_STOCKS_FILE="${STOCKS_FILE:-stocks.json}" \
+    "$LIVE_CORE_ROOT/venv/bin/python" -c 'from live_core.runtime import build_runtime; r = build_runtime(); print("partition", r.partition.describe())')
+fi
 ln -sfn "$RELEASE_DIR" "$LIVE_CORE_ROOT/current.new"
 mv -T "$LIVE_CORE_ROOT/current.new" "$LIVE_CORE_ROOT/current"
 
@@ -132,10 +165,13 @@ cat > /etc/psygrid-live-core-node.env <<TOPOLOGY
 LIVE_CORE_PORT=${PORT}
 LIVE_CORE_PEERS=${PEERS}
 LIVE_CORE_TOKEN_SOURCE=${TOKEN_SOURCE}
+LIVE_CORE_TOKEN_GENERATION=${TOKEN_GENERATION}
+PSYGRID_TOKEN_SHARE_CLIENTS=${TOKEN_SHARE_CLIENTS}
+PSYGRID_STOCKS_FILE=${STOCKS_FILE:-stocks.json}
 TOPOLOGY
 
 # 6. Exactly one Live Core node per VM: retire any other node unit left on this host.
-for other in /etc/systemd/system/psygrid-live-core-node*.service; do
+for other in /etc/systemd/system/psygrid-live-core-node*.service /etc/systemd/system/psygrid-index-node.service; do
   [ -e "$other" ] || continue
   name="$(basename "$other")"
   if [ "$name" != "$UNIT" ]; then

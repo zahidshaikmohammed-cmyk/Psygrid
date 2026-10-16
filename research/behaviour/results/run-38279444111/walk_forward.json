@@ -1,0 +1,73 @@
+{
+ "trades": 2410,
+ "weeks": 104,
+ "mean_pct": {
+  "gross": 0.18,
+  "net_low": 0.128,
+  "net_base": 0.088,
+  "net_high": 0.006
+ },
+ "t_week_clustered": {
+  "gross": 5.14,
+  "net_low": 3.65,
+  "net_base": 2.51,
+  "net_high": 0.17
+ },
+ "win_pct_net_base": 51.5,
+ "per_window": {
+  "2024-01-01": {
+   "trades": 45,
+   "rules": 3,
+   "net_base_mean_pct": 0.2732,
+   "t": 1.06
+  },
+  "2024-04-01": {
+   "trades": 18,
+   "rules": 2,
+   "net_base_mean_pct": 0.2135,
+   "t": 0.41
+  },
+  "2024-10-01": {
+   "trades": 9,
+   "rules": 1,
+   "net_base_mean_pct": -0.006,
+   "t": -0.02
+  },
+  "2025-01-01": {
+   "trades": 116,
+   "rules": 5,
+   "net_base_mean_pct": -0.0019,
+   "t": -0.01
+  },
+  "2025-04-01": {
+   "trades": 64,
+   "rules": 4,
+   "net_base_mean_pct": 0.05,
+   "t": 0.32
+  },
+  "2025-07-01": {
+   "trades": 18,
+   "rules": 1,
+   "net_base_mean_pct": -0.182,
+   "t": -1.18
+  },
+  "2026-01-01": {
+   "trades": 38,
+   "rules": 3,
+   "net_base_mean_pct": 0.1283,
+   "t": 0.56
+  },
+  "2026-04-01": {
+   "trades": 27,
+   "rules": 3,
+   "net_base_mean_pct": -0.2937,
+   "t": -0.84
+  },
+  "2026-07-01": {
+   "trades": 2075,
+   "rules": 65,
+   "net_base_mean_pct": 0.0961,
+   "t": 2.49
+  }
+ }
+}
