@@ -54,7 +54,7 @@ fi
 
 case "$NODE_ID" in ''|*[!0-9]*) echo "NODE_ID must be a number" >&2; exit 2;; esac
 case "$NODE_COUNT" in ''|*[!0-9]*) echo "NODE_COUNT must be a number" >&2; exit 2;; esac
-if [ "$NODE_ID" -ge "$NODE_COUNT" ]; then
+if [ "${MODE:-stocks}" != index ] && [ "$NODE_ID" -ge "$NODE_COUNT" ]; then
   echo "NODE_ID $NODE_ID must be below NODE_COUNT $NODE_COUNT" >&2
   exit 2
 fi
