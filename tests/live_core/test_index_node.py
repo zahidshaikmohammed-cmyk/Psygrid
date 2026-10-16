@@ -126,3 +126,35 @@ def test_small_universe_has_no_negative_shards():
     assert all(start <= end for _, start, end in shard_ranges(214))
     assert sum(end - start for _, start, end in shard_ranges(214)) == 214
     assert index_node.INDICES[0].symbol == "NIFTY"
+
+
+def test_fresh_candles_are_not_reported_stale():
+    node = _node()  # last candle 09:16 (complete at 09:17), checked at 09:17:05
+    health = node.health()
+    assert health["indices"]["NIFTY"]["last_candle_age_minutes"] < 1
+    assert not any("stale" in r for r in health["reasons"])
+
+
+def test_sensex_depth_comes_from_five_level_quotes():
+    from index_depth import IndexDepthManager, IndexDepthState, _quote_depth
+    from index_options import NIFTY, SENSEX
+
+    settings = type("S", (), {"timezone": "Asia/Kolkata"})()
+    assert IndexDepthManager(settings, None, None, NIFTY).twenty_level
+    assert not IndexDepthManager(settings, None, None, SENSEX).twenty_level
+    book = _quote_depth(
+        {"buy": [{"price": 101.5, "quantity": 20, "orders": 2}], "sell": [{"price": 102, "quantity": 40, "orders": 1}]}
+    )
+    assert book == (
+        [{"level": 1, "price": 101.5, "quantity": 20, "orders": 2}],
+        [{"level": 1, "price": 102.0, "quantity": 40, "orders": 1}],
+    )
+    state = IndexDepthState(settings, SENSEX)
+    state.contracts = {"9001": {"security_id": "9001", "bid": [], "ask": []}}
+    state.update_quotes(
+        {"9001": {"last_price": 101.7, "depth": {"buy": [{"price": 101.5, "quantity": 20, "orders": 2}]}}},
+        depth_from_quote=True,
+    )
+    snap = state.snapshot()
+    assert snap["status"] == "LIVE" and snap["contracts"][0]["depth_source"] == "DHAN_QUOTE_5_LEVEL"
+    assert snap["contracts"][0]["bid"][0]["price"] == 101.5

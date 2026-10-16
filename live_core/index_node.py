@@ -261,7 +261,9 @@ class IndexNode:
             age = None
             if last_ts:
                 with contextlib.suppress(ValueError):
-                    age = round((now - datetime.fromisoformat(str(last_ts))).total_seconds() / 60, 1)
+                    # "2026-10-16 13:29:00 IST": the candle's start; it completes a minute later.
+                    started = datetime.strptime(str(last_ts)[:19], "%Y-%m-%d %H:%M:%S").replace(tzinfo=TZ)
+                    age = round((now - started).total_seconds() / 60 - 1, 1)
             opt = self.options_payload(sym)
             dep = self.depth_payload(sym)
             components[sym] = {
